@@ -83,3 +83,19 @@ export interface MultiFormatContent {
   [key: string]: string | undefined; // For additional formats
 }
 
+export interface TemplateToken {
+  name: string; // e.g., "productName", "targetAudienceBenefit"
+  description: string; // e.g., "The name of your product", "The key benefit for the audience"
+  defaultValue?: string;
+}
+
+export interface ContentTemplate {
+  templateId: string;
+  title: string;
+  description?: string; // A short description of what the template is for
+  type: ContentFormat | 'general' | 'campaignBrief'; // What kind of content this template generates or helps with
+  tokens: TemplateToken[]; // Placeholders like {{productName}}
+  body: string; // The template string itself with tokens
+  // Optional: category: string; tags: string[]; previewImageUrl?: string;
+}
+
