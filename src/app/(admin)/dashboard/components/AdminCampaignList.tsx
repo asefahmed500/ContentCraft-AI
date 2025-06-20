@@ -3,10 +3,10 @@
 
 import type { Campaign } from '@/types/content';
 import { useEffect, useState, useCallback } from 'react';
-import { CampaignCard } from '@/app/(app)/dashboard/components/CampaignCard'; // Re-use existing card
+import { CampaignCard } from '@/app/(app)/dashboard/components/CampaignCard'; 
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { Info, ServerCrash, Trash2 } from 'lucide-react';
+import { Info, ServerCrash, Trash2, Flag, MessageSquare } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import {
   AlertDialog,
@@ -18,11 +18,15 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { Button } from '@/components/ui/button';
+import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 interface AdminCampaignListProps {
-  onCampaignSelect?: (campaignId: string | null, action: 'view' | 'edit') => void; // Optional for admin view
+  onCampaignSelect?: (campaignId: string | null, action: 'view' | 'edit') => void; 
 }
 
 export function AdminCampaignList({ onCampaignSelect }: AdminCampaignListProps) {
@@ -35,14 +39,21 @@ export function AdminCampaignList({ onCampaignSelect }: AdminCampaignListProps) 
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [campaignToDelete, setCampaignToDelete] = useState<Campaign | null>(null);
 
+  const [isFlaggingDialogOpen, setIsFlaggingDialogOpen] = useState(false);
+  const [campaignToFlag, setCampaignToFlag] = useState<Campaign | null>(null);
+  const [flaggingNotes, setFlaggingNotes] = useState('');
+  const [isSubmittingFlag, setIsSubmittingFlag] = useState(false);
+
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [flaggedFilter, setFlaggedFilter] = useState('all');
+
 
   const fetchCampaigns = useCallback(async () => {
     setIsLoading(true);
     setError(null);
     try {
-      const response = await fetch('/api/admin/campaigns'); // Use admin endpoint
+      const response = await fetch('/api/admin/campaigns'); 
       if (!response.ok) {
         const errorData = await response.json();
         throw new Error(errorData.error || `Failed to fetch campaigns: ${response.statusText}`);
@@ -54,9 +65,10 @@ export function AdminCampaignList({ onCampaignSelect }: AdminCampaignListProps) 
         updatedAt: new Date(c.updatedAt),
         agentDebates: (c.agentDebates || []).map(ad => ({...ad, timestamp: new Date(ad.timestamp)})),
         contentVersions: (c.contentVersions || []).map(cv => ({...cv, timestamp: new Date(cv.timestamp)})),
+        isFlagged: c.isFlagged ?? false,
+        adminModerationNotes: c.adminModerationNotes ?? '',
       }));
       setAllCampaigns(campaignsWithDates);
-      setFilteredCampaigns(campaignsWithDates); // Initially show all
     } catch (err) {
       console.error("AdminCampaignList fetch error:", err);
       const errorMessage = err instanceof Error ? err.message : "An unknown error occurred.";
@@ -77,18 +89,18 @@ export function AdminCampaignList({ onCampaignSelect }: AdminCampaignListProps) 
       campaignsToFilter = campaignsToFilter.filter(campaign => 
         campaign.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
         campaign.brief.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        campaign.userId.toLowerCase().includes(searchTerm.toLowerCase()) // Allow searching by User ID
+        (campaign.userId && campaign.userId.toLowerCase().includes(searchTerm.toLowerCase()))
       );
     }
     if (statusFilter !== 'all') {
       campaignsToFilter = campaignsToFilter.filter(campaign => campaign.status === statusFilter);
     }
+    if (flaggedFilter !== 'all') {
+        campaignsToFilter = campaignsToFilter.filter(campaign => campaign.isFlagged === (flaggedFilter === 'flagged'));
+    }
     setFilteredCampaigns(campaignsToFilter);
-  }, [searchTerm, statusFilter, allCampaigns]);
+  }, [searchTerm, statusFilter, flaggedFilter, allCampaigns]);
 
-
-  // Admin might have different delete logic (e.g., direct delete without user check, or soft delete)
-  // For now, reusing the client-side confirmation but API call would be different if needed
   const handleDeletePrompt = (campaign: Campaign) => {
     setCampaignToDelete(campaign);
     setIsDeleteDialogOpen(true);
@@ -96,21 +108,52 @@ export function AdminCampaignList({ onCampaignSelect }: AdminCampaignListProps) 
 
   const handleDeleteCampaign = async () => {
     if (!campaignToDelete) return;
-    
-    // TODO: Implement admin-specific delete if different from user's own campaign delete
-    // For now, this simulates a generic delete action.
-    // Actual deletion for admins might bypass ownership checks or perform additional logging.
-    
-    toast({ title: "Delete Action (Admin)", description: `Simulating delete for campaign "${campaignToDelete.title}". Actual admin delete API needed.`, variant: "default" });
+    toast({ title: "Delete Action (Admin)", description: `Simulating delete for campaign "${campaignToDelete.title}". Actual admin delete API for any campaign (not just own) is needed.`, variant: "default" });
     // Example:
-    // const response = await fetch(`/api/admin/campaigns/${campaignToDelete.id}`, { method: 'DELETE' });
+    // const response = await fetch(`/api/admin/campaigns/${campaignToDelete.id}/delete`, { method: 'DELETE' }); // Needs a dedicated admin delete endpoint
     // if (response.ok) { fetchCampaigns(); } else { toast(...error) }
     setIsDeleteDialogOpen(false);
     setCampaignToDelete(null);
   };
   
+  const handleFlagPrompt = (campaignId: string, currentFlagStatus: boolean, currentNotes?: string) => {
+    const campaign = allCampaigns.find(c => c.id === campaignId);
+    if (campaign) {
+        setCampaignToFlag(campaign);
+        setFlaggingNotes(currentNotes || '');
+        setIsFlaggingDialogOpen(true);
+    }
+  };
+
+  const handleConfirmFlag = async () => {
+    if (!campaignToFlag) return;
+    setIsSubmittingFlag(true);
+    const newFlagStatus = !campaignToFlag.isFlagged;
+    try {
+        const response = await fetch(`/api/admin/campaigns/${campaignToFlag.id}/flag`, {
+            method: 'PUT',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ isFlagged: newFlagStatus, adminModerationNotes: flaggingNotes })
+        });
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.error || "Failed to update campaign flag status.");
+        }
+        toast({ title: "Campaign Moderation Updated", description: `Campaign "${campaignToFlag.title}" has been ${newFlagStatus ? 'flagged' : 'unflagged'}.`});
+        fetchCampaigns(); // Refresh the list
+        setIsFlaggingDialogOpen(false);
+    } catch (err) {
+        const errorMessage = err instanceof Error ? err.message : "An unknown error occurred.";
+        toast({ title: "Error Updating Flag", description: errorMessage, variant: "destructive" });
+    } finally {
+        setIsSubmittingFlag(false);
+        setCampaignToFlag(null);
+        setFlaggingNotes('');
+    }
+  };
+
+
   const handleViewCampaign = (campaignId: string) => {
-    // For admin, "view" might lead to a detailed read-only page or use onCampaignSelect if provided for main dashboard integration
      if (onCampaignSelect) {
         onCampaignSelect(campaignId, 'view');
      } else {
@@ -119,14 +162,12 @@ export function AdminCampaignList({ onCampaignSelect }: AdminCampaignListProps) 
   };
 
   const handleEditCampaign = (campaignId: string) => {
-    // Admin edit might be restricted or lead to a specific admin edit interface
     if (onCampaignSelect) {
-        onCampaignSelect(campaignId, 'edit'); // If admin can use the same edit form
+        onCampaignSelect(campaignId, 'edit'); 
     } else {
         alert(`Admin edit for campaign ${campaignId} - (Not implemented to load into main user dashboard editor from here)`);
     }
   };
-
 
   if (isLoading && filteredCampaigns.length === 0) {
     return (
@@ -178,6 +219,16 @@ export function AdminCampaignList({ onCampaignSelect }: AdminCampaignListProps) 
             <SelectItem value="archived">Archived</SelectItem>
           </SelectContent>
         </Select>
+        <Select value={flaggedFilter} onValueChange={setFlaggedFilter}>
+          <SelectTrigger className="w-full sm:w-[180px]">
+            <SelectValue placeholder="Filter by flag status" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Flag Statuses</SelectItem>
+            <SelectItem value="flagged">Flagged</SelectItem>
+            <SelectItem value="not_flagged">Not Flagged</SelectItem>
+          </SelectContent>
+        </Select>
       </div>
 
       {filteredCampaigns.length === 0 && !isLoading && (
@@ -196,9 +247,11 @@ export function AdminCampaignList({ onCampaignSelect }: AdminCampaignListProps) 
             key={campaign.id} 
             campaign={campaign} 
             onView={() => handleViewCampaign(campaign.id)}
-            onEdit={() => handleEditCampaign(campaign.id)} // Admins can edit via same flow for now
+            onEdit={() => handleEditCampaign(campaign.id)}
             onDelete={() => handleDeletePrompt(campaign)}
-            canEditOrDelete={true} // Admins can always edit/delete from their panel
+            onFlag={handleFlagPrompt}
+            canEditOrDelete={true} 
+            isAdminView={true}
           />
         ))}
       </div>
@@ -211,7 +264,7 @@ export function AdminCampaignList({ onCampaignSelect }: AdminCampaignListProps) 
             <AlertDialogDescription>
               This will permanently delete the campaign 
               <span className="font-semibold"> &quot;{campaignToDelete?.title || 'this campaign'}&quot; </span>. 
-              This action is destructive and cannot be undone by regular users.
+              This action is destructive and cannot be undone by regular users. (Note: Admin delete logic may differ).
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -222,6 +275,41 @@ export function AdminCampaignList({ onCampaignSelect }: AdminCampaignListProps) 
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <Dialog open={isFlaggingDialogOpen} onOpenChange={setIsFlaggingDialogOpen}>
+        <DialogContent>
+            <DialogHeader>
+                <DialogTitle className="flex items-center gap-2">
+                    <Flag className="h-5 w-5 text-primary"/>
+                    {campaignToFlag?.isFlagged ? "Unflag Campaign & Edit Notes" : "Flag Campaign & Add Notes"}
+                </DialogTitle>
+                <DialogDescription>
+                    Campaign: <span className="font-semibold">&quot;{campaignToFlag?.title || ''}&quot;</span>. 
+                    {campaignToFlag?.isFlagged ? " This campaign is currently flagged." : " Flagging this campaign will mark it for review."}
+                </DialogDescription>
+            </DialogHeader>
+            <div className="py-4 space-y-2">
+                <Label htmlFor="flagging-notes">Moderation Notes (Optional)</Label>
+                <Textarea 
+                    id="flagging-notes"
+                    value={flaggingNotes}
+                    onChange={(e) => setFlaggingNotes(e.target.value)}
+                    placeholder="e.g., Contains inappropriate content, needs brand voice review."
+                    rows={3}
+                />
+            </div>
+            <DialogFooter>
+                <DialogClose asChild>
+                    <Button variant="outline" onClick={() => { setCampaignToFlag(null); setFlaggingNotes(''); }}>Cancel</Button>
+                </DialogClose>
+                <Button onClick={handleConfirmFlag} disabled={isSubmittingFlag}>
+                    {isSubmittingFlag && <ServerCrash className="mr-2 h-4 w-4 animate-spin" />}
+                    {campaignToFlag?.isFlagged ? "Unflag & Save Notes" : "Flag & Save Notes"}
+                </Button>
+            </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }
+

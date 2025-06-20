@@ -22,6 +22,8 @@ const mapCampaignDocumentToCampaign = (campaignDoc: Omit<Campaign, 'id'> & { _id
     scheduledPosts: (campaignDoc.scheduledPosts || []).map(sp => ({ ...sp, scheduledAt: ensureDate(sp.scheduledAt) || new Date() })),
     abTests: (campaignDoc.abTests || []).map(ab => ({ ...ab, createdAt: ensureDate(ab.createdAt) || new Date() })),
     isPrivate: campaignDoc.isPrivate ?? false,
+    isFlagged: campaignDoc.isFlagged ?? false,
+    adminModerationNotes: campaignDoc.adminModerationNotes ?? undefined,
     createdAt: ensureDate(campaignDoc.createdAt) || new Date(),
     updatedAt: ensureDate(campaignDoc.updatedAt) || new Date(),
   };
@@ -55,3 +57,5 @@ export async function GET(request: NextRequest) {
 
 // Admin might need a specific DELETE or PUT for campaigns (e.g., overriding ownership)
 // For now, GET is sufficient for viewing. Standard campaign DELETE/PUT routes check ownership.
+// Flagging endpoint will be separate: /api/admin/campaigns/[campaignId]/flag
+

@@ -28,6 +28,8 @@ const mapCampaignDocumentToCampaign = (campaignDoc: Omit<Campaign, 'id'> & { _id
     scheduledPosts: (campaignDoc.scheduledPosts || []).map(sp => ({ ...sp, scheduledAt: ensureDate(sp.scheduledAt) || new Date() })),
     abTests: (campaignDoc.abTests || []).map(ab => ({ ...ab, createdAt: ensureDate(ab.createdAt) || new Date() })),
     isPrivate: campaignDoc.isPrivate ?? false,
+    isFlagged: campaignDoc.isFlagged ?? false,
+    adminModerationNotes: campaignDoc.adminModerationNotes ?? undefined,
     createdAt: ensureDate(campaignDoc.createdAt) || new Date(),
     updatedAt: ensureDate(campaignDoc.updatedAt) || new Date(),
   };
@@ -110,6 +112,8 @@ export async function POST(request: NextRequest) {
       abTests: [],
       status: status || 'draft', 
       isPrivate: isPrivate ?? false, 
+      isFlagged: false, // Default for new campaigns
+      adminModerationNotes: '', // Default for new campaigns
       createdAt: new Date(),
       updatedAt: new Date(),
     };
@@ -155,6 +159,7 @@ export async function PUT(request: NextRequest) {
     
     const updateData: Partial<Omit<Campaign, 'id' | '_id' | 'userId' | 'createdAt'>> = { updatedAt: new Date() };
     
+    // User-updatable fields
     if (Object.prototype.hasOwnProperty.call(body, 'title')) updateData.title = body.title;
     if (Object.prototype.hasOwnProperty.call(body, 'brief')) updateData.brief = body.brief;
     if (Object.prototype.hasOwnProperty.call(body, 'targetAudience')) updateData.targetAudience = body.targetAudience === null ? undefined : body.targetAudience;
@@ -165,41 +170,43 @@ export async function PUT(request: NextRequest) {
     if (Object.prototype.hasOwnProperty.call(body, 'brandId')) updateData.brandId = body.brandId === null ? undefined : body.brandId;
     if (Object.prototype.hasOwnProperty.call(body, 'isPrivate')) updateData.isPrivate = body.isPrivate ?? false;
 
-
+    // Fields typically updated by system/backend logic (e.g., content generation, admin actions)
     if (Object.prototype.hasOwnProperty.call(body, 'contentVersions')) {
       updateData.contentVersions = (body.contentVersions === null ? [] : body.contentVersions).map((v: ContentVersion) => ({
         ...v,
         timestamp: ensureDate(v.timestamp) || new Date(),
       }));
     }
-
     if (Object.prototype.hasOwnProperty.call(body, 'agentDebates')) {
       updateData.agentDebates = (body.agentDebates === null ? [] : body.agentDebates).map((ad: AgentInteraction) => ({
         ...ad,
         timestamp: ensureDate(ad.timestamp) || new Date(),
       }));
     }
-
     if (Object.prototype.hasOwnProperty.call(body, 'scheduledPosts')) {
       updateData.scheduledPosts = (body.scheduledPosts === null ? [] : body.scheduledPosts).map((sp: ScheduledPost) => ({ 
         ...sp,
         scheduledAt: ensureDate(sp.scheduledAt) || new Date(),
       }));
     }
-
     if (Object.prototype.hasOwnProperty.call(body, 'abTests')) {
       updateData.abTests = (body.abTests === null ? [] : body.abTests).map((ab: ABTestInstance) => ({
         ...ab,
         createdAt: ensureDate(ab.createdAt) || new Date(),
       }));
     }
-    
+    // Admin-specific fields should only be updated by admin routes, not general user PUT
+    // isFlagged and adminModerationNotes are handled by /api/admin/campaigns/[id]/flag
+
     const client = await clientPromise;
     const db = client.db(process.env.MONGODB_DB_NAME);
     const campaignsCollection = db.collection<Omit<Campaign, 'id'>>('campaigns');
 
+    // Standard users can only update their own campaigns
+    const query = { _id: new ObjectId(campaignId), userId: userId };
+    
     const result = await campaignsCollection.findOneAndUpdate(
-      { _id: new ObjectId(campaignId), userId: userId },
+      query,
       { $set: updateData },
       { returnDocument: 'after' }
     );
@@ -246,10 +253,11 @@ export async function DELETE(request: NextRequest) {
     const db = client.db(process.env.MONGODB_DB_NAME);
     const campaignsCollection = db.collection('campaigns');
 
-    const result = await campaignsCollection.deleteOne({ 
-      _id: new ObjectId(campaignId),
-      userId: userId 
-    });
+    // Standard users can only delete their own campaigns
+    const query = { _id: new ObjectId(campaignId), userId: userId };
+    // Admins might have a separate endpoint to delete any campaign
+    
+    const result = await campaignsCollection.deleteOne(query);
 
     if (result.deletedCount === 0) {
       return NextResponse.json({ error: 'Campaign not found or user not authorized to delete' }, { status: 404 });

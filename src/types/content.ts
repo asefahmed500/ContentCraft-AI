@@ -1,6 +1,5 @@
 
 
-
 export interface ContentPiece {
   id: string;
   format: ContentFormat;
@@ -105,6 +104,8 @@ export interface Campaign {
   
   status: CampaignStatus;
   isPrivate?: boolean; // New field for privacy setting
+  isFlagged?: boolean; // For admin content moderation
+  adminModerationNotes?: string; // Notes from admin regarding moderation
   createdAt: Date;
   updatedAt: Date;
 }
@@ -154,5 +155,4 @@ export interface CampaignMemory {
   // other learned insights can be added here
   lastUpdatedAt?: Date;
 }
-
 
