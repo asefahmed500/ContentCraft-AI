@@ -10,17 +10,18 @@ import { ContentEvolutionTimeline } from './components/ContentEvolutionTimeline'
 import { PerformancePredictor } from './components/PerformancePredictor';
 import { CampaignList } from './components/CampaignList'; 
 import { TemplateLibrary } from './components/TemplateLibrary';
+import { ContentCalendarView } from './components/ContentCalendarView';
 import type { AgentDebateInput, AgentDebateOutput } from '@/ai/flows/agent-debate';
 import { agentDebate } from '@/ai/flows/agent-debate';
 import type { GenerateContentInput, GenerateContentOutput } from '@/ai/flows/content-generation';
 import { generateContent } from '@/ai/flows/content-generation';
-import type { AgentMessage, AgentRole } from '@/types/agent';
+import type { AgentRole } from '@/types/agent';
 import type { MultiFormatContent, CampaignStatus, Campaign, ContentVersion, AgentInteraction } from '@/types/content';
 import { useToast } from '@/hooks/use-toast';
 import { Separator } from '@/components/ui/separator';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Fingerprint, Users, Bot, Library, FileText, Activity, TrendingUp, BadgeCheck, ListChecks, Lightbulb, Edit, MessageSquareWarning, ShieldCheck, SearchCheck, Brain, BarChartBig } from 'lucide-react';
+import { Fingerprint, Users, Bot, Library, FileText, Activity, TrendingUp, BadgeCheck, ListChecks, Lightbulb, Edit, MessageSquareWarning, ShieldCheck, SearchCheck, Brain, BarChartBig, CalendarDays } from 'lucide-react';
 
 async function agentDebateAction(input: AgentDebateInput): Promise<AgentDebateOutput | { error: string }> {
   try {
@@ -76,7 +77,7 @@ export default function DashboardPage() {
   const { toast } = useToast();
 
   const agentRolesForDebate: AgentRole[] = ["Creative Director", "Content Writer", "Brand Persona", "Analytics Strategist", "SEO Optimization", "Quality Assurance", "Orchestrator"];
-  const orchestratorAgentName: AgentMessage['agentName'] = "Orchestrator";
+  const orchestratorAgentName: AgentInteraction['agent'] = "Orchestrator";
 
 
   const handleNewCampaignCreatedOrUpdated = (campaign: Campaign) => {
@@ -94,32 +95,7 @@ export default function DashboardPage() {
         setMultiFormatContent(latestVersion ? latestVersion.multiFormatContentSnapshot : null);
     }
   };
-
-  const addAgentInteractionToCurrentCampaign = (interaction: AgentInteraction) => {
-     if (!selectedCampaignForProcessing) return;
-
-     const campaignToUpdate = selectedCampaignForProcessing;
-     const updatedCampaign = {
-        ...campaignToUpdate,
-        agentDebates: [...(campaignToUpdate.agentDebates || []), interaction]
-     };
-     setSelectedCampaignForProcessing(updatedCampaign);
-     return updatedCampaign; 
-  };
   
-  const addContentVersionToCurrentCampaign = (version: ContentVersion) => {
-     if (!selectedCampaignForProcessing) return { error: "No campaign selected" };
-
-     const campaignToUpdate = selectedCampaignForProcessing;
-     const updatedCampaign = {
-        ...campaignToUpdate,
-        contentVersions: [...(campaignToUpdate.contentVersions || []), version],
-        status: 'review' as CampaignStatus 
-     };
-     setSelectedCampaignForProcessing(updatedCampaign);
-     return updatedCampaign; 
-  };
-
   const persistCurrentCampaignUpdates = async (campaignToPersist?: Campaign | null) => {
     const campaign = campaignToPersist || selectedCampaignForProcessing;
     if (!campaign || !campaign.id) return;
@@ -196,14 +172,11 @@ export default function DashboardPage() {
       debateInteractions.push({ agent: 'SEO Optimization', message: `SEO Suggestion: For blog/LinkedIn, target keywords like '${campaign.title.toLowerCase().replace(/\s/g, '-')}' and related terms like '${campaign.targetAudience?.toLowerCase() || 'audience-specific'} marketing'.`, timestamp: new Date() });
       debateInteractions.push({ agent: orchestratorAgentName, message: `Debate Summary: ${debateResult.debateSummary}\nKey Suggestions & Consensus: ${debateResult.contentSuggestions.join('; ')}\nProceeding to content generation.`, timestamp: new Date()});
       
-      currentCampaignState = {...currentCampaignState, agentDebates: debateInteractions};
-      setSelectedCampaignForProcessing(currentCampaignState);
-
-      setIsDebating(false); 
-      currentCampaignState = {...currentCampaignState, status: 'generating' as CampaignStatus};
+      currentCampaignState = {...currentCampaignState, agentDebates: debateInteractions, status: 'generating' as CampaignStatus};
       setSelectedCampaignForProcessing(currentCampaignState);
       await persistCurrentCampaignUpdates(currentCampaignState); 
       
+      setIsDebating(false); 
       toast({ title: "Debate Phase Complete", description: "Agents have concluded the strategy session. Now generating multi-format content." });
       setActiveTab('preview');
 
@@ -229,16 +202,15 @@ export default function DashboardPage() {
         multiFormatContentSnapshot: contentResult,
       };
       
-      const updatedCampaignWithVersion = addContentVersionToCurrentCampaign(newVersion);
-      if (updatedCampaignWithVersion && !('error' in updatedCampaignWithVersion)) {
-         currentCampaignState = updatedCampaignWithVersion;
-         await persistCurrentCampaignUpdates(currentCampaignState); 
-         toast({ title: "Content Generation Complete!", description: "Your final draft of multi-format content is ready for preview." });
-      } else {
-         toast({ title: "Failed to Save Content Version", description: "Could not update campaign with new content.", variant: "destructive"});
-      }
+      currentCampaignState = {
+        ...currentCampaignState, 
+        contentVersions: [...(currentCampaignState.contentVersions || []), newVersion],
+        status: 'review' as CampaignStatus
+      };
+      setSelectedCampaignForProcessing(currentCampaignState);
+      await persistCurrentCampaignUpdates(currentCampaignState); 
+      toast({ title: "Content Generation Complete!", description: "Your final draft of multi-format content is ready for preview." });
       
-
     } catch (error) {
       console.error("Campaign Generation Error:", error);
       const errorMessage = error instanceof Error ? error.message : "An unknown error occurred.";
@@ -272,6 +244,8 @@ export default function DashboardPage() {
     }
 
     try {
+      // Fetch the specific campaign directly might be better if API supports it,
+      // but fetching all and filtering is okay for now with few campaigns.
       const campaignsResponse = await fetch(`/api/campaigns`);
       if (!campaignsResponse.ok) throw new Error("Failed to fetch campaigns to find the selected one.");
       const campaigns: Campaign[] = await campaignsResponse.json();
@@ -391,7 +365,7 @@ export default function DashboardPage() {
       <Separator />
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-1 h-auto flex-wrap p-1">
+        <TabsList className="grid w-full grid-cols-3 md:grid-cols-5 lg:grid-cols-9 gap-1 h-auto flex-wrap p-1">
           <TabsTrigger value="campaign-hub" className="text-xs sm:text-sm"><ListChecks className="mr-1 sm:mr-2 h-3 w-3 sm:h-4 sm:w-4" />Campaigns</TabsTrigger>
           <TabsTrigger value="generator" className="text-xs sm:text-sm"><Lightbulb className="mr-1 sm:mr-2 h-3 w-3 sm:h-4 sm:w-4" />{selectedCampaignForEditingInForm ? "Edit" : "New"} Brief</TabsTrigger>
           <TabsTrigger value="templates" className="text-xs sm:text-sm"><Library className="mr-1 sm:mr-2 h-3 w-3 sm:h-4 sm:w-4" />Templates</TabsTrigger>
@@ -400,6 +374,7 @@ export default function DashboardPage() {
           <TabsTrigger value="preview" className="text-xs sm:text-sm" disabled={!selectedCampaignForProcessing || !hasContentForPreview}><FileText className="mr-1 sm:mr-2 h-3 w-3 sm:h-4 sm:w-4" />Preview</TabsTrigger>
           <TabsTrigger value="evolution" className="text-xs sm:text-sm" disabled={!selectedCampaignForProcessing || contentVersions.length === 0}><Activity className="mr-1 sm:mr-2 h-3 w-3 sm:h-4 sm:w-4" />Evolution</TabsTrigger>
           <TabsTrigger value="performance" className="text-xs sm:text-sm" disabled={!selectedCampaignForProcessing || !hasContentForPerformance}><BarChartBig className="mr-1 sm:mr-2 h-3 w-3 sm:h-4 sm:w-4" />Performance</TabsTrigger>
+          <TabsTrigger value="calendar" className="text-xs sm:text-sm"><CalendarDays className="mr-1 sm:mr-2 h-3 w-3 sm:h-4 sm:w-4" />Calendar</TabsTrigger>
         </TabsList>
 
         <TabsContent value="campaign-hub" className="mt-6">
@@ -471,8 +446,13 @@ export default function DashboardPage() {
                 contentToAnalyze={multiFormatContent} 
             />
         </TabsContent>
+
+        <TabsContent value="calendar" className="mt-6">
+            <ContentCalendarView />
+        </TabsContent>
         
       </Tabs>
     </div>
   );
 }
+

@@ -1,4 +1,5 @@
 
+
 export interface ContentPiece {
   id: string;
   format: ContentFormat;
@@ -35,7 +36,7 @@ export type CampaignStatus =
   | 'archived';
 
 export interface AgentInteraction {
-  agent: string; // e.g., "seo-optimizer", "Brand Persona"
+  agent: string; // e.g., "Creative Director", "Brand Persona", "Analytics Strategist", "QA Agent", "SEO Optimization", "Orchestrator"
   message: string;
   timestamp: Date;
   // Optional: type: 'suggestion', 'critique', 'vote'
@@ -51,11 +52,21 @@ export interface ContentVersion {
   // Optional: performanceMetrics?: Record<ContentFormat, { ctr?: number; engagement?: number; conversion?: number; openRate?: number; ctaClick?: number; audienceMatchScore?: number }>;
 }
 
+export interface ScheduledPost {
+  id: string; // Unique ID for the scheduled post
+  campaignId: string;
+  contentVersionId?: string; // Which version of content is scheduled
+  contentFormat: keyof MultiFormatContent | string; // e.g., 'tweet', 'linkedInArticle'
+  platform: string; // e.g., "Twitter", "LinkedIn", "Instagram"
+  scheduledAt: Date;
+  status: 'scheduled' | 'posted' | 'failed' | 'draft';
+}
+
 export interface Campaign {
   _id?: any; // MongoDB ObjectId
   id: string; // String representation of _id
   userId: string; // To associate with a user
-  title: string; // Campaign name/title from CampaignGenerator
+  title: string; // Campaign name/title
   brief: string; // Product or service description
   targetAudience?: string;
   tone?: string;
@@ -65,6 +76,7 @@ export interface Campaign {
   
   agentDebates: AgentInteraction[]; // Stores the history of agent interactions during the debate phase
   contentVersions: ContentVersion[]; // For content evolution timeline and storing different output versions
+  scheduledPosts?: ScheduledPost[]; // Array of scheduled posts for this campaign
   
   status: CampaignStatus;
   createdAt: Date;
@@ -106,3 +118,4 @@ export interface UserFeedback {
   comment?: string;
   timestamp: Date;
 }
+
