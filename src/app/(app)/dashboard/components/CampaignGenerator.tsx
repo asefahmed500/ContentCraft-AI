@@ -10,7 +10,7 @@ import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, Wand2, Lightbulb, Users, Target, Palette, FileUp, Save, Paperclip, Tag, Info, Link2, Combine, Brain } from 'lucide-react';
+import { Loader2, Wand2, Lightbulb, Users, Target, Palette, FileUp, Save, Paperclip, Tag, Info, Link2, Combine, Brain, Video, Upload } from 'lucide-react';
 import type { Campaign } from '@/types/content'; 
 import { Separator } from '@/components/ui/separator';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -42,8 +42,13 @@ export function CampaignGenerator({
   const [isSaving, setIsSaving] = useState(false);
   const [andStartGeneration, setAndStartGeneration] = useState(false);
   const [referenceFiles, setReferenceFiles] = useState<FileList | null>(null);
+  
   const [importUrl, setImportUrl] = useState('');
   const [isImportingUrl, setIsImportingUrl] = useState(false);
+
+  const [videoUrl, setVideoUrl] = useState('');
+  const [videoFile, setVideoFile] = useState<File | null>(null);
+  const [isProcessingVideo, setIsProcessingVideo] = useState(false);
 
 
   const { toast } = useToast();
@@ -58,6 +63,8 @@ export function CampaignGenerator({
       setBrandVoice(''); 
       setReferenceFiles(null);
       setImportUrl('');
+      setVideoUrl('');
+      setVideoFile(null);
     } else {
       // Reset form for new campaign
       setCampaignTitle('');
@@ -68,6 +75,8 @@ export function CampaignGenerator({
       setBrandVoice('');
       setReferenceFiles(null);
       setImportUrl('');
+      setVideoUrl('');
+      setVideoFile(null);
     }
   }, [selectedCampaignForEdit]);
 
@@ -115,7 +124,7 @@ export function CampaignGenerator({
       if (shouldStartGeneration) {
         await onGenerateContentForCampaign(savedCampaign, brandVoice.trim() || undefined);
       } else if (!selectedCampaignForEdit) { 
-        setCampaignTitle(''); setBrief(''); setTargetAudience(''); setTone(''); setContentGoals([]); setBrandVoice(''); setReferenceFiles(null); setImportUrl('');
+        setCampaignTitle(''); setBrief(''); setTargetAudience(''); setTone(''); setContentGoals([]); setBrandVoice(''); setReferenceFiles(null); setImportUrl(''); setVideoUrl(''); setVideoFile(null);
       }
 
     } catch (error) {
@@ -135,6 +144,14 @@ export function CampaignGenerator({
     }
   };
 
+  const handleVideoFileChange = (e: ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+        setVideoFile(e.target.files[0]);
+        setVideoUrl(''); // Clear URL if file is selected
+        toast({title: "Video File Selected", description: `Selected: ${e.target.files[0].name}. This is a UI placeholder.`});
+    }
+  };
+
   const handleImportFromUrl = async () => {
     if (!importUrl.trim()) {
       toast({ title: "No URL provided", description: "Please enter a URL to import content.", variant: "destructive"});
@@ -143,7 +160,6 @@ export function CampaignGenerator({
     setIsImportingUrl(true);
     toast({ title: "Importing Content...", description: `Attempting to fetch and analyze content from ${importUrl}. This is a simulation.`});
 
-    // Simulate API call and processing delay
     await new Promise(resolve => setTimeout(resolve, 2000));
 
     const simulatedExtractedText = `Content successfully "imported" from: ${importUrl}.\n\n[Simulated extracted content appears here... This text is a placeholder. In a real system, the actual content from the URL would be fetched, parsed (e.g., using readability.js), and then displayed here or used for analysis.]\n\nPlease review and refine this text to serve as the core brief for your campaign. You can edit it directly below.`;
@@ -151,7 +167,46 @@ export function CampaignGenerator({
 
     toast({ title: "Content Imported (Simulated)", description: "The 'Product or Service Description' has been updated. Please review and edit as needed."});
     setIsImportingUrl(false);
-    setImportUrl(''); // Clear URL input after "import"
+    setImportUrl(''); 
+  };
+
+  const handleGenerateFromVideo = async () => {
+    if (!videoUrl.trim() && !videoFile) {
+        toast({ title: "No Video Source", description: "Please provide a video URL or upload a video file.", variant: "destructive"});
+        return;
+    }
+    setIsProcessingVideo(true);
+    toast({ title: "Processing Video (Experimental)...", description: `Attempting to generate brief from ${videoFile ? videoFile.name : videoUrl}. This is a simulation.`});
+
+    await new Promise(resolve => setTimeout(resolve, 3000)); // Simulate longer processing for video
+
+    const simulatedVideoAnalysis = `[Simulated Video Analysis from: ${videoFile ? videoFile.name : videoUrl}]\n
+Transcript Highlights: 
+(AI would place key transcript snippets here...)
+"...our new eco-friendly product line..."
+"...revolutionizing how you approach daily tasks..."
+"...available next month, sign up for early access!.."
+
+Identified Key Themes:
+- Eco-friendliness, Sustainability
+- Innovation, Revolutionizing tasks
+- Product Launch, Early Access
+
+Suggested Campaign Angles:
+- Focus on the environmental benefits.
+- Highlight the time-saving or efficiency aspects.
+- Build anticipation for the upcoming launch.
+
+Please review and refine this extracted information and the suggestions above to serve as the core brief for your campaign. You can edit it directly in the 'Product or Service Description' field.`;
+    
+    setBrief(simulatedVideoAnalysis);
+    toast({ title: "Video Analysis Complete (Simulated)", description: "The 'Product or Service Description' has been updated with insights from the video. Please review and edit as needed."});
+    setIsProcessingVideo(false);
+    setVideoUrl('');
+    setVideoFile(null);
+    // Clear file input visually if possible (complex, often needs a ref or key change)
+    const videoFileInput = document.getElementById('video-file-input') as HTMLInputElement;
+    if (videoFileInput) videoFileInput.value = '';
   };
 
 
@@ -182,6 +237,54 @@ export function CampaignGenerator({
           />
         </div>
         
+        <Separator />
+        
+        <Alert variant="default" className="bg-primary/5 border-primary/20">
+          <Video className="h-5 w-5 text-primary/80" />
+          <AlertTitle className="font-semibold text-primary/90">Experimental: Video-to-Content Generator</AlertTitle>
+          <AlertDescription className="text-sm text-primary/70">
+            Paste a video URL or upload a video file. The system will attempt to extract key information to help bootstrap your campaign brief below.
+          </AlertDescription>
+          <div className="mt-4 space-y-3">
+            <div className="space-y-1">
+                <Label htmlFor="video-url" className="text-sm">Video URL (e.g., TikTok, YouTube)</Label>
+                <Input 
+                    id="video-url"
+                    placeholder="https://example.com/video"
+                    value={videoUrl}
+                    onChange={(e) => { setVideoUrl(e.target.value); if(e.target.value) setVideoFile(null); }}
+                    disabled={isProcessingVideo}
+                />
+            </div>
+             <div className="relative flex items-center text-xs uppercase my-2">
+                <span className="flex-grow border-t border-primary/20"></span>
+                <span className="mx-2 text-primary/60">OR</span>
+                <span className="flex-grow border-t border-primary/20"></span>
+            </div>
+            <div className="space-y-1">
+                <Label htmlFor="video-file-input" className="text-sm">Upload Video File</Label>
+                <Input 
+                    id="video-file-input"
+                    type="file"
+                    accept="video/mp4,video/quicktime,video/x-msvideo,video/webm" // Common video formats
+                    onChange={handleVideoFileChange}
+                    disabled={isProcessingVideo} // Keep this disabled for now as it's a placeholder
+                />
+            </div>
+            <Button 
+                onClick={handleGenerateFromVideo} 
+                disabled={isProcessingVideo || (!videoUrl.trim() && !videoFile)} 
+                variant="outline" 
+                className="w-full sm:w-auto border-primary/50 text-primary/90 hover:bg-primary/10 hover:text-primary"
+            >
+                {isProcessingVideo ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Wand2 className="mr-2 h-4 w-4"/>} 
+                Generate Brief from Video
+            </Button>
+          </div>
+        </Alert>
+
+        <Separator />
+
         <div className="space-y-4">
             <div className="space-y-2">
                 <Label htmlFor="import-url" className="text-base flex items-center gap-1"><Link2 className="h-4 w-4"/>Import Content from URL (Optional)</Label>
@@ -192,14 +295,15 @@ export function CampaignGenerator({
                         value={importUrl}
                         onChange={(e) => setImportUrl(e.target.value)}
                         className="text-base"
+                        disabled={isImportingUrl || isProcessingVideo}
                     />
-                    <Button onClick={handleImportFromUrl} disabled={isImportingUrl || !importUrl.trim()} variant="outline">
-                        {isImportingUrl ? <Loader2 className="h-4 w-4 animate-spin"/> : <Combine className="h-4 w-4"/>}
-                        Import & Use for Brief
+                    <Button onClick={handleImportFromUrl} disabled={isImportingUrl || !importUrl.trim() || isProcessingVideo} variant="outline">
+                        {isImportingUrl ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Combine className="mr-2 h-4 w-4"/>}
+                        Import Text
                     </Button>
                 </div>
                 <p className="text-xs text-muted-foreground">
-                    This will attempt to fetch content from the URL and populate the description below (simulated).
+                    This will attempt to fetch text from the URL and populate the description below (simulated).
                 </p>
             </div>
 
@@ -209,12 +313,13 @@ export function CampaignGenerator({
               <Label htmlFor="campaign-brief" className="text-base flex items-center gap-1"><Info className="h-4 w-4"/>Product or Service Description*</Label>
               <Textarea
                 id="campaign-brief"
-                placeholder="Describe the product, service, or topic this campaign is about. e.g., Our new line of eco-friendly yoga mats made from recycled materials, designed for ultimate comfort and sustainability. You can also paste content here directly or use the URL import feature above."
+                placeholder="Describe the product, service, or topic this campaign is about. e.g., Our new line of eco-friendly yoga mats... This field can be auto-populated by the import features above."
                 value={brief}
                 onChange={(e) => setBrief(e.target.value)}
                 rows={8}
                 className="text-base"
                 required
+                disabled={isProcessingVideo || isImportingUrl}
               />
             </div>
         </div>
@@ -295,7 +400,7 @@ export function CampaignGenerator({
         </div>
 
          <Alert className="mt-6 bg-primary/5 border-primary/20">
-          <Brain className="h-5 w-5 text-primary/80" />
+          <Brain className="mr-2 h-5 w-5 text-primary/80" />
           <AlertTitle className="font-semibold text-primary/90">Campaign Intelligence (Coming Soon!)</AlertTitle>
           <AlertDescription className="text-sm text-primary/70">
             ContentCraft AI will learn from your past campaign performance to offer smarter suggestions for tone, topics, and CTAs right here, helping you optimize new campaign briefs.
@@ -304,7 +409,7 @@ export function CampaignGenerator({
 
         <div className="space-y-2">
             <Label htmlFor="reference-materials" className="text-base flex items-center gap-1">
-                <Paperclip className="h-4 w-4" /> Upload PDFs or Links (Reference Materials)
+                <Paperclip className="mr-2 h-4 w-4" /> Upload PDFs or Links (Reference Materials)
             </Label>
             <Input 
                 id="reference-materials" 
@@ -313,7 +418,7 @@ export function CampaignGenerator({
                 onChange={handleFileChange}
                 className="text-base"
                 accept=".pdf, .txt, .md, .doc, .docx" 
-                disabled // Full implementation requires backend storage & processing
+                disabled 
             />
              {referenceFiles && referenceFiles.length > 0 && (
                 <div className="pt-2 text-sm text-muted-foreground">
@@ -321,7 +426,7 @@ export function CampaignGenerator({
                 </div>
              )}
             <p className="text-xs text-muted-foreground">
-                (File upload & URL parsing for AI processing (e.g. to GCS/GridFS & Gemini analysis) is a planned feature and currently simulated for UI. Files are not uploaded. Use the URL import above for brief generation).
+                (File upload & URL parsing for AI processing (e.g. to GCS/GridFS & Gemini analysis) is a planned feature and currently simulated for UI. Files are not uploaded. Use the URL/Video import above for brief generation).
             </p>
         </div>
 
@@ -329,7 +434,7 @@ export function CampaignGenerator({
       <CardFooter className="flex flex-col sm:flex-row justify-end gap-3 pt-6">
         <Button 
             onClick={() => handleSaveCampaign(false)} 
-            disabled={isSaving || isGenerating || isImportingUrl} 
+            disabled={isSaving || isGenerating || isImportingUrl || isProcessingVideo} 
             variant="outline"
             className="w-full sm:w-auto"
         >
@@ -338,7 +443,7 @@ export function CampaignGenerator({
         </Button>
         <Button 
             onClick={() => handleSaveCampaign(true)} 
-            disabled={isSaving || isGenerating || !campaignTitle.trim() || !brief.trim() || isImportingUrl} 
+            disabled={isSaving || isGenerating || !campaignTitle.trim() || !brief.trim() || isImportingUrl || isProcessingVideo} 
             size="lg" 
             className="w-full sm:w-auto"
         >
