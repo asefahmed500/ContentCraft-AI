@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useCallback, useEffect } from 'react';
@@ -12,7 +13,7 @@ import type { AgentDebateInput, AgentDebateOutput } from '@/ai/flows/agent-debat
 import { agentDebate } from '@/ai/flows/agent-debate';
 import type { GenerateContentInput, GenerateContentOutput } from '@/ai/flows/content-generation';
 import { generateContent } from '@/ai/flows/content-generation';
-import type { AgentMessage } from '@/types/agent';
+import type { AgentMessage, AgentRole } from '@/types/agent';
 import type { MultiFormatContent, CampaignStatus, Campaign } from '@/types/content';
 import { useToast } from '@/hooks/use-toast';
 import { Separator } from '@/components/ui/separator';
@@ -74,21 +75,20 @@ export default function DashboardPage() {
 
   const { toast } = useToast();
 
-  const predefinedAgentRoles = [
+  const predefinedAgentRoles: AgentRole[] = [
     "Creative Director", "Content Writer", "Brand Persona", 
-    "Analytics Strategist", "Visual Content", "SEO Optimization", "Quality Assurance"
+    "Analytics Strategist", "Visual Content", "SEO Optimization", "Quality Assurance", "Orchestrator"
   ];
 
   const handleNewCampaignCreatedOrUpdated = (campaign: Campaign) => {
     setRefreshCampaignListTrigger(prev => prev + 1); 
-    setSelectedCampaignForProcessing(campaign); // Set this as the campaign in focus if it was just created/updated
-    setSelectedCampaignForEditingInForm(null); // Clear form editing state after save
-    // toast({ title: "Campaign Ready", description: `Campaign "${campaign.brief.substring(0,30)}..." is ready.` });
+    setSelectedCampaignForProcessing(campaign); 
+    setSelectedCampaignForEditingInForm(null); 
   };
 
   const handleGenerateContentForCampaign = async (
     campaign: Campaign,
-    brandVoiceOverride?: string, // Renamed from brandVoiceFromDNA for clarity
+    brandVoiceOverride?: string,
   ) => {
     if(!campaign || !campaign.id) {
         toast({title: "Error", description: "No campaign selected to generate content.", variant: "destructive"});
@@ -104,9 +104,9 @@ export default function DashboardPage() {
     
     const displayBrief = campaign.brief.substring(0, 50);
     const displayAudience = campaign.targetAudience ? `, for ${campaign.targetAudience.substring(0,30)}` : '';
-    const displayTone = campaign.tone ? `, with ${campaign.tone} tone` : '';
-    const campaignTitle = `Working on: "${displayBrief}..."${displayAudience}${displayTone}`;
-    setCurrentDebateTopic(campaignTitle);
+    const displayTone = campaign.tone ? `, with a ${campaign.tone} tone` : '';
+    const campaignTitleForDebate = `Campaign: "${displayBrief}..."${displayAudience}${displayTone}`;
+    setCurrentDebateTopic(campaignTitleForDebate);
     setActiveTab('debate');
 
     toast({ title: "Campaign Processing Started", description: "Agents are now working on your campaign." });
@@ -118,9 +118,10 @@ export default function DashboardPage() {
       if (campaign.contentGoals && campaign.contentGoals.length > 0) augmentedBrief += `\nContent Goals: ${campaign.contentGoals.join(', ')}`;
 
       const debateInput: AgentDebateInput = {
-        topic: `Campaign strategy for: ${augmentedBrief}`,
+        topic: `Formulate content strategy for a campaign about: ${augmentedBrief}. Focus on key messaging, angles, and potential pitfalls.`,
         initialContent: augmentedBrief,
-        agentRoles: predefinedAgentRoles,
+        // Pick a subset of roles for the AI to "embody" in its summary, or let it choose
+        agentRoles: ["Creative Director", "Brand Persona", "Analytics Strategist", "Content Writer"], 
       };
       const debateResult = await agentDebateAction(debateInput);
 
@@ -128,13 +129,21 @@ export default function DashboardPage() {
         throw new Error(`Debate failed: ${debateResult.error}`);
       }
       
-      const newDebateMessages: AgentMessage[] = [
-        { agentId: 'orchestrator', agentName: 'Orchestrator', agentRole: 'Orchestrator', message: `Debate initiated for: ${augmentedBrief.substring(0,100)}...`, timestamp: new Date(), type: 'statement'},
-        { agentId: 'agent-cd', agentName: 'Creative Director', agentRole: 'Creative Director', message: debateResult.contentSuggestions[0] || "Let's ensure bold, authentic messaging.", timestamp: new Date(), type: 'statement' },
-        { agentId: 'agent-bp', agentName: 'Brand Persona', agentRole: 'Brand Persona', message: debateResult.contentSuggestions[1] || "Focus on transparency for the target audience.", timestamp: new Date(), type: 'critique' },
-        { agentId: 'orchestrator', agentName: 'Orchestrator', agentRole: 'Orchestrator', message: `Debate Summary: ${debateResult.debateSummary}`, timestamp: new Date(), type: 'statement'},
-      ];
-      setDebateMessages(newDebateMessages);
+      const simulatedMessages: AgentMessage[] = [];
+      simulatedMessages.push({ agentId: 'orchestrator-start', agentName: 'Orchestrator', agentRole: 'Orchestrator', message: `Debate initiated for campaign: "${campaign.brief.substring(0,100)}...". Agents are formulating strategy.`, timestamp: new Date(), type: 'statement'});
+      
+      // Simulate messages from debateResult
+      if (debateResult.contentSuggestions && debateResult.contentSuggestions.length > 0) {
+        simulatedMessages.push({ agentId: 'agent-cd', agentName: 'Creative Director', agentRole: 'Creative Director', message: debateResult.contentSuggestions[0], timestamp: new Date(), type: 'suggestion' });
+        if (debateResult.contentSuggestions.length > 1) {
+             simulatedMessages.push({ agentId: 'agent-bp', agentName: 'Brand Persona', agentRole: 'Brand Persona', message: debateResult.contentSuggestions[1], timestamp: new Date(), type: 'critique' });
+        }
+      } else {
+         simulatedMessages.push({ agentId: 'agent-cw', agentName: 'Content Writer', agentRole: 'Content Writer', message: "Analyzing the brief for key angles...", timestamp: new Date(), type: 'statement' });
+      }
+      simulatedMessages.push({ agentId: 'orchestrator-summary', agentName: 'Orchestrator', agentRole: 'Orchestrator', message: `Debate Summary: ${debateResult.debateSummary}`, timestamp: new Date(), type: 'statement'});
+      
+      setDebateMessages(simulatedMessages);
       setIsDebating(false);
       await updateCampaignStatusAndRefresh(campaign.id, 'generating');
       toast({ title: "Debate Phase Complete", description: "Agents have concluded. Generating content." });
@@ -154,15 +163,12 @@ export default function DashboardPage() {
       setMultiFormatContent(contentResult);
       await updateCampaignStatusAndRefresh(campaign.id, 'review');
       toast({ title: "Content Generation Complete", description: "Multi-format content is ready for preview." });
-      // TODO: Persist multiFormatContent to the campaign document in DB
-      // For now, it's stored in local state `multiFormatContent` and associated with `selectedCampaignForProcessing`
-
 
     } catch (error) {
       console.error("Campaign Generation Error:", error);
       const errorMessage = error instanceof Error ? error.message : "An unknown error occurred.";
       toast({ title: "Campaign Generation Failed", description: errorMessage, variant: "destructive" });
-      await updateCampaignStatusAndRefresh(campaign.id, 'draft');
+      await updateCampaignStatusAndRefresh(campaign.id, 'draft'); // Reset to draft on failure
       setIsDebating(false);
     } finally {
       setIsGeneratingCampaign(false);
@@ -175,13 +181,17 @@ export default function DashboardPage() {
       toast({ title: "Status Update Failed", description: result.error, variant: "destructive"});
     } else {
       setCurrentCampaignOverallStatus(status);
-      setRefreshCampaignListTrigger(prev => prev + 1); // Refresh list to show new status
+      setRefreshCampaignListTrigger(prev => prev + 1); 
+      // Update the selected campaign for processing if it's the one being changed
+      if (selectedCampaignForProcessing && selectedCampaignForProcessing.id === campaignId) {
+        setSelectedCampaignForProcessing(prev => prev ? {...prev, status: status} : null);
+      }
     }
   };
 
 
   const handleCampaignSelectionFromList = async (campaignId: string | null, action: 'view' | 'edit') => {
-    setSelectedCampaignForEditingInForm(null); // Clear form editing state first
+    setSelectedCampaignForEditingInForm(null); 
 
     if (!campaignId) {
       setSelectedCampaignForProcessing(null);
@@ -193,12 +203,14 @@ export default function DashboardPage() {
       return;
     }
 
-    // Fetch the full campaign details from API to ensure we have the latest data
     try {
-      const response = await fetch(`/api/campaigns`); // Assuming GET /api/campaigns gets all, then filter
-      if (!response.ok) throw new Error("Failed to fetch campaigns");
-      const campaigns: Campaign[] = await response.json();
+      // Fetch details for the specific campaign to ensure data freshness
+      // This assumes an API endpoint like /api/campaigns?id={campaignId} exists or GET /api/campaigns returns an array
+      const campaignsResponse = await fetch(`/api/campaigns`);
+      if (!campaignsResponse.ok) throw new Error("Failed to fetch campaigns to find the selected one.");
+      const campaigns: Campaign[] = await campaignsResponse.json();
       const campaignToSelect = campaigns.find(c => c.id === campaignId);
+
 
       if (!campaignToSelect) {
         toast({ title: "Error", description: "Campaign not found.", variant: "destructive" });
@@ -207,27 +219,28 @@ export default function DashboardPage() {
       
       setSelectedCampaignForProcessing(campaignToSelect);
       setCurrentCampaignOverallStatus(campaignToSelect.status);
-      // TODO: Fetch existing debate messages and multi-format content for this campaign if they exist in DB.
-      // For now, they will be cleared and re-generated if "Edit & Generate" is chosen, or shown if "View".
-      setDebateMessages([]); // Placeholder: load from campaignToSelect.agentDebates if stored
-      setMultiFormatContent(null); // Placeholder: load from campaignToSelect.contentVersions if stored
+      
+      // Reset specific states for the newly selected campaign
+      setDebateMessages([]); 
+      setMultiFormatContent(null); // In a real app, you'd fetch this if persisted
+      const displayBrief = campaignToSelect.brief.substring(0, 50);
+      setCurrentDebateTopic(`Campaign: "${displayBrief}..."`);
 
 
       if (action === 'edit') {
-        setSelectedCampaignForEditingInForm(campaignToSelect); // Pre-fill the generator form
-        setActiveTab('generator'); // Switch to generator tab for editing
+        setSelectedCampaignForEditingInForm(campaignToSelect); 
+        setActiveTab('generator'); 
         toast({ title: "Editing Campaign", description: `Loaded "${campaignToSelect.brief.substring(0,30)}..." for editing.`});
       } else if (action === 'view') {
-        // For "View", we'd typically show existing generated content and metrics.
-        // If content needs to be generated first, direct user or trigger it.
-        if (campaignToSelect.status === 'review' || campaignToSelect.status === 'published') {
-             // Assume content exists and set it (requires fetching/storing it on Campaign object)
-             // setMultiFormatContent(campaignToSelect.generatedContent || null); // Example
-             toast({ title: "Viewing Campaign", description: `Displaying content for "${campaignToSelect.brief.substring(0,30)}...". Metrics and evolution are mock.`});
-             setActiveTab('preview');
+        // For "View", attempt to show existing content or guide to generate
+        // This part needs persisted content to be truly effective. For now, it relies on local state after generation.
+        if ((campaignToSelect.status === 'review' || campaignToSelect.status === 'published') /* && campaignToSelect.generatedContent */) {
+             // setMultiFormatContent(campaignToSelect.generatedContent || null); // Requires generatedContent on Campaign type
+             toast({ title: "Viewing Campaign", description: `Displaying details for "${campaignToSelect.brief.substring(0,30)}...". Generate content if not already done.`});
+             setActiveTab('preview'); // Or 'performance' or 'evolution'
         } else {
-            toast({ title: "Campaign Not Ready for View", description: `Campaign "${campaignToSelect.brief.substring(0,30)}..." is in '${campaignToSelect.status}' status. Generate content first.`});
-            setSelectedCampaignForEditingInForm(campaignToSelect); // Allow to start generation
+            toast({ title: "Campaign Status: " + campaignToSelect.status, description: `Generate content for "${campaignToSelect.brief.substring(0,30)}..." or edit the brief.`});
+            setSelectedCampaignForEditingInForm(campaignToSelect); 
             setActiveTab('generator');
         }
       }
@@ -240,10 +253,12 @@ export default function DashboardPage() {
   useEffect(() => {
     if (selectedCampaignForProcessing) {
         setCurrentCampaignOverallStatus(selectedCampaignForProcessing.status);
-        setCurrentDebateTopic(selectedCampaignForProcessing.brief.substring(0,50) + "...");
+        setCurrentDebateTopic(selectedCampaignForProcessing.brief.substring(0,70) + "...");
     } else {
         setCurrentCampaignOverallStatus('draft');
         setCurrentDebateTopic(undefined);
+        setDebateMessages([]);
+        setMultiFormatContent(null);
     }
   }, [selectedCampaignForProcessing]);
 
@@ -301,7 +316,7 @@ export default function DashboardPage() {
            <Card>
                 <CardHeader>
                     <CardTitle className="font-headline flex items-center gap-2"><ListChecks className="h-6 w-6 text-primary"/>Your Campaigns</CardTitle>
-                    <CardDescription>View, edit, or manage your existing content campaigns. Select a campaign to start.</CardDescription>
+                    <CardDescription>View, edit, or manage your existing content campaigns. Select a campaign to start or create a new one.</CardDescription>
                 </CardHeader>
                 <CardContent>
                     <CampaignList 
@@ -324,7 +339,7 @@ export default function DashboardPage() {
         <TabsContent value="debate" className="mt-6">
              <AgentDebatePanel 
                 debateMessages={debateMessages} 
-                isDebating={isDebating} 
+                isDebating={isDebating && currentCampaignOverallStatus === 'debating'} 
                 debateTopic={currentDebateTopic || selectedCampaignForProcessing?.brief.substring(0,70)} 
              />
         </TabsContent>
@@ -343,7 +358,6 @@ export default function DashboardPage() {
         <TabsContent value="evolution" className="mt-6">
             <ContentEvolutionTimeline 
                 campaignId={selectedCampaignForProcessing?.id || "current"} 
-                // Mocked versions based on current multiFormatContent. Real app would fetch from DB.
                 contentVersions={selectedCampaignForProcessing && multiFormatContent ? [{id: 'v1', text: JSON.stringify(multiFormatContent, null, 2), agentName: 'AI Team', timestamp: new Date(), changeSummary: 'Initial generation based on brief and debate.'}] : []} 
             />
         </TabsContent>
@@ -359,3 +373,4 @@ export default function DashboardPage() {
     </div>
   );
 }
+
