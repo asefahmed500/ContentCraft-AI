@@ -6,7 +6,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { CampaignCard } from '@/app/(app)/dashboard/components/CampaignCard'; 
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { Info, ServerCrash, Trash2, Flag, MessageSquare } from 'lucide-react';
+import { Info, ServerCrash, Trash2, Flag, MessageSquare, Search as SearchIcon } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import {
   AlertDialog,
@@ -85,11 +85,14 @@ export function AdminCampaignList({ onCampaignSelect }: AdminCampaignListProps) 
 
   useEffect(() => {
     let campaignsToFilter = [...allCampaigns];
+    const lowerSearchTerm = searchTerm.toLowerCase();
+
     if (searchTerm) {
       campaignsToFilter = campaignsToFilter.filter(campaign => 
-        campaign.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        campaign.brief.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (campaign.userId && campaign.userId.toLowerCase().includes(searchTerm.toLowerCase()))
+        campaign.title.toLowerCase().includes(lowerSearchTerm) ||
+        campaign.brief.toLowerCase().includes(lowerSearchTerm) ||
+        (campaign.userId && campaign.userId.toLowerCase().includes(lowerSearchTerm)) ||
+        (campaign.id && campaign.id.toLowerCase().includes(lowerSearchTerm))
       );
     }
     if (statusFilter !== 'all') {
@@ -199,12 +202,15 @@ export function AdminCampaignList({ onCampaignSelect }: AdminCampaignListProps) 
   return (
     <>
       <div className="flex flex-col sm:flex-row gap-4 mb-6">
-        <Input 
-          placeholder="Search campaigns (title, brief, user ID)..."
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-          className="max-w-sm"
-        />
+        <div className="relative flex-grow sm:max-w-sm">
+            <SearchIcon className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input 
+              placeholder="Search (title, brief, user/campaign ID)..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="pl-10"
+            />
+        </div>
         <Select value={statusFilter} onValueChange={setStatusFilter}>
           <SelectTrigger className="w-full sm:w-[180px]">
             <SelectValue placeholder="Filter by status" />
