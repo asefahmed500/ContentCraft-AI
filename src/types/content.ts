@@ -27,6 +27,14 @@ export type ContentFormat =
 
 export type CampaignStatus = 'draft' | 'debating' | 'generating' | 'review' | 'published' | 'archived';
 
+export interface ContentVersion {
+  id: string;
+  timestamp: Date;
+  actorName: string; // e.g., "AI Team", "User Edit", specific agent name
+  changeSummary: string; // Brief description of what changed or what was generated
+  multiFormatContentSnapshot: MultiFormatContent; // A snapshot of all generated formats at this version
+}
+
 export interface Campaign {
   _id?: any; // MongoDB ObjectId
   id: string;
@@ -36,7 +44,7 @@ export interface Campaign {
   contentGoals?: string[];
   brandProfileId?: string; // Link to a BrandDNA document
   agentDebates?: string[]; // IDs of debates (or embedded debate summaries)
-  contentVersions: ContentPiece[]; // For content evolution timeline
+  contentHistory: ContentVersion[]; // For content evolution timeline
   status: CampaignStatus;
   createdAt: Date;
   updatedAt: Date;
@@ -53,4 +61,3 @@ export interface MultiFormatContent {
   adsCopy?: string;
   [key: string]: string | undefined; // For additional formats
 }
-

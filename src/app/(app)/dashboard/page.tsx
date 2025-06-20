@@ -14,7 +14,7 @@ import { agentDebate } from '@/ai/flows/agent-debate';
 import type { GenerateContentInput, GenerateContentOutput } from '@/ai/flows/content-generation';
 import { generateContent } from '@/ai/flows/content-generation';
 import type { AgentMessage, AgentRole } from '@/types/agent';
-import type { MultiFormatContent, CampaignStatus, Campaign } from '@/types/content';
+import type { MultiFormatContent, CampaignStatus, Campaign, ContentVersion } from '@/types/content';
 import { useToast } from '@/hooks/use-toast';
 import { Separator } from '@/components/ui/separator';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -41,20 +41,24 @@ async function generateContentAction(input: GenerateContentInput): Promise<Gener
   }
 }
 
-async function updateCampaignStatusAPI(campaignId: string, status: CampaignStatus): Promise<Campaign | { error: string }> {
+async function updateCampaignStatusAPI(campaignId: string, status: CampaignStatus, contentHistory?: ContentVersion[]): Promise<Campaign | { error: string }> {
   try {
+    const payload: { status: CampaignStatus, contentHistory?: ContentVersion[] } = { status };
+    if (contentHistory) {
+      payload.contentHistory = contentHistory;
+    }
     const response = await fetch(`/api/campaigns?id=${campaignId}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status }),
+      body: JSON.stringify(payload),
     });
     if (!response.ok) {
       const errorData = await response.json();
-      throw new Error(errorData.error || 'Failed to update campaign status');
+      throw new Error(errorData.error || 'Failed to update campaign');
     }
     return await response.json();
   } catch (error) {
-    console.error("Error updating campaign status:", error);
+    console.error("Error updating campaign:", error);
     return { error: error instanceof Error ? error.message : "An unknown error occurred." };
   }
 }
@@ -63,6 +67,7 @@ async function updateCampaignStatusAPI(campaignId: string, status: CampaignStatu
 export default function DashboardPage() {
   const [debateMessages, setDebateMessages] = useState<AgentMessage[]>([]);
   const [multiFormatContent, setMultiFormatContent] = useState<MultiFormatContent | null>(null);
+  const [contentHistory, setContentHistory] = useState<ContentVersion[]>([]);
   const [isGeneratingCampaign, setIsGeneratingCampaign] = useState(false);
   const [isDebating, setIsDebating] = useState(false);
   const [currentDebateTopic, setCurrentDebateTopic] = useState<string | undefined>(undefined);
@@ -84,6 +89,9 @@ export default function DashboardPage() {
     setRefreshCampaignListTrigger(prev => prev + 1); 
     setSelectedCampaignForProcessing(campaign); 
     setSelectedCampaignForEditingInForm(null); 
+    setContentHistory(campaign.contentHistory || []);
+     setMultiFormatContent(campaign.contentHistory && campaign.contentHistory.length > 0 ? campaign.contentHistory[campaign.contentHistory.length -1].multiFormatContentSnapshot : null);
+
   };
 
   const handleGenerateContentForCampaign = async (
@@ -100,6 +108,7 @@ export default function DashboardPage() {
     await updateCampaignStatusAndRefresh(campaign.id, 'debating');
     setDebateMessages([]);
     setMultiFormatContent(null);
+    // setContentHistory([]); // Don't reset history, append to it
     setSelectedCampaignForProcessing(campaign); 
     
     const displayBrief = campaign.brief.substring(0, 50);
@@ -159,7 +168,16 @@ export default function DashboardPage() {
       }
 
       setMultiFormatContent(contentResult);
-      await updateCampaignStatusAndRefresh(campaign.id, 'review');
+      const newVersion: ContentVersion = {
+        id: `v${contentHistory.length + 1}`, // Simple version ID
+        timestamp: new Date(),
+        actorName: "AI Team (Generation)",
+        changeSummary: "Initial content generated based on brief and debate.",
+        multiFormatContentSnapshot: contentResult,
+      };
+      const updatedHistory = [...contentHistory, newVersion];
+      setContentHistory(updatedHistory);
+      await updateCampaignStatusAndRefresh(campaign.id, 'review', updatedHistory);
       toast({ title: "Content Generation Complete", description: "Multi-format content is ready for preview." });
 
     } catch (error) {
@@ -173,17 +191,23 @@ export default function DashboardPage() {
     }
   };
 
-  const updateCampaignStatusAndRefresh = async (campaignId: string, status: CampaignStatus) => {
-    const result = await updateCampaignStatusAPI(campaignId, status);
-    if ('error' in result) {
+  const updateCampaignStatusAndRefresh = async (campaignId: string, status: CampaignStatus, newContentHistory?: ContentVersion[]) => {
+    const result = await updateCampaignStatusAPI(campaignId, status, newContentHistory);
+    if ('error'in result) {
       toast({ title: "Status Update Failed", description: result.error, variant: "destructive"});
     } else {
       setCurrentCampaignOverallStatus(status);
       setRefreshCampaignListTrigger(prev => prev + 1); 
       if (selectedCampaignForProcessing && selectedCampaignForProcessing.id === campaignId) {
-        setSelectedCampaignForProcessing(prev => prev ? {...prev, status: status} : null);
+        setSelectedCampaignForProcessing(prev => prev ? {...prev, status: status, contentHistory: newContentHistory || prev.contentHistory } : null);
       }
     }
+  };
+
+  const handleViewVersion = (version: ContentVersion) => {
+    setMultiFormatContent(version.multiFormatContentSnapshot);
+    setActiveTab('preview');
+    toast({title: `Viewing Version: ${version.id}`, description: `Displaying content snapshot from ${version.timestamp.toLocaleString()}`});
   };
 
 
@@ -194,6 +218,7 @@ export default function DashboardPage() {
       setSelectedCampaignForProcessing(null);
       setDebateMessages([]);
       setMultiFormatContent(null);
+      setContentHistory([]);
       setCurrentDebateTopic(undefined);
       setCurrentCampaignOverallStatus('draft');
       setActiveTab('campaign-hub'); 
@@ -201,6 +226,8 @@ export default function DashboardPage() {
     }
 
     try {
+      // Fetch all campaigns to find the selected one. This is inefficient but simple for now.
+      // Ideally, fetch only the specific campaign by ID if API supports it.
       const campaignsResponse = await fetch(`/api/campaigns`);
       if (!campaignsResponse.ok) throw new Error("Failed to fetch campaigns to find the selected one.");
       const campaigns: Campaign[] = await campaignsResponse.json();
@@ -214,9 +241,15 @@ export default function DashboardPage() {
       
       setSelectedCampaignForProcessing(campaignToSelect);
       setCurrentCampaignOverallStatus(campaignToSelect.status);
+      setContentHistory(campaignToSelect.contentHistory || []);
       
-      setDebateMessages([]); 
-      setMultiFormatContent(null); 
+      setDebateMessages([]); // Reset debate messages for now; could load persisted ones later
+      
+      const latestVersion = campaignToSelect.contentHistory && campaignToSelect.contentHistory.length > 0 
+        ? campaignToSelect.contentHistory[campaignToSelect.contentHistory.length - 1] 
+        : null;
+      setMultiFormatContent(latestVersion ? latestVersion.multiFormatContentSnapshot : null);
+
       const displayBrief = campaignToSelect.brief.substring(0, 50);
       setCurrentDebateTopic(`Campaign: "${displayBrief}..."`);
 
@@ -226,19 +259,16 @@ export default function DashboardPage() {
         setActiveTab('generator'); 
         toast({ title: "Editing Campaign", description: `Loaded "${campaignToSelect.brief.substring(0,30)}..." for editing.`});
       } else if (action === 'view') {
-        // For "View", if content was previously generated and campaign is in review/published
-        // we'd ideally load it. For now, it resets and guides to (re)generate or edit.
-        // To truly show old content, it needs to be persisted with the campaign.
-        // This logic assumes content is generated on-the-fly or within the current session.
-        if ((campaignToSelect.status === 'review' || campaignToSelect.status === 'published') ) {
-             toast({ title: "Viewing Campaign", description: `Displaying details for "${campaignToSelect.brief.substring(0,30)}...". You might need to (re)generate content if it's from a previous session.`});
-             // Consider fetching existing generated content here if it's stored
-             // setMultiFormatContent(campaignToSelect.persistedContent || null);
+        if (latestVersion) {
+             toast({ title: "Viewing Campaign", description: `Displaying latest content for "${campaignToSelect.brief.substring(0,30)}...".`});
              setActiveTab('preview');
-        } else {
+        } else if (campaignToSelect.status === 'draft' || campaignToSelect.status === 'debating' || campaignToSelect.status === 'generating' ) {
             toast({ title: "Campaign Status: " + campaignToSelect.status, description: `Generate content for "${campaignToSelect.brief.substring(0,30)}..." or edit the brief.`});
             setSelectedCampaignForEditingInForm(campaignToSelect); 
             setActiveTab('generator');
+        } else { // Review, Published, Archived with no content history (edge case)
+            toast({ title: "Viewing Campaign", description: `No content versions found for "${campaignToSelect.brief.substring(0,30)}...". Consider re-generating or editing.`});
+            setActiveTab('preview'); // Show empty preview
         }
       }
     } catch (error) {
@@ -251,11 +281,18 @@ export default function DashboardPage() {
     if (selectedCampaignForProcessing) {
         setCurrentCampaignOverallStatus(selectedCampaignForProcessing.status);
         setCurrentDebateTopic(selectedCampaignForProcessing.brief.substring(0,70) + "...");
+        setContentHistory(selectedCampaignForProcessing.contentHistory || []);
+        const latestVersion = selectedCampaignForProcessing.contentHistory && selectedCampaignForProcessing.contentHistory.length > 0 
+            ? selectedCampaignForProcessing.contentHistory[selectedCampaignForProcessing.contentHistory.length - 1] 
+            : null;
+        setMultiFormatContent(latestVersion ? latestVersion.multiFormatContentSnapshot : null);
+
     } else {
         setCurrentCampaignOverallStatus('draft');
         setCurrentDebateTopic(undefined);
         setDebateMessages([]);
         setMultiFormatContent(null);
+        setContentHistory([]);
     }
   }, [selectedCampaignForProcessing]);
 
@@ -305,8 +342,8 @@ export default function DashboardPage() {
           <TabsTrigger value="debate" disabled={!selectedCampaignForProcessing && debateMessages.length === 0}><Users className="mr-1 sm:mr-2 h-4 w-4" />Debate</TabsTrigger>
           <TabsTrigger value="preview" disabled={!selectedCampaignForProcessing && !multiFormatContent}><FileText className="mr-1 sm:mr-2 h-4 w-4" />Preview</TabsTrigger>
           <TabsTrigger value="brand"><Sparkles className="mr-1 sm:mr-2 h-4 w-4" />Brand DNA</TabsTrigger>
-          <TabsTrigger value="evolution" disabled={!selectedCampaignForProcessing}><Activity className="mr-1 sm:mr-2 h-4 w-4" />Evolution</TabsTrigger>
-          <TabsTrigger value="performance" disabled={!selectedCampaignForProcessing}><TrendingUp className="mr-1 sm:mr-2 h-4 w-4" />Performance</TabsTrigger>
+          <TabsTrigger value="evolution" disabled={!selectedCampaignForProcessing || contentHistory.length === 0}><Activity className="mr-1 sm:mr-2 h-4 w-4" />Evolution</TabsTrigger>
+          <TabsTrigger value="performance" disabled={!selectedCampaignForProcessing || !multiFormatContent}><TrendingUp className="mr-1 sm:mr-2 h-4 w-4" />Performance</TabsTrigger>
         </TabsList>
 
         <TabsContent value="campaign-hub" className="mt-6">
@@ -354,8 +391,8 @@ export default function DashboardPage() {
 
         <TabsContent value="evolution" className="mt-6">
             <ContentEvolutionTimeline 
-                campaignId={selectedCampaignForProcessing?.id || "current"} 
-                contentVersions={selectedCampaignForProcessing && multiFormatContent ? [{id: 'v1', text: JSON.stringify(multiFormatContent, null, 2), agentName: 'AI Team', timestamp: new Date(), changeSummary: 'Initial generation based on brief and debate.'}] : []} 
+                versions={contentHistory}
+                onViewVersion={handleViewVersion}
             />
         </TabsContent>
 
@@ -370,4 +407,3 @@ export default function DashboardPage() {
     </div>
   );
 }
-

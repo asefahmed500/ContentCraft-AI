@@ -3,7 +3,7 @@ import type { NextRequest } from 'next/server';
 import clientPromise from '@/lib/mongodb';
 import { getToken } from 'next-auth/jwt';
 import { ObjectId } from 'mongodb';
-import type { Campaign } from '@/types/content';
+import type { Campaign, ContentVersion } from '@/types/content';
 
 // GET /api/campaigns - List all campaigns for the authenticated user
 export async function GET(request: NextRequest) {
@@ -20,10 +20,11 @@ export async function GET(request: NextRequest) {
     
     const userCampaigns = await campaignsCollection.find({ userId }).sort({ createdAt: -1 }).toArray();
     
-    // Ensure _id is converted to id string
+    // Ensure _id is converted to id string and contentHistory is initialized if missing
     const formattedCampaigns = userCampaigns.map(campaign => ({
       ...campaign,
-      id: campaign._id!.toString(), // Added non-null assertion for _id
+      id: campaign._id!.toString(), 
+      contentHistory: campaign.contentHistory || [], // Ensure contentHistory is an array
     }));
 
     return NextResponse.json(formattedCampaigns, { status: 200 });
@@ -53,16 +54,16 @@ export async function POST(request: NextRequest) {
     const db = client.db();
     const campaignsCollection = db.collection('campaigns');
 
-    const newCampaignData: Omit<Campaign, 'id' | '_id'> = { // Use Omit to exclude id and _id for creation
+    const newCampaignData: Omit<Campaign, 'id' | '_id'> = { 
       userId,
       brief,
       targetAudience,
       tone,
       contentGoals,
-      brandProfileId, // Optional
+      brandProfileId, 
       agentDebates: [],
-      contentVersions: [],
-      status: 'draft', // Default status
+      contentHistory: [], // Initialize with empty content history
+      status: 'draft', 
       createdAt: new Date(),
       updatedAt: new Date(),
     };
@@ -76,7 +77,7 @@ export async function POST(request: NextRequest) {
     const createdCampaign = {
       id: result.insertedId.toString(),
       ...newCampaignData
-    } as Campaign; // Assert as Campaign after adding id
+    } as Campaign; 
 
     return NextResponse.json(createdCampaign, { status: 201 });
   } catch (error) {
@@ -106,20 +107,37 @@ export async function PUT(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { brief, targetAudience, tone, contentGoals, status } = body;
+    const { brief, targetAudience, tone, contentGoals, status, contentHistory } = body;
 
-    // Construct update object with only provided fields
-    const updateData: Partial<Campaign> = { updatedAt: new Date() };
-    if (brief) updateData.brief = brief;
-    if (targetAudience) updateData.targetAudience = targetAudience;
-    if (tone) updateData.tone = tone;
-    if (contentGoals) updateData.contentGoals = contentGoals;
-    if (status) updateData.status = status;
-
-
-    if (Object.keys(updateData).length === 1 && updateData.updatedAt) { // only updatedAt
-        return NextResponse.json({ error: 'No fields to update provided' }, { status: 400 });
+    const updateData: Partial<Campaign> & { $set?: any } = { updatedAt: new Date() };
+    if (brief !== undefined) updateData.brief = brief;
+    if (targetAudience !== undefined) updateData.targetAudience = targetAudience;
+    if (tone !== undefined) updateData.tone = tone;
+    if (contentGoals !== undefined) updateData.contentGoals = contentGoals;
+    if (status !== undefined) updateData.status = status;
+    if (contentHistory !== undefined) {
+      // Ensure contentHistory versions have valid timestamps
+      const validatedHistory = contentHistory.map((v: ContentVersion) => ({
+        ...v,
+        timestamp: v.timestamp ? new Date(v.timestamp) : new Date(),
+      }));
+      updateData.contentHistory = validatedHistory;
     }
+    
+    // Prevent updating with only updatedAt if no other fields are provided
+    const updateKeys = Object.keys(updateData).filter(key => key !== 'updatedAt');
+    if (updateKeys.length === 0) {
+        // If only updatedAt is present, fetch and return current campaign data without an update
+        const client = await clientPromise;
+        const db = client.db();
+        const campaignsCollection = db.collection<Campaign>('campaigns');
+        const existingCampaign = await campaignsCollection.findOne({ _id: new ObjectId(campaignId), userId: userId });
+        if (!existingCampaign) {
+            return NextResponse.json({ error: 'Campaign not found or user not authorized' }, { status: 404 });
+        }
+        return NextResponse.json({ ...existingCampaign, id: existingCampaign._id.toString() }, { status: 200 });
+    }
+
 
     const client = await clientPromise;
     const db = client.db();
@@ -138,6 +156,7 @@ export async function PUT(request: NextRequest) {
     const updatedCampaign = {
         ...result.value,
         id: result.value._id!.toString(),
+        contentHistory: result.value.contentHistory || [], // Ensure contentHistory exists
     };
 
     return NextResponse.json(updatedCampaign, { status: 200 });
@@ -176,7 +195,7 @@ export async function DELETE(request: NextRequest) {
 
     const result = await campaignsCollection.deleteOne({ 
       _id: new ObjectId(campaignId),
-      userId: userId // Ensure user can only delete their own campaigns
+      userId: userId 
     });
 
     if (result.deletedCount === 0) {
