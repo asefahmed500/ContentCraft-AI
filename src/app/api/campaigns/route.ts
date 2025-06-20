@@ -4,9 +4,9 @@ import type { NextRequest } from 'next/server';
 import clientPromise from '@/lib/mongodb';
 import { getToken } from 'next-auth/jwt';
 import { ObjectId } from 'mongodb';
-import type { Campaign, ContentVersion, AgentInteraction, ABTestInstance } from '@/types/content';
+import type { Campaign, ContentVersion, AgentInteraction, ABTestInstance, ScheduledPost } from '@/types/content';
 
-// GET /api/campaigns - List all campaigns for the authenticated user
+// GET /api/campaigns - List all campaigns for the authenticated user OR a single campaign
 export async function GET(request: NextRequest) {
   try {
     const token = await getToken({ req: request, secret: process.env.NEXTAUTH_SECRET });
@@ -15,10 +15,34 @@ export async function GET(request: NextRequest) {
     }
     const userId = token.id as string;
 
+    const { searchParams } = new URL(request.url);
+    const campaignId = searchParams.get('id');
+    const fetchSingle = searchParams.get('single') === 'true';
+
     const client = await clientPromise;
     const db = client.db();
     const campaignsCollection = db.collection<Campaign>('campaigns');
     
+    if (fetchSingle && campaignId) {
+        if (!ObjectId.isValid(campaignId)) {
+            return NextResponse.json({ error: 'Invalid Campaign ID format for single fetch' }, { status: 400 });
+        }
+        const campaign = await campaignsCollection.findOne({ _id: new ObjectId(campaignId), userId });
+        if (!campaign) {
+            return NextResponse.json({ error: 'Campaign not found or user not authorized' }, { status: 404 });
+        }
+        return NextResponse.json({
+            ...campaign,
+            id: campaign._id!.toString(), 
+            contentVersions: campaign.contentVersions || [],
+            agentDebates: campaign.agentDebates || [],
+            scheduledPosts: campaign.scheduledPosts || [],
+            abTests: campaign.abTests || [],
+            isPrivate: campaign.isPrivate || false,
+        }, { status: 200 });
+    }
+
+
     const userCampaigns = await campaignsCollection.find({ userId }).sort({ createdAt: -1 }).toArray();
     
     const formattedCampaigns = userCampaigns.map(campaign => ({
@@ -28,7 +52,7 @@ export async function GET(request: NextRequest) {
       agentDebates: campaign.agentDebates || [],
       scheduledPosts: campaign.scheduledPosts || [],
       abTests: campaign.abTests || [],
-      isPrivate: campaign.isPrivate || false, // Ensure isPrivate is returned, default to false
+      isPrivate: campaign.isPrivate || false,
     }));
 
     return NextResponse.json(formattedCampaigns, { status: 200 });
@@ -62,17 +86,17 @@ export async function POST(request: NextRequest) {
       userId,
       title,
       brief,
-      targetAudience,
-      tone,
-      contentGoals,
-      brandId, 
+      targetAudience: targetAudience || undefined,
+      tone: tone || undefined,
+      contentGoals: contentGoals || [],
+      brandId: brandId || undefined, 
       referenceMaterials: referenceMaterials || [],
       agentDebates: [],
       contentVersions: [],
       scheduledPosts: [],
       abTests: [],
       status: 'draft', 
-      isPrivate: isPrivate || false, // Save isPrivate, default to false
+      isPrivate: isPrivate || false, 
       createdAt: new Date(),
       updatedAt: new Date(),
     };
@@ -123,13 +147,13 @@ export async function PUT(request: NextRequest) {
     
     if (title !== undefined) updateData.title = title;
     if (brief !== undefined) updateData.brief = brief;
-    if (targetAudience !== undefined) updateData.targetAudience = targetAudience;
-    if (tone !== undefined) updateData.tone = tone;
-    if (contentGoals !== undefined) updateData.contentGoals = contentGoals;
+    if (targetAudience !== undefined) updateData.targetAudience = targetAudience; else if (body.hasOwnProperty('targetAudience') && targetAudience === null) updateData.targetAudience = undefined;
+    if (tone !== undefined) updateData.tone = tone; else if (body.hasOwnProperty('tone') && tone === null) updateData.tone = undefined;
+    if (contentGoals !== undefined) updateData.contentGoals = contentGoals || []; else if (body.hasOwnProperty('contentGoals') && contentGoals === null) updateData.contentGoals = [];
     if (status !== undefined) updateData.status = status;
-    if (referenceMaterials !== undefined) updateData.referenceMaterials = referenceMaterials;
-    if (brandId !== undefined) updateData.brandId = brandId;
-    if (isPrivate !== undefined) updateData.isPrivate = isPrivate; // Update isPrivate
+    if (referenceMaterials !== undefined) updateData.referenceMaterials = referenceMaterials || [];
+    if (brandId !== undefined) updateData.brandId = brandId; else if (body.hasOwnProperty('brandId') && brandId === null) updateData.brandId = undefined;
+    if (isPrivate !== undefined) updateData.isPrivate = isPrivate;
 
 
     if (contentVersions !== undefined && Array.isArray(contentVersions)) {
@@ -137,49 +161,40 @@ export async function PUT(request: NextRequest) {
         ...v,
         timestamp: v.timestamp ? new Date(v.timestamp) : new Date(),
       }));
+    } else if (body.hasOwnProperty('contentVersions') && contentVersions === null) {
+        updateData.contentVersions = [];
     }
+
     if (agentDebates !== undefined && Array.isArray(agentDebates)) {
       updateData.agentDebates = agentDebates.map((ad: AgentInteraction) => ({
         ...ad,
         timestamp: ad.timestamp ? new Date(ad.timestamp) : new Date(),
       }));
+    } else if (body.hasOwnProperty('agentDebates') && agentDebates === null) {
+        updateData.agentDebates = [];
     }
+
     if (scheduledPosts !== undefined && Array.isArray(scheduledPosts)) {
-      updateData.scheduledPosts = scheduledPosts.map((sp: any) => ({ // Type any for sp if ScheduledPost is not fully defined yet
+      updateData.scheduledPosts = scheduledPosts.map((sp: ScheduledPost) => ({ 
         ...sp,
         scheduledAt: sp.scheduledAt ? new Date(sp.scheduledAt) : new Date(),
-        // Ensure other date fields are handled if they exist
       }));
+    } else if (body.hasOwnProperty('scheduledPosts') && scheduledPosts === null) {
+        updateData.scheduledPosts = [];
     }
-     if (abTests !== undefined && Array.isArray(abTests)) {
+
+    if (abTests !== undefined && Array.isArray(abTests)) {
       updateData.abTests = abTests.map((ab: ABTestInstance) => ({
         ...ab,
         createdAt: ab.createdAt ? new Date(ab.createdAt) : new Date(),
       }));
+    } else if (body.hasOwnProperty('abTests') && abTests === null) {
+        updateData.abTests = [];
     }
-    
-    const updateKeys = Object.keys(updateData).filter(key => key !== 'updatedAt');
     
     const client = await clientPromise;
     const db = client.db();
     const campaignsCollection = db.collection<Campaign>('campaigns');
-
-    if (updateKeys.length === 0 && isPrivate === undefined) { // Check if isPrivate is also undefined
-        const existingCampaign = await campaignsCollection.findOne({ _id: new ObjectId(campaignId), userId: userId });
-        if (!existingCampaign) {
-            return NextResponse.json({ error: 'Campaign not found or user not authorized' }, { status: 404 });
-        }
-        return NextResponse.json({ 
-            ...existingCampaign, 
-            id: existingCampaign._id!.toString(), 
-            contentVersions: existingCampaign.contentVersions || [], 
-            agentDebates: existingCampaign.agentDebates || [],
-            scheduledPosts: existingCampaign.scheduledPosts || [],
-            abTests: existingCampaign.abTests || [],
-            isPrivate: existingCampaign.isPrivate || false,
-        }, { status: 200 });
-    }
-
 
     const result = await campaignsCollection.findOneAndUpdate(
       { _id: new ObjectId(campaignId), userId: userId },
