@@ -1,5 +1,6 @@
 
 
+
 export interface ContentPiece {
   id: string;
   format: ContentFormat;
@@ -49,6 +50,8 @@ export interface ContentVersion {
   actorName: string; // e.g., "AI Team", "User Edit", specific agent name like "Creative Director" (maps to modifiedBy)
   changeSummary: string; // Brief description of what changed or what was generated in this version (maps to changes)
   multiFormatContentSnapshot: MultiFormatContent; // A snapshot of all generated formats at this version
+  isFlagged?: boolean; // New: For admin moderation of individual content pieces
+  adminModerationNotes?: string; // New: Admin notes specific to this content version's moderation status
 }
 
 export interface ScheduledPost {
@@ -104,8 +107,8 @@ export interface Campaign {
   
   status: CampaignStatus;
   isPrivate?: boolean; // New field for privacy setting
-  isFlagged?: boolean; // For admin content moderation
-  adminModerationNotes?: string; // Notes from admin regarding moderation
+  isFlagged?: boolean; // For admin content moderation of the overall campaign
+  adminModerationNotes?: string; // Notes from admin regarding campaign-level moderation
   createdAt: Date;
   updatedAt: Date;
 }
@@ -155,4 +158,5 @@ export interface CampaignMemory {
   // other learned insights can be added here
   lastUpdatedAt?: Date;
 }
+
 

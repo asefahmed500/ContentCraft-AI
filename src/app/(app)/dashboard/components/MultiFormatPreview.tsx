@@ -7,20 +7,27 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
-import { FileText, Tv2, Copy, Download, Loader2, FileType, Share2, WandSparkles, ThumbsUp, ThumbsDown, MessageSquarePlus, Languages, Save } from 'lucide-react';
+import { FileText, Tv2, Copy, Download, Loader2, FileType, Share2, WandSparkles, ThumbsUp, ThumbsDown, MessageSquarePlus, Languages, Save, Flag, AlertTriangle } from 'lucide-react'; // Added Flag, AlertTriangle
 import { useToast } from '@/hooks/use-toast';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { useState, type ReactNode } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
+import { useSession } from 'next-auth/react'; // Added useSession
+import type { User as NextAuthUser } from 'next-auth'; // Added User type
+import { Alert } from '@/components/ui/alert'; // Added Alert
+
+interface SessionUser extends NextAuthUser {
+  role?: 'viewer' | 'editor' | 'admin';
+}
 
 interface MultiFormatPreviewProps {
   content: MultiFormatContent | null;
   isLoading: boolean;
   campaignId?: string;
-  currentCampaign?: Campaign | null; // Added to get campaign tone for translation
-  currentContentVersion?: ContentVersion | null; // Added to get original version for saving translation
+  currentCampaign?: Campaign | null; 
+  currentContentVersion?: ContentVersion | null; 
   onFeedbackSubmittedSuccessfully?: (xpAmount: number, reason: string) => void;
   onSaveTranslatedContent?: (formatKey: keyof MultiFormatContent, translatedText: string, originalVersion: ContentVersion, targetLanguage: string) => Promise<void>;
 }
@@ -68,6 +75,10 @@ export function MultiFormatPreview({
     onSaveTranslatedContent
 }: MultiFormatPreviewProps) {
   const { toast } = useToast();
+  const { data: session } = useSession(); // Get session
+  const user = session?.user as SessionUser | undefined;
+  const isAdmin = user?.role === 'admin';
+
   const [feedbackState, setFeedbackState] = useState<FeedbackState>({});
 
   const [isTranslateDialogOpen, setIsTranslateDialogOpen] = useState(false);
@@ -176,7 +187,7 @@ export function MultiFormatPreview({
     try {
         await onSaveTranslatedContent(translateConfig.formatKey, translatedText, currentContentVersion, targetLanguage);
         toast({title: "Translation Saved", description: "Translated content saved as a new version."});
-        setIsTranslateDialogOpen(false); // Close dialog on successful save
+        setIsTranslateDialogOpen(false); 
     } catch (error) {
         // Error toast handled by the parent `onSaveTranslatedContent` typically
     } finally {
@@ -305,6 +316,15 @@ export function MultiFormatPreview({
         <CardHeader>
           <CardTitle className="font-headline text-2xl flex items-center gap-2"><Tv2 className="h-6 w-6 text-primary" />Multi-Format Content Preview</CardTitle>
           <CardDescription>Preview the generated content. Copy, download, translate, or provide feedback to help our AI agents learn.</CardDescription>
+          {isAdmin && currentContentVersion?.isFlagged && (
+            <Alert variant="destructive" className="mt-2">
+                <AlertTriangle className="h-5 w-5" />
+                <CardTitle className="text-sm font-semibold">Content Version Flagged for Review</CardTitle>
+                {currentContentVersion.adminModerationNotes && (
+                    <CardDescription className="text-xs mt-1">Admin Notes: {currentContentVersion.adminModerationNotes}</CardDescription>
+                )}
+            </Alert>
+          )}
         </CardHeader>
         <CardContent>
           <Tabs defaultValue={defaultTab} className="w-full">
@@ -317,6 +337,7 @@ export function MultiFormatPreview({
                       className="text-xs sm:text-sm break-all px-3 py-2 whitespace-nowrap data-[state=active]:border-primary data-[state=active]:border-b-2 data-[state=active]:text-primary rounded-none data-[state=active]:shadow-none data-[state=active]:bg-transparent"
                   >
                     {formatLabels[formatKey] || formatKey}
+                    {isAdmin && currentContentVersion?.isFlagged && <Flag className="ml-2 h-3 w-3 text-destructive" />}
                   </TabsTrigger>
                 ))}
               </TabsList>
@@ -327,7 +348,20 @@ export function MultiFormatPreview({
               <TabsContent key={formatKey} value={formatKey} className="mt-4">
                 <Card className="border shadow-md">
                   <CardHeader className="flex flex-row items-center justify-between pb-3 bg-muted/30 rounded-t-lg flex-wrap gap-2">
-                    <CardTitle className="font-headline text-lg">{formatLabels[formatKey] || formatKey}</CardTitle>
+                    <CardTitle className="font-headline text-lg flex items-center gap-2">
+                        {formatLabels[formatKey] || formatKey}
+                        {isAdmin && currentContentVersion?.isFlagged && (
+                            <Tooltip>
+                                <TooltipTrigger>
+                                    <Flag className="h-4 w-4 text-destructive" />
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                    <p className="text-xs">This version is flagged by an admin.</p>
+                                    {currentContentVersion.adminModerationNotes && <p className="text-xs mt-1">Notes: {currentContentVersion.adminModerationNotes}</p>}
+                                </TooltipContent>
+                            </Tooltip>
+                        )}
+                    </CardTitle>
                     <div className="flex flex-wrap gap-2">
                       <Button variant="outline" size="sm" onClick={() => handleCopy(content?.[formatKey])}>
                         <Copy className="mr-1 h-3 w-3" /> Copy
@@ -434,7 +468,6 @@ export function MultiFormatPreview({
         </CardContent>
       </Card>
 
-      {/* Translation Dialog */}
       <Dialog open={isTranslateDialogOpen} onOpenChange={setIsTranslateDialogOpen}>
         <DialogContent className="sm:max-w-2xl">
           <DialogHeader>

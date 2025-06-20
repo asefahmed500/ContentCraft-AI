@@ -24,12 +24,17 @@ const mapCampaignDocumentToCampaign = (campaignDoc: Omit<Campaign, 'id'> & { _id
     ...campaignDoc,
     id: campaignDoc._id.toString(),
     agentDebates: (campaignDoc.agentDebates || []).map(ad => ({ ...ad, timestamp: ensureDate(ad.timestamp) || new Date() })),
-    contentVersions: (campaignDoc.contentVersions || []).map(cv => ({ ...cv, timestamp: ensureDate(cv.timestamp) || new Date() })),
+    contentVersions: (campaignDoc.contentVersions || []).map(cv => ({
+        ...cv,
+        timestamp: ensureDate(cv.timestamp) || new Date(),
+        isFlagged: cv.isFlagged ?? false,
+        adminModerationNotes: cv.adminModerationNotes ?? undefined,
+    })),
     scheduledPosts: (campaignDoc.scheduledPosts || []).map(sp => ({ ...sp, scheduledAt: ensureDate(sp.scheduledAt) || new Date() })),
     abTests: (campaignDoc.abTests || []).map(ab => ({ ...ab, createdAt: ensureDate(ab.createdAt) || new Date() })),
     isPrivate: campaignDoc.isPrivate ?? false,
-    isFlagged: campaignDoc.isFlagged ?? false,
-    adminModerationNotes: campaignDoc.adminModerationNotes ?? undefined,
+    isFlagged: campaignDoc.isFlagged ?? false, // Campaign level flag
+    adminModerationNotes: campaignDoc.adminModerationNotes ?? undefined, // Campaign level notes
     createdAt: ensureDate(campaignDoc.createdAt) || new Date(),
     updatedAt: ensureDate(campaignDoc.updatedAt) || new Date(),
   };
@@ -107,13 +112,13 @@ export async function POST(request: NextRequest) {
       brandId: brandId || undefined, 
       referenceMaterials: referenceMaterials || [],
       agentDebates: [],
-      contentVersions: [],
+      contentVersions: [], // Initialize contentVersions with isFlagged and adminModerationNotes if needed
       scheduledPosts: [],
       abTests: [],
       status: status || 'draft', 
       isPrivate: isPrivate ?? false, 
-      isFlagged: false, // Default for new campaigns
-      adminModerationNotes: '', // Default for new campaigns
+      isFlagged: false, // Campaign level flag
+      adminModerationNotes: '', // Campaign level notes
       createdAt: new Date(),
       updatedAt: new Date(),
     };
@@ -159,7 +164,6 @@ export async function PUT(request: NextRequest) {
     
     const updateData: Partial<Omit<Campaign, 'id' | '_id' | 'userId' | 'createdAt'>> = { updatedAt: new Date() };
     
-    // User-updatable fields
     if (Object.prototype.hasOwnProperty.call(body, 'title')) updateData.title = body.title;
     if (Object.prototype.hasOwnProperty.call(body, 'brief')) updateData.brief = body.brief;
     if (Object.prototype.hasOwnProperty.call(body, 'targetAudience')) updateData.targetAudience = body.targetAudience === null ? undefined : body.targetAudience;
@@ -170,11 +174,12 @@ export async function PUT(request: NextRequest) {
     if (Object.prototype.hasOwnProperty.call(body, 'brandId')) updateData.brandId = body.brandId === null ? undefined : body.brandId;
     if (Object.prototype.hasOwnProperty.call(body, 'isPrivate')) updateData.isPrivate = body.isPrivate ?? false;
 
-    // Fields typically updated by system/backend logic (e.g., content generation, admin actions)
     if (Object.prototype.hasOwnProperty.call(body, 'contentVersions')) {
       updateData.contentVersions = (body.contentVersions === null ? [] : body.contentVersions).map((v: ContentVersion) => ({
         ...v,
         timestamp: ensureDate(v.timestamp) || new Date(),
+        isFlagged: v.isFlagged ?? false, // Ensure new fields are handled
+        adminModerationNotes: v.adminModerationNotes ?? undefined,
       }));
     }
     if (Object.prototype.hasOwnProperty.call(body, 'agentDebates')) {
@@ -195,14 +200,11 @@ export async function PUT(request: NextRequest) {
         createdAt: ensureDate(ab.createdAt) || new Date(),
       }));
     }
-    // Admin-specific fields should only be updated by admin routes, not general user PUT
-    // isFlagged and adminModerationNotes are handled by /api/admin/campaigns/[id]/flag
 
     const client = await clientPromise;
     const db = client.db(process.env.MONGODB_DB_NAME);
     const campaignsCollection = db.collection<Omit<Campaign, 'id'>>('campaigns');
 
-    // Standard users can only update their own campaigns
     const query = { _id: new ObjectId(campaignId), userId: userId };
     
     const result = await campaignsCollection.findOneAndUpdate(
@@ -252,11 +254,9 @@ export async function DELETE(request: NextRequest) {
     const client = await clientPromise;
     const db = client.db(process.env.MONGODB_DB_NAME);
     const campaignsCollection = db.collection('campaigns');
-
-    // Standard users can only delete their own campaigns
-    const query = { _id: new ObjectId(campaignId), userId: userId };
-    // Admins might have a separate endpoint to delete any campaign
     
+    const query = { _id: new ObjectId(campaignId), userId: userId };
+        
     const result = await campaignsCollection.deleteOne(query);
 
     if (result.deletedCount === 0) {
@@ -271,3 +271,4 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json({ error: 'Failed to delete campaign', details: errorMessage }, { status: 500 });
   }
 }
+
