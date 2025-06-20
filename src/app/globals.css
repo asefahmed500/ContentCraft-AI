@@ -2,29 +2,27 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Removed conflicting body font-family rule to allow Tailwind config and layout.tsx to control fonts */
-
 @layer base {
   :root {
-    --background: 40 20% 95%; /* #F7F4EF */
-    --foreground: 240 10% 3.9%; /* Dark text */
-    --card: 40 20% 98%; /* Slightly lighter than background for cards */
+    --background: 40 20% 95%; /* #F7F4EF - PRD: HSL(40, 20%, 95%) */
+    --foreground: 240 10% 3.9%;
+    --card: 40 20% 98%;
     --card-foreground: 240 10% 3.9%;
     --popover: 40 20% 98%;
     --popover-foreground: 240 10% 3.9%;
-    --primary: 40 100% 60%; /* #FFAD33 */
-    --primary-foreground: 240 10% 3.9%; /* Dark text on primary */
-    --secondary: 40 40% 88%; /* Lighter, less saturated orange/yellow */
+    --primary: 40 100% 60%; /* #FFAD33 - PRD: HSL(40, 100%, 60%) */
+    --primary-foreground: 240 10% 3.9%;
+    --secondary: 40 40% 88%;
     --secondary-foreground: 240 10% 3.9%;
-    --muted: 40 20% 90%; 
+    --muted: 40 20% 90%;
     --muted-foreground: 240 5% 45.1%;
-    --accent: 10 100% 60%; /* #FF3333 */
-    --accent-foreground: 0 0% 98%; /* White text on accent */
+    --accent: 10 100% 60%; /* #FF3333 - PRD: HSL(10, 100%, 60%) */
+    --accent-foreground: 0 0% 98%;
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 0 0% 98%;
     --border: 40 20% 85%;
     --input: 40 20% 90%;
-    --ring: 40 100% 60%;
+    --ring: 40 100% 60%; /* Consistent with primary */
     --chart-1: 12 76% 61%;
     --chart-2: 173 58% 39%;
     --chart-3: 197 37% 24%;
@@ -43,19 +41,19 @@
     --sidebar-ring: 40 100% 60%;
   }
   .dark {
-    --background: 40 10% 10%; /* Dark brown/orange */
-    --foreground: 0 0% 98%; /* Light text */
-    --card: 40 10% 12%; /* Slightly lighter dark for cards */
+    --background: 40 10% 10%; 
+    --foreground: 0 0% 98%; 
+    --card: 40 10% 12%; 
     --card-foreground: 0 0% 98%;
     --popover: 40 10% 12%;
     --popover-foreground: 0 0% 98%;
-    --primary: 40 100% 60%; /* #FFAD33 */
-    --primary-foreground: 40 100% 10%; /* Very dark orange/brown text on primary */
-    --secondary: 40 15% 20%; /* Darker secondary */
+    --primary: 40 100% 60%; 
+    --primary-foreground: 40 100% 10%; 
+    --secondary: 40 15% 20%; 
     --secondary-foreground: 0 0% 98%;
     --muted: 40 10% 15%;
     --muted-foreground: 0 0% 63.9%;
-    --accent: 10 100% 60%; /* #FF3333 */
+    --accent: 10 100% 60%; 
     --accent-foreground: 0 0% 98%;
     --destructive: 0 62.8% 30.6%;
     --destructive-foreground: 0 0% 98%;

@@ -25,15 +25,21 @@ export type ContentFormat =
   | 'generic';
 
 
+export type CampaignStatus = 'draft' | 'debating' | 'generating' | 'review' | 'published' | 'archived';
+
 export interface Campaign {
   id: string;
   brief: string;
-  brandProfileId?: string;
-  agentDebates?: string[]; // IDs of debates
-  contentVersions: ContentPiece[];
-  status: 'draft' | 'generating' | 'review' | 'published' | 'archived';
+  targetAudience?: string;
+  tone?: string;
+  contentGoals?: string[];
+  brandProfileId?: string; // Link to a BrandDNA document
+  agentDebates?: string[]; // IDs of debates (or embedded debate summaries)
+  contentVersions: ContentPiece[]; // For content evolution timeline
+  status: CampaignStatus;
   createdAt: Date;
   updatedAt: Date;
+  userId: string; // To associate with a user
 }
 
 export interface MultiFormatContent {

@@ -11,7 +11,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { LogOut, Settings, UserCircle } from 'lucide-react';
+import { LogOut, Settings, UserCircle, LayoutDashboard } from 'lucide-react';
 import { Logo } from '@/components/Logo';
 import { useAuth } from '@/components/AuthContext';
 
@@ -26,9 +26,11 @@ export function SiteHeader() {
         </Link>
         <nav className="flex flex-1 items-center space-x-4">
           {isAuthenticated && (
-            <Link href="/dashboard" className="text-sm font-medium text-foreground/70 hover:text-foreground transition-colors">
-              Dashboard
-            </Link>
+            <Button variant="ghost" asChild className="text-sm font-medium text-foreground/70 hover:text-foreground transition-colors">
+              <Link href="/dashboard">
+                <LayoutDashboard className="mr-2 h-4 w-4"/> Dashboard
+              </Link>
+            </Button>
           )}
         </nav>
         <div className="flex items-center space-x-4">
@@ -49,14 +51,16 @@ export function SiteHeader() {
                   <div className="flex flex-col space-y-1">
                     <p className="text-sm font-medium leading-none">Account</p>
                     <p className="text-xs leading-none text-muted-foreground">
-                      user@example.com
+                      user@example.com 
                     </p>
                   </div>
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem>
-                  <Settings className="mr-2 h-4 w-4" />
-                  <span>Settings</span>
+                <DropdownMenuItem asChild>
+                  <Link href="/dashboard/settings">
+                    <Settings className="mr-2 h-4 w-4" />
+                    <span>Settings</span>
+                  </Link>
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={logout}>
