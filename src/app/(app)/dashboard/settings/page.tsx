@@ -1,3 +1,4 @@
+
 "use client";
 
 import { Button } from "@/components/ui/button";
@@ -27,16 +28,20 @@ export default function SettingsPage() {
   const handleProfileSave = async (e: React.FormEvent) => {
     e.preventDefault();
     // In a real app, you'd call an API to update the user's profile
-    // For example: /api/user/profile
-    toast({ title: "Profile Update (Simulated)", description: `Name would be updated to: ${userName}.` });
-    // This might involve re-fetching session or updating NextAuth session if name changes
+    // For example: /api/user/profile with { name: userName, currentPassword, newPassword }
+    // This might also involve re-fetching session or updating NextAuth session if name changes.
+    // For password changes, ensure backend handles verification and secure update.
+    toast({ title: "Profile Update (Simulated)", description: `If password fields were filled, a change would be attempted. Name would be updated to: ${userName}.` });
   };
 
   const handleInviteUser = (e: React.FormEvent) => {
     e.preventDefault();
     const target = e.target as typeof e.target & { email: { value: string }; role: { value: string } };
-    toast({ title: "Invitation Sent (Simulated)", description: `User ${target.email.value} invited as ${target.role.value}.`});
+    toast({ title: "Invitation Sent (Simulated)", description: `User ${target.email.value} invited as ${target.role.value}. A real system would email them and add to a 'teams' or 'invitations' collection.`});
     // Reset form or clear inputs here if needed
+    if (user?.role === 'admin') {
+        (e.target as HTMLFormElement).reset();
+    }
   };
 
   if (authIsLoading) {
@@ -85,11 +90,11 @@ export default function SettingsPage() {
               </div>
                <div className="space-y-1">
                 <Label htmlFor="currentPassword">Current Password</Label>
-                <Input id="currentPassword" type="password" placeholder="Enter current password to change" />
+                <Input id="currentPassword" name="currentPassword" type="password" placeholder="Enter current password to change" />
               </div>
               <div className="space-y-1">
                 <Label htmlFor="newPassword">New Password</Label>
-                <Input id="newPassword" type="password" placeholder="Enter new password (min. 6 chars)" />
+                <Input id="newPassword" name="newPassword" type="password" placeholder="Enter new password (min. 6 chars)" />
                  <p className="text-xs text-muted-foreground">Leave blank to keep current password.</p>
               </div>
             </CardContent>
@@ -114,18 +119,24 @@ export default function SettingsPage() {
             <CardContent className="space-y-4">
                 <div className="space-y-1">
                     <Label htmlFor="inviteEmail">Invite User by Email</Label>
-                    <Input id="inviteEmail" name="email" type="email" placeholder="teammate@example.com" disabled={user.role !== 'admin'} />
+                    <Input id="inviteEmail" name="email" type="email" placeholder="teammate@example.com" disabled={user.role !== 'admin'} required/>
                 </div>
                 <div className="space-y-1">
                     <Label htmlFor="inviteRole">Assign Role</Label>
-                    <select id="inviteRole" name="role" className="w-full p-2 border rounded-md bg-background text-foreground disabled:opacity-50 disabled:cursor-not-allowed" disabled={user.role !== 'admin'}>
+                    <select 
+                        id="inviteRole" 
+                        name="role" 
+                        defaultValue="viewer"
+                        className="w-full p-2 border rounded-md bg-background text-foreground disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 h-10 text-sm" 
+                        disabled={user.role !== 'admin'}
+                    >
                         <option value="viewer">Viewer</option>
                         <option value="editor">Editor</option>
                         <option value="admin">Admin</option>
                     </select>
                 </div>
                  <p className="text-xs text-muted-foreground">
-                    Team management features are typically available for 'admin' roles. This is a simulation.
+                    Team management features are typically available for 'admin' roles. This is a simulation. A real system would involve email invitations and a 'teams' database collection.
                 </p>
             </CardContent>
             <CardFooter>
@@ -144,3 +155,4 @@ export default function SettingsPage() {
     </div>
   );
 }
+
