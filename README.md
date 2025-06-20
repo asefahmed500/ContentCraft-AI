@@ -19,22 +19,22 @@ ContentCraft AI is a revolutionary multi-agent content creation system designed 
 *   **Content Translation**: Translate generated content into multiple languages using AI, preserving tone, and save as new versions.
 *   **Private Mode**: Mark campaigns as private, conceptually excluding their data from broader AI agent learning.
 *   **Gamification System**: Earn Creative XP for actions like content generation and providing feedback. Level up, track progress, and (conceptually) unlock badges and advanced features. XP and level are displayed in the user profile.
-*   **User Profile Settings**: Update account name and change password. (Team Management is a placeholder).
-*   **A/B Testing Panel (Conceptual)**: A level-locked placeholder for a future feature allowing users to test content variations.
+*   **User Profile Settings**: Update account name and change password (for credential-based accounts). Team Management is a conceptual placeholder.
+*   **A/B Testing Panel (Conceptual)**: A level-locked placeholder (Level 3) for a future feature allowing users to test content variations.
 
 ### Admin Features
-*   **Comprehensive Admin Dashboard**: Centralized control panel for platform oversight, including summary statistics (total users, campaigns, mocked activity), charts for platform activity, and navigation to detailed management sections.
+*   **Comprehensive Admin Dashboard**: Centralized control panel for platform oversight, including summary statistics (total users, campaigns, mocked activity), charts for platform activity, XP Leaderboard, and navigation to detailed management sections.
 *   **User Management**: Admins can view a sortable and searchable table of all users, manage their roles (viewer, editor, admin), and ban/unban users. User `isBanned` status is stored and enforced by middleware and login checks.
 *   **Campaign Oversight**: Admins can view, search, and filter all campaigns created by any user. They can inspect full campaign details including brief, agent debates, and all content versions.
 *   **Campaign Moderation**: Admins can flag/unflag entire campaigns and add moderation notes. Flagged status is visible in admin views. Admins can also delete any campaign.
 *   **Content Version Moderation**:
-    *   Admins can flag/unflag individual content versions within any campaign and add specific moderation notes.
-    *   A dedicated "Flagged Content" tab in the admin dashboard lists all flagged content versions across the platform for centralized review and action.
+    *   Admins can flag/unflag individual content versions within any campaign and add specific moderation notes via the campaign detail view.
+    *   A dedicated "Flagged Content" tab in the admin dashboard lists all flagged content versions across the platform for centralized review and action (unflagging, previewing).
 *   **Platform Analytics (Admin View)**: The admin dashboard displays key metrics and charts:
     *   Total users, total campaigns.
     *   (Mocked) Weekly platform activity (users, campaigns, AI flows).
     *   (Mocked) Top content formats generated.
-    *   XP Leaderboard showing top users.
+    *   XP Leaderboard showing top users by Creative XP.
 *   **Secure Admin Routes & APIs**: Admin-specific routes (e.g., `/admin/dashboard`) and APIs are protected by middleware and token checks, ensuring only users with the 'admin' role can access them.
 *   **Data Export (Conceptual)**: Placeholder buttons for admins to simulate downloading campaign, feedback, or user data as CSV.
 

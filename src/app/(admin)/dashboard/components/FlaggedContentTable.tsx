@@ -69,15 +69,16 @@ export function FlaggedContentTable({ onViewCampaign, onRefreshNeeded }: Flagged
       const response = await fetch(`/api/admin/campaigns/${item.campaignId}/versions/${item.versionId}/flag`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ isFlagged: false, adminModerationNotes: item.adminModerationNotes || '' }) // Keep notes or clear them based on policy
+        // Explicitly clear notes when unflagging
+        body: JSON.stringify({ isFlagged: false, adminModerationNotes: '' }) 
       });
       const result = await response.json();
       if (!response.ok) {
         throw new Error(result.error || "Failed to unflag content version.");
       }
-      toast({ title: "Content Version Unflagged", description: `Version ${item.versionNumber} of campaign "${item.campaignTitle}" has been unflagged.` });
-      onRefreshNeeded(); // Parent will re-fetch and re-render this component
-      fetchFlaggedContent(); // Or, re-fetch directly here
+      toast({ title: "Content Version Unflagged", description: `Version ${item.versionNumber} of campaign "${item.campaignTitle}" has been unflagged and notes cleared.` });
+      onRefreshNeeded(); 
+      fetchFlaggedContent(); 
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : "An unknown error occurred.";
       toast({ title: "Error Unflagging Version", description: errorMessage, variant: "destructive" });
@@ -201,11 +202,11 @@ export function FlaggedContentTable({ onViewCampaign, onRefreshNeeded }: Flagged
           <DialogHeader>
             <DialogTitle>{previewTitle}</DialogTitle>
             <DialogDescription>
-              Quick preview of the flagged content version. Only the first available format is shown.
+              Quick preview of the flagged content version. Iterates through available formats.
             </DialogDescription>
           </DialogHeader>
           <ScrollArea className="max-h-[60vh] p-1 pr-4">
-            {selectedContentForPreview ? (
+            {selectedContentForPreview && Object.values(selectedContentForPreview).some(text => !!text) ? (
                 Object.entries(selectedContentForPreview).map(([format, text]) => 
                     text ? (
                     <div key={format} className="mb-4">
@@ -215,7 +216,7 @@ export function FlaggedContentTable({ onViewCampaign, onRefreshNeeded }: Flagged
                     ) : null
                 )
             ) : (
-                <p className="text-muted-foreground">No content to display in preview.</p>
+                <p className="text-muted-foreground">No content available in this version snapshot for preview.</p>
             )}
           </ScrollArea>
           <DialogFooter>
@@ -226,3 +227,4 @@ export function FlaggedContentTable({ onViewCampaign, onRefreshNeeded }: Flagged
     </TooltipProvider>
   );
 }
+

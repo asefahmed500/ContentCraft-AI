@@ -1,6 +1,6 @@
 
 ContentCraft AI - Project Documentation
-Version: 1.3 (Reflecting Enhanced Admin and User Profile Features)
+Version: 1.4 (Reflecting Comprehensive Admin Moderation and User Settings)
 
 Table of Contents
 -----------------
@@ -18,7 +18,7 @@ Table of Contents
 -----------------
 1. Project Overview
 -----------------
-ContentCraft AI is a Next.js web application designed as a multi-agent AI content creation system. It aims to assist users in generating comprehensive content campaigns by leveraging specialized AI agents that collaborate, analyze brand identity, debate strategies, and produce content in multiple formats. The platform includes features for user authentication (with roles: viewer, editor, admin), campaign management, brand analysis, simulated agent interactions, content generation, performance prediction, user feedback mechanisms, content translation, and a gamification system. It also incorporates a dedicated admin dashboard for platform oversight, user management, campaign and content version moderation, and platform analytics. Users can manage their profile settings, including name and password changes.
+ContentCraft AI is a Next.js web application designed as a multi-agent AI content creation system. It aims to assist users in generating comprehensive content campaigns by leveraging specialized AI agents that collaborate, analyze brand identity, debate strategies, and produce content in multiple formats. The platform includes features for user authentication (with roles: viewer, editor, admin), campaign management, brand analysis, simulated agent interactions, content generation, performance prediction, user feedback mechanisms, content translation, and a gamification system. It also incorporates a dedicated admin dashboard for platform oversight, user management, campaign and content version moderation (including a dedicated flagged content view), and platform analytics. Users can manage their profile settings, including name and password changes for credential-based accounts.
 
 -----------------
 2. Core Architecture
@@ -97,7 +97,7 @@ The application is built using a modern JavaScript stack:
 
     *   **Content Evolution Timeline**:
         *   Purpose: Allow users to track the history of generated content for a campaign.
-        *   How: Displays `ContentVersion` objects chronologically.
+        *   How: Displays `ContentVersion` objects chronologically. Admins also see flagging controls here.
         *   Key Files: `src/app/(app)/dashboard/components/ContentEvolutionTimeline.tsx`.
 
     *   **Performance Predictor (Simulated)**:
@@ -122,7 +122,7 @@ The application is built using a modern JavaScript stack:
 
     *   **User Settings & Profile Management**:
         *   Purpose: Allow users to manage their profile (name, password).
-        *   How: Dedicated settings page with forms to update name (via `PUT /api/user/profile`) and change password (via `POST /api/user/change-password`). Session is updated upon name change.
+        *   How: Dedicated settings page with forms to update name (via `PUT /api/user/profile`) and change password (via `POST /api/user/change-password` for credential accounts). Session is updated upon name change.
         *   Key Files: `src/app/(app)/dashboard/settings/page.tsx`, `src/app/api/user/profile/route.ts`, `src/app/api/user/change-password/route.ts`.
 
     3.2 Admin Features
@@ -134,7 +134,7 @@ The application is built using a modern JavaScript stack:
 
     *   **User Management (Roles & Banning)**:
         *   Purpose: Admins can manage user accounts, roles, and access.
-        *   How: Admins can view a table of all users, change their roles (viewer, editor, admin), and ban/unban users. Changes are persisted to the `users` collection via `PUT /api/admin/users/[userId]`.
+        *   How: Admins can view a table of all users, change their roles (viewer, editor, admin), and ban/unban users. Changes are persisted to the `users` collection via `PUT /api/admin/users/[userId]`. Middleware and NextAuth callbacks enforce bans.
         *   Key Files: `src/app/(admin)/dashboard/components/UserTable.tsx`, `src/app/api/admin/users/route.ts`, `src/app/api/admin/users/[userId]/route.ts`.
 
     *   **Campaign Oversight & Moderation**:
@@ -144,13 +144,24 @@ The application is built using a modern JavaScript stack:
 
     *   **Content Version Moderation**:
         *   Purpose: Admins can review and moderate individual flagged content versions.
-        *   How: A dedicated "Flagged Content" tab shows a table of all `ContentVersion`s where `isFlagged` is true, fetched from `GET /api/admin/content/flagged`. Admins can preview content, see moderation notes, and unflag versions (which calls `PUT /api/admin/campaigns/[campaignId]/versions/[versionId]/flag`). Individual versions can also be flagged/unflagged from the campaign detail view's `ContentEvolutionTimeline`.
-        *   Key Files: `src/app/(admin)/dashboard/components/FlaggedContentTable.tsx`, `src/app/api/admin/content/flagged/route.ts`, `src/app/api/admin/campaigns/[campaignId]/versions/[versionId]/flag/route.ts`, `src/app/(app)/dashboard/components/ContentEvolutionTimeline.tsx` (admin context).
+        *   How: 
+            *   A dedicated "Flagged Content" tab (`FlaggedContentTable.tsx`) shows a table of all `ContentVersion`s where `isFlagged` is true, fetched from `GET /api/admin/content/flagged`. Admins can preview content, see moderation notes, and unflag versions (which calls `PUT /api/admin/campaigns/[campaignId]/versions/[versionId]/flag` and clears notes).
+            *   Individual versions can also be flagged/unflagged with notes from the campaign detail view's `ContentEvolutionTimeline.tsx` (admin context).
+        *   Key Files: `src/app/(admin)/dashboard/components/FlaggedContentTable.tsx`, `src/app/(app)/dashboard/components/ContentEvolutionTimeline.tsx` (admin context), `src/app/api/admin/content/flagged/route.ts`, `src/app/api/admin/campaigns/[campaignId]/versions/[versionId]/flag/route.ts`.
 
     *   **Admin Search**:
         *   Purpose: Allow admins to quickly find specific users or campaigns.
-        *   How: Search input fields in `UserTable` (name, email, ID) and `AdminCampaignList` (title, brief, user ID, campaign ID).
+        *   How: Search input fields in `UserTable.tsx` (name, email, ID) and `AdminCampaignList.tsx` (title, brief, user ID, campaign ID).
         *   Key Files: `src/app/(admin)/dashboard/components/UserTable.tsx`, `src/app/(admin)/dashboard/components/AdminCampaignList.tsx`.
+
+    *   **Platform Analytics (Admin View)**:
+        *   Purpose: Display key metrics and charts for platform activity.
+        *   How: 
+            *   Total users, total campaigns (from DB).
+            *   (Mocked) Weekly platform activity (users, campaigns, AI flows) chart.
+            *   (Mocked) Top content formats generated (pie chart).
+            *   XP Leaderboard showing top users (from DB).
+        *   Key Files: `src/app/(admin)/dashboard/page.tsx`.
 
     *   **Data Export (Conceptual)**:
         *   Purpose: Allow admins to download platform data.
@@ -182,18 +193,31 @@ The application is built using a modern JavaScript stack:
         *   `userId`: String (ObjectId string, links to User)
         *   `title`: String
         *   `brief`: String
-        *   ... (other fields like targetAudience, tone, contentGoals)
+        *   `targetAudience`: String (optional)
+        *   `tone`: String (optional)
+        *   `contentGoals`: Array of Strings (optional)
+        *   `brandId`: String (optional)
+        *   `referenceMaterials`: Array of Objects (optional)
         *   `agentDebates`: Array of `AgentInteraction` objects
         *   `contentVersions`: Array of `ContentVersion` objects
         *   `status`: String (e.g., 'draft', 'generating', 'published')
         *   `isPrivate`: Boolean (default false)
         *   `isFlagged`: Boolean (default false, for admin campaign moderation)
         *   `adminModerationNotes`: String (optional, for admin campaign moderation)
+        *   `scheduledPosts`: Array (optional)
+        *   `abTests`: Array (optional)
         *   `createdAt`: Date
         *   `updatedAt`: Date
 
     *   **AgentInteraction** (embedded in Campaign):
-        *   ... (fields like agentName, message, timestamp)
+        *   `agent`: String
+        *   `message`: String
+        *   `timestamp`: Date
+        *   `agentId`: String (optional)
+        *   `agentName`: String (optional)
+        *   `role`: String (optional, AgentRole)
+        *   `type`: String (optional, e.g., 'statement')
+
 
     *   **ContentVersion** (embedded in Campaign):
         *   `id`: String (unique version identifier)
@@ -201,15 +225,22 @@ The application is built using a modern JavaScript stack:
         *   `timestamp`: Date
         *   `actorName`: String
         *   `changeSummary`: String
-        *   `multiFormatContentSnapshot`: Object
+        *   `multiFormatContentSnapshot`: Object (MultiFormatContent)
         *   `isFlagged`: Boolean (default false, for admin moderation of this version)
         *   `adminModerationNotes`: String (optional, admin notes for this version)
 
     *   **UserFeedback** (`feedback_logs` collection):
-        *   ... (fields like userId, campaignId, rating, comment, timestamp)
+        *   `_id`: ObjectId
+        *   `userId`: ObjectId (links to User)
+        *   `campaignId`: ObjectId (links to Campaign)
+        *   `contentVersionId`: ObjectId (optional, links to specific version ID within a campaign)
+        *   `contentFormat`: String
+        *   `rating`: Number (1 or -1)
+        *   `comment`: String (optional)
+        *   `timestamp`: Date
 
-    *   **BrandDNA** (`brand_dna` collection - conceptual for full persistence):
-        *   ... (fields as previously defined)
+    *   **BrandDNA** (`brand_dna` collection - conceptual for full persistence if required beyond session):
+        *   Contains fields for `voiceProfile`, `visualStyle`, `contentPatterns` as defined in `src/types/brand.ts`.
 
 -----------------
 5. AI Integration
@@ -228,17 +259,18 @@ Refer to `README.md`. Key `.env.local` variables: `MONGODB_URI`, `NEXTAUTH_SECRE
 -----------------
 *   **Route Protection**: `src/middleware.ts` protects `/dashboard/*` (authentication) and `/admin/*` (authentication + 'admin' role). Redirects unauthorized users.
 *   **Banned Users**: NextAuth `signIn` callback prevents login if `isBanned` is true. Middleware redirects already authenticated but subsequently banned users from protected routes.
-*   **API Security**: Admin APIs (`/api/admin/*`) check for 'admin' role in JWT. Other sensitive APIs check for general authentication.
+*   **API Security**: Admin APIs (`/api/admin/*`) check for 'admin' role in JWT. Other sensitive APIs check for general authentication. Role-based access for campaign creation/editing is handled in respective API routes.
 
 -----------------
 8. Future Enhancements
 -----------------
 *   Real-time Agent Debates (WebSockets).
-*   Full File Uploads & Processing (Cloud Storage).
-*   Advanced Brand DNA persistence and usage.
-*   Functional Content Calendar & A/B Testing.
-*   Real Analytics & Data Export.
-*   Team Collaboration features.
+*   Full File Uploads & Processing (Cloud Storage instead of data URIs for large files).
+*   Advanced BrandDNA persistence, evolution tracking, and usage in generation.
+*   Functional Content Calendar & A/B Testing (beyond placeholders).
+*   Real Analytics & Data Export (beyond placeholders).
+*   Team Collaboration features (beyond placeholders).
 *   AI Usage Monitoring & Cost Tracking.
 *   Feature Flags for beta features.
+*   More granular permissions within roles (e.g., editor can only edit their own campaigns).
 ```
