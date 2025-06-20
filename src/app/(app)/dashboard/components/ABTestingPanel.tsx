@@ -2,19 +2,54 @@
 "use client";
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { TestTube, Construction } from 'lucide-react';
+import { TestTube, Construction, Lock, TrendingUp } from 'lucide-react';
 import type { ABTestInstance } from '@/types/content';
+import { useSession } from 'next-auth/react';
+import type { User as NextAuthUser } from 'next-auth';
+import { Button } from '@/components/ui/button';
+
+interface SessionUser extends NextAuthUser {
+  level?: number;
+}
 
 interface ABTestingPanelProps {
   campaignId?: string;
-  abTests: ABTestInstance[]; // Currently, this will be empty from the backend
+  abTests: ABTestInstance[]; 
 }
 
+const FEATURE_UNLOCK_LEVEL = 3;
+
 export function ABTestingPanel({ campaignId, abTests }: ABTestingPanelProps) {
-  // For now, this component will be a placeholder.
-  // Future enhancements would allow creating/viewing A/B tests,
-  // selecting a specific A/B test if multiple exist,
-  // then showing side-by-side comparisons for chosen formats.
+  const { data: session } = useSession();
+  const user = session?.user as SessionUser | undefined;
+  const userLevel = user?.level || 1;
+  const isFeatureLocked = userLevel < FEATURE_UNLOCK_LEVEL;
+
+
+  if (isFeatureLocked) {
+    return (
+        <Card className="shadow-lg">
+            <CardHeader>
+                <CardTitle className="font-headline text-2xl flex items-center gap-2">
+                <Lock className="h-6 w-6 text-primary/70" />
+                A/B Testing Panel Locked
+                </CardTitle>
+                <CardDescription>
+                This advanced feature unlocks at Level {FEATURE_UNLOCK_LEVEL}. Keep creating and providing feedback to level up!
+                </CardDescription>
+            </CardHeader>
+            <CardContent className="flex flex-col items-center justify-center min-h-[300px] text-muted-foreground space-y-4 py-10">
+                <TrendingUp size={64} className="text-primary/50" />
+                <h3 className="text-xl font-semibold">Reach Level {FEATURE_UNLOCK_LEVEL} to Unlock!</h3>
+                <p className="text-center max-w-md">
+                Your current level is {userLevel}. Engage more with ContentCraft AI to gain XP and unlock powerful tools like A/B testing.
+                </p>
+                {/* Optional: Add a button or link to guide users on how to gain XP */}
+                {/* <Button variant="outline" onClick={() => alert("Gain XP by generating content and providing feedback on generated content!")}>How to Level Up?</Button> */}
+            </CardContent>
+        </Card>
+    );
+  }
 
   return (
     <Card className="shadow-lg">

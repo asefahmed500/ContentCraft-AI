@@ -11,11 +11,16 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, Wand2, Lightbulb, Users, Target, Palette, FileUp, Save, Paperclip, Tag, Info, Link2, Combine, Brain, Video, Upload, Lock, Unlock } from 'lucide-react';
+import { Loader2, Wand2, Lightbulb, Users, Target, Palette, FileUp, Save, Paperclip, Tag, Info, Link2, Combine, Brain, Video, Upload, Lock, Unlock, ShieldAlert } from 'lucide-react';
 import type { Campaign, CampaignStatus } from '@/types/content'; 
 import { Separator } from '@/components/ui/separator';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { useSession } from 'next-auth/react';
+import type { User as NextAuthUser } from 'next-auth';
 
+interface SessionUser extends NextAuthUser {
+  role?: 'viewer' | 'editor' | 'admin';
+}
 
 interface CampaignGeneratorProps {
   onCampaignCreated: (newCampaign: Campaign) => void; 
@@ -34,6 +39,10 @@ export function CampaignGenerator({
     isGenerating,
     selectedCampaignForEdit 
 }: CampaignGeneratorProps) {
+  const { data: session } = useSession();
+  const user = session?.user as SessionUser | undefined;
+  const isViewer = user?.role === 'viewer';
+
   const [campaignTitle, setCampaignTitle] = useState('');
   const [brief, setBrief] = useState(''); 
   const [brandVoice, setBrandVoice] = useState('');
@@ -93,6 +102,10 @@ export function CampaignGenerator({
 
 
   const handleSaveCampaign = async (shouldStartGeneration: boolean = false) => {
+    if (isViewer) {
+        toast({ title: "Permission Denied", description: "Viewers cannot save or generate campaigns.", variant: "destructive" });
+        return;
+    }
     if (!campaignTitle.trim()) {
       toast({ title: "Campaign Title is empty", description: "Please provide a campaign title.", variant: "destructive" });
       return;
@@ -173,6 +186,10 @@ export function CampaignGenerator({
   };
 
   const handleImportFromUrl = async () => {
+    if (isViewer) {
+        toast({ title: "Permission Denied", description: "Viewers cannot import content.", variant: "destructive" });
+        return;
+    }
     if (!importUrl.trim()) {
       toast({ title: "No URL provided", description: "Please enter a URL to import content.", variant: "destructive"});
       return;
@@ -191,6 +208,10 @@ export function CampaignGenerator({
   };
 
   const handleGenerateFromVideo = async () => {
+     if (isViewer) {
+        toast({ title: "Permission Denied", description: "Viewers cannot generate briefs from video.", variant: "destructive" });
+        return;
+    }
     if (!videoUrl.trim() && !videoFile) {
         toast({ title: "No Video Source", description: "Please provide a video URL or upload a video file.", variant: "destructive"});
         return;
@@ -228,7 +249,7 @@ Please review and refine this extracted information and the suggestions above to
     if (videoFileInput) videoFileInput.value = '';
   };
 
-  const primaryActionsDisabled = isSaving || isGenerating || isImportingUrl || isProcessingVideo;
+  const formDisabled = isViewer || isSaving || isGenerating || isImportingUrl || isProcessingVideo;
 
   return (
     <Card className="shadow-lg">
@@ -243,6 +264,20 @@ Please review and refine this extracted information and the suggestions above to
                 : "Define your campaign: name, product/service, target audience, tone, and goals. Our AI agents will take it from there."
             }
         </CardDescription>
+         {isViewer && selectedCampaignForEdit && (
+            <Alert variant="destructive" className="mt-2">
+                <ShieldAlert className="h-5 w-5" />
+                <AlertTitle>Read-Only Mode</AlertTitle>
+                <AlertDescription>You are viewing this campaign in read-only mode. Viewers cannot edit campaigns.</AlertDescription>
+            </Alert>
+        )}
+         {isViewer && !selectedCampaignForEdit && (
+            <Alert variant="destructive" className="mt-2">
+                <ShieldAlert className="h-5 w-5" />
+                <AlertTitle>Permission Denied</AlertTitle>
+                <AlertDescription>Viewers cannot create new campaigns. Please contact an editor or admin.</AlertDescription>
+            </Alert>
+        )}
       </CardHeader>
       <CardContent className="space-y-6">
         <div className="space-y-2">
@@ -254,7 +289,7 @@ Please review and refine this extracted information and the suggestions above to
             onChange={(e) => setCampaignTitle(e.target.value)}
             className="text-base"
             required
-            disabled={primaryActionsDisabled}
+            disabled={formDisabled}
           />
         </div>
         
@@ -274,7 +309,7 @@ Please review and refine this extracted information and the suggestions above to
                     placeholder="https://example.com/video"
                     value={videoUrl}
                     onChange={(e) => { setVideoUrl(e.target.value); if(e.target.value && videoFile) setVideoFile(null); }}
-                    disabled={isProcessingVideo || primaryActionsDisabled}
+                    disabled={formDisabled || isProcessingVideo}
                 />
             </div>
              <div className="relative flex items-center text-xs uppercase my-2">
@@ -289,12 +324,12 @@ Please review and refine this extracted information and the suggestions above to
                     type="file"
                     accept="video/mp4,video/quicktime,video/x-msvideo,video/webm" 
                     onChange={handleVideoFileChange}
-                    disabled={isProcessingVideo || !!videoUrl.trim() || primaryActionsDisabled} 
+                    disabled={formDisabled || isProcessingVideo || !!videoUrl.trim()} 
                 />
             </div>
             <Button 
                 onClick={handleGenerateFromVideo} 
-                disabled={isProcessingVideo || (!videoUrl.trim() && !videoFile) || primaryActionsDisabled} 
+                disabled={formDisabled || isProcessingVideo || (!videoUrl.trim() && !videoFile)} 
                 variant="outline" 
                 className="w-full sm:w-auto border-primary/50 text-primary/90 hover:bg-primary/10 hover:text-primary"
             >
@@ -316,9 +351,9 @@ Please review and refine this extracted information and the suggestions above to
                         value={importUrl}
                         onChange={(e) => setImportUrl(e.target.value)}
                         className="text-base"
-                        disabled={isImportingUrl || isProcessingVideo || primaryActionsDisabled}
+                        disabled={formDisabled || isImportingUrl || isProcessingVideo}
                     />
-                    <Button onClick={handleImportFromUrl} disabled={isImportingUrl || !importUrl.trim() || isProcessingVideo || primaryActionsDisabled} variant="outline">
+                    <Button onClick={handleImportFromUrl} disabled={formDisabled || isImportingUrl || !importUrl.trim() || isProcessingVideo} variant="outline">
                         {isImportingUrl ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Combine className="mr-2 h-4 w-4"/>}
                         Import Text
                     </Button>
@@ -340,7 +375,7 @@ Please review and refine this extracted information and the suggestions above to
                 rows={8}
                 className="text-base"
                 required
-                disabled={isProcessingVideo || isImportingUrl || primaryActionsDisabled}
+                disabled={formDisabled || isProcessingVideo || isImportingUrl}
               />
             </div>
         </div>
@@ -355,12 +390,12 @@ Please review and refine this extracted information and the suggestions above to
               value={targetAudience}
               onChange={(e) => setTargetAudience(e.target.value)}
               className="text-base"
-              disabled={primaryActionsDisabled}
+              disabled={formDisabled}
             />
           </div>
           <div className="space-y-2">
             <Label htmlFor="tone" className="text-base flex items-center gap-1"><Palette className="mr-1 h-4 w-4"/>Desired Tone</Label>
-            <Select value={tone} onValueChange={setTone} disabled={primaryActionsDisabled}>
+            <Select value={tone} onValueChange={setTone} disabled={formDisabled}>
               <SelectTrigger id="tone" className="text-base">
                 <SelectValue placeholder="Select tone (e.g., Playful, Bold)" />
               </SelectTrigger>
@@ -373,7 +408,7 @@ Please review and refine this extracted information and the suggestions above to
 
         <div className="space-y-2">
           <Label htmlFor="content-goals" className="text-base flex items-center gap-1"><Target className="mr-1 h-4 w-4"/>Content Goals (Select up to 3)</Label>
-           <Select onValueChange={(value) => { /* This select is used for display only, logic is in items */ }} disabled={primaryActionsDisabled}>
+           <Select onValueChange={(value) => { /* This select is used for display only, logic is in items */ }} disabled={formDisabled}>
             <SelectTrigger id="content-goals" className="text-base h-auto min-h-10 py-2">
                 <SelectValue placeholder="Select up to 3 goals">
                   {contentGoals.length > 0 ? contentGoals.join(', ') : "Select up to 3 goals"}
@@ -384,9 +419,9 @@ Please review and refine this extracted information and the suggestions above to
                     <SelectItem 
                         key={goal} 
                         value={goal} 
-                        disabled={(contentGoals.length >=3 && !contentGoals.includes(goal)) || primaryActionsDisabled}
+                        disabled={(contentGoals.length >=3 && !contentGoals.includes(goal)) || formDisabled}
                         onPointerDown={(e) => { 
-                            if (primaryActionsDisabled) return;
+                            if (formDisabled) return;
                             e.preventDefault(); 
                             const newGoals = contentGoals.includes(goal) ? contentGoals.filter(g => g !== goal) : [...contentGoals, goal];
                              if (newGoals.length <= 3) {
@@ -416,7 +451,7 @@ Please review and refine this extracted information and the suggestions above to
             value={brandVoice}
             onChange={(e) => setBrandVoice(e.target.value)}
             className="text-base"
-            disabled={primaryActionsDisabled}
+            disabled={formDisabled}
           />
           <p className="text-xs text-muted-foreground">
             Provide specific voice instructions here to guide the AI for this campaign. This can augment or override an analyzed Brand DNA profile for this specific campaign's content. If no profile exists or no override is given, AI will use a general approach.
@@ -428,7 +463,7 @@ Please review and refine this extracted information and the suggestions above to
                 id="private-campaign"
                 checked={isPrivate}
                 onCheckedChange={setIsPrivate}
-                disabled={primaryActionsDisabled}
+                disabled={formDisabled}
             />
             <Label htmlFor="private-campaign" className="text-base flex items-center gap-1">
                 {isPrivate ? <Lock className="h-4 w-4" /> : <Unlock className="h-4 w-4" />}
@@ -459,7 +494,7 @@ Please review and refine this extracted information and the suggestions above to
                 onChange={handleFileChange}
                 className="text-base"
                 accept=".pdf,.txt,.md,.doc,.docx"
-                disabled={primaryActionsDisabled}
+                disabled={formDisabled}
             />
              {referenceFiles && referenceFiles.length > 0 && (
                 <div className="pt-2 text-sm text-muted-foreground">
@@ -475,7 +510,7 @@ Please review and refine this extracted information and the suggestions above to
       <CardFooter className="flex flex-col sm:flex-row justify-end gap-3 pt-6">
         <Button 
             onClick={() => handleSaveCampaign(false)} 
-            disabled={primaryActionsDisabled} 
+            disabled={formDisabled || isViewer} 
             variant="outline"
             className="w-full sm:w-auto"
         >
@@ -484,7 +519,7 @@ Please review and refine this extracted information and the suggestions above to
         </Button>
         <Button 
             onClick={() => handleSaveCampaign(true)} 
-            disabled={primaryActionsDisabled || !campaignTitle.trim() || !brief.trim()} 
+            disabled={formDisabled || isViewer || !campaignTitle.trim() || !brief.trim()} 
             size="lg" 
             className="w-full sm:w-auto"
         >
@@ -495,4 +530,3 @@ Please review and refine this extracted information and the suggestions above to
     </Card>
   );
 }
-

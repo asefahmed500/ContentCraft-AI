@@ -13,13 +13,14 @@ interface CampaignCardProps {
   onView: (campaignId: string) => void;
   onEdit: (campaignId: string) => void;
   onDelete: (campaignId: string) => void;
+  canEditOrDelete?: boolean;
 }
 
 const statusColors: Record<Campaign['status'], string> = {
     draft: "bg-gray-500",
-    debating: "bg-blue-500", // "under debate"
+    debating: "bg-blue-500", 
     generating: "bg-purple-500",
-    review: "bg-yellow-500 text-yellow-foreground", // "finalized"
+    review: "bg-yellow-500 text-yellow-foreground", 
     published: "bg-green-500",
     archived: "bg-slate-600",
 };
@@ -34,7 +35,7 @@ const statusText: Record<Campaign['status'], string> = {
 };
 
 
-export function CampaignCard({ campaign, onView, onEdit, onDelete }: CampaignCardProps) {
+export function CampaignCard({ campaign, onView, onEdit, onDelete, canEditOrDelete }: CampaignCardProps) {
   return (
     <Card className="shadow-lg hover:shadow-xl transition-shadow duration-300 flex flex-col h-full">
       <CardHeader className="pb-3">
@@ -76,14 +77,17 @@ export function CampaignCard({ campaign, onView, onEdit, onDelete }: CampaignCar
         <Button variant="outline" size="sm" onClick={() => onView(campaign.id)}>
           <Eye className="mr-1 h-4 w-4" /> View
         </Button>
-        <Button variant="outline" size="sm" onClick={() => onEdit(campaign.id)}>
-          <Edit3 className="mr-1 h-4 w-4" /> Edit
-        </Button>
-        <Button variant="destructive" size="sm" onClick={() => onDelete(campaign.id)}>
-          <Trash2 className="mr-1 h-4 w-4" /> Delete
-        </Button>
+        {canEditOrDelete && (
+            <>
+                <Button variant="outline" size="sm" onClick={() => onEdit(campaign.id)}>
+                <Edit3 className="mr-1 h-4 w-4" /> Edit
+                </Button>
+                <Button variant="destructive" size="sm" onClick={() => onDelete(campaign.id)}>
+                <Trash2 className="mr-1 h-4 w-4" /> Delete
+                </Button>
+            </>
+        )}
       </CardFooter>
     </Card>
   );
 }
-

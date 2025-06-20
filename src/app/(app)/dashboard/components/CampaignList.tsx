@@ -18,7 +18,12 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { useSession } from 'next-auth/react';
+import type { User as NextAuthUser } from 'next-auth';
 
+interface SessionUser extends NextAuthUser {
+  role?: 'viewer' | 'editor' | 'admin';
+}
 
 interface CampaignListProps {
   refreshTrigger: number; 
@@ -27,6 +32,10 @@ interface CampaignListProps {
 }
 
 export function CampaignList({ refreshTrigger, onCampaignSelect, currentlySelectedCampaignId }: CampaignListProps) {
+  const { data: session } = useSession();
+  const user = session?.user as SessionUser | undefined;
+  const canEditDelete = user?.role === 'editor' || user?.role === 'admin';
+
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -62,12 +71,16 @@ export function CampaignList({ refreshTrigger, onCampaignSelect, currentlySelect
   }, [refreshTrigger, toast]);
 
   const handleDeletePrompt = (campaign: Campaign) => {
+    if (!canEditDelete) {
+        toast({ title: "Permission Denied", description: "You do not have permission to delete campaigns.", variant: "destructive" });
+        return;
+    }
     setCampaignToDelete(campaign);
     setIsDeleteDialogOpen(true);
   };
 
   const handleDeleteCampaign = async () => {
-    if (!campaignToDelete) return;
+    if (!campaignToDelete || !canEditDelete) return;
     
     const campaignTitleForToast = campaignToDelete.title;
     const campaignIdToDelete = campaignToDelete.id;
@@ -98,6 +111,16 @@ export function CampaignList({ refreshTrigger, onCampaignSelect, currentlySelect
       setCampaignToDelete(null);
     }
   };
+  
+  const handleEditPrompt = (campaignId: string) => {
+      if(!canEditDelete) {
+        toast({ title: "Permission Denied", description: "You do not have permission to edit campaigns.", variant: "destructive" });
+        onCampaignSelect(campaignId, 'view'); // Allow viewing even if edit is denied
+        return;
+      }
+      onCampaignSelect(campaignId, 'edit');
+  }
+
 
   if (isLoading && campaigns.length === 0) {
     return (
@@ -146,8 +169,9 @@ export function CampaignList({ refreshTrigger, onCampaignSelect, currentlySelect
             key={campaign.id} 
             campaign={campaign} 
             onView={() => onCampaignSelect(campaign.id, 'view')}
-            onEdit={() => onCampaignSelect(campaign.id, 'edit')}
+            onEdit={() => handleEditPrompt(campaign.id)}
             onDelete={() => handleDeletePrompt(campaign)}
+            canEditOrDelete={canEditDelete}
           />
         ))}
       </div>

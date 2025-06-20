@@ -5,6 +5,12 @@ import clientPromise from '@/lib/mongodb';
 import { getToken } from 'next-auth/jwt';
 import { ObjectId } from 'mongodb';
 import type { Campaign, ContentVersion, AgentInteraction, ABTestInstance, ScheduledPost } from '@/types/content';
+import type { User as NextAuthUser } from 'next-auth';
+
+interface SessionUser extends NextAuthUser {
+  id?: string;
+  role?: 'viewer' | 'editor' | 'admin';
+}
 
 const ensureDate = (dateInput: string | Date | undefined | null): Date | undefined => {
   if (!dateInput) return undefined;
@@ -69,9 +75,12 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const token = await getToken({ req: request, secret: process.env.NEXTAUTH_SECRET });
+    const token = await getToken({ req: request, secret: process.env.NEXTAUTH_SECRET }) as SessionUser | null;
     if (!token || !token.id) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+    if (token.role !== 'editor' && token.role !== 'admin') {
+      return NextResponse.json({ error: 'Forbidden: Insufficient permissions to create campaigns.' }, { status: 403 });
     }
     const userId = token.id as string;
 
@@ -123,9 +132,12 @@ export async function POST(request: NextRequest) {
 
 export async function PUT(request: NextRequest) {
   try {
-    const token = await getToken({ req: request, secret: process.env.NEXTAUTH_SECRET });
+    const token = await getToken({ req: request, secret: process.env.NEXTAUTH_SECRET }) as SessionUser | null;
     if (!token || !token.id) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+     if (token.role !== 'editor' && token.role !== 'admin') {
+      return NextResponse.json({ error: 'Forbidden: Insufficient permissions to update campaigns.' }, { status: 403 });
     }
     const userId = token.id as string;
 
@@ -143,7 +155,6 @@ export async function PUT(request: NextRequest) {
     
     const updateData: Partial<Omit<Campaign, 'id' | '_id' | 'userId' | 'createdAt'>> = { updatedAt: new Date() };
     
-    // Only include fields in updateData if they are present in the body
     if (Object.prototype.hasOwnProperty.call(body, 'title')) updateData.title = body.title;
     if (Object.prototype.hasOwnProperty.call(body, 'brief')) updateData.brief = body.brief;
     if (Object.prototype.hasOwnProperty.call(body, 'targetAudience')) updateData.targetAudience = body.targetAudience === null ? undefined : body.targetAudience;
@@ -211,9 +222,12 @@ export async function PUT(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   try {
-    const token = await getToken({ req: request, secret: process.env.NEXTAUTH_SECRET });
+    const token = await getToken({ req: request, secret: process.env.NEXTAUTH_SECRET }) as SessionUser | null;
     if (!token || !token.id) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+    if (token.role !== 'editor' && token.role !== 'admin') {
+      return NextResponse.json({ error: 'Forbidden: Insufficient permissions to delete campaigns.' }, { status: 403 });
     }
     const userId = token.id as string;
 

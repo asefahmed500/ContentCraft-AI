@@ -7,15 +7,16 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { useSession, signOut } from 'next-auth/react';
-import { UserCircle, Users, ShieldCheck, Save, LogOut, Loader2 } from "lucide-react";
+import { UserCircle, Users, ShieldCheck, Save, LogOut, Loader2, ShieldAlert } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import type { FormEvent} from 'react';
 import { useState, useEffect } from "react";
 import type { User as NextAuthUser } from 'next-auth';
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
 interface SessionUser extends NextAuthUser {
   id?: string;
-  role?: string;
+  role?: 'viewer' | 'editor' | 'admin';
   totalXP?: number;
   level?: number;
   badges?: string[];
@@ -28,6 +29,7 @@ export default function SettingsPage() {
   
   const user = session?.user as SessionUser | undefined;
   const authIsLoading = status === 'loading';
+  const isAdmin = user?.role === 'admin';
 
   const [userName, setUserName] = useState("");
   const [userEmail, setUserEmail] = useState("");
@@ -45,26 +47,33 @@ export default function SettingsPage() {
   const handleProfileSave = async (e: FormEvent) => {
     e.preventDefault();
     setIsSavingProfile(true);
-    // Simulate API call
+    
+    // In a real app, you would call an API to update the user's name and password.
+    // For now, we just simulate the update and toast.
     await new Promise(resolve => setTimeout(resolve, 1000));
     
-    // To reflect name change in UI immediately if successful, call update from useSession
-    // await updateSession({ user: { name: userName }}); // This is how you might update session data
+    // If you were actually updating the name and wanted it reflected in the session:
+    // await updateSession({ user: { name: userName }}); 
 
     toast({ 
       title: "Profile Update (Simulated)", 
-      description: `Name update to "${userName}" is simulated. Password changes would require a secure backend process and are also simulated here. No actual data has been changed on the server.` 
+      description: `Name update to "${userName}" is simulated. Password changes would require a secure backend process. No actual data has been changed on the server.` 
     });
     setIsSavingProfile(false);
   };
 
   const handleInviteUser = async (e: FormEvent) => {
     e.preventDefault();
+    if (!isAdmin) {
+        toast({ title: "Permission Denied", description: "Only admins can invite users.", variant: "destructive" });
+        return;
+    }
     setIsSendingInvite(true);
     const target = e.target as typeof e.target & { email: { value: string }; role: { value: string } };
     const invitedEmail = target.email.value;
     const invitedRole = target.role.value;
 
+    // Simulate API call
     await new Promise(resolve => setTimeout(resolve, 1000)); 
     
     toast({ 
@@ -147,13 +156,20 @@ export default function SettingsPage() {
               <Users className="h-6 w-6 text-primary" />
               Team Management
             </CardTitle>
-            <CardDescription>Invite and manage team members. (Admins only / Feature simulation)</CardDescription>
+            <CardDescription>Invite and manage team members. (Admins only)</CardDescription>
+             {!isAdmin && (
+                <Alert variant="destructive" className="mt-2">
+                    <ShieldAlert className="h-5 w-5" />
+                    <AlertTitle>Admin Access Required</AlertTitle>
+                    <AlertDescription>Only administrators can manage team members.</AlertDescription>
+                </Alert>
+            )}
           </CardHeader>
            <form onSubmit={handleInviteUser}>
             <CardContent className="space-y-4">
                 <div className="space-y-1">
                     <Label htmlFor="inviteEmail">Invite User by Email</Label>
-                    <Input id="inviteEmail" name="email" type="email" placeholder="teammate@example.com" disabled={user.role !== 'admin' || isSendingInvite} required/>
+                    <Input id="inviteEmail" name="email" type="email" placeholder="teammate@example.com" disabled={!isAdmin || isSendingInvite} required/>
                 </div>
                 <div className="space-y-1">
                     <Label htmlFor="inviteRole">Assign Role</Label>
@@ -162,7 +178,7 @@ export default function SettingsPage() {
                         name="role" 
                         defaultValue="viewer"
                         className="w-full p-2 border rounded-md bg-background text-foreground disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 h-10 text-sm" 
-                        disabled={user.role !== 'admin' || isSendingInvite}
+                        disabled={!isAdmin || isSendingInvite}
                     >
                         <option value="viewer">Viewer</option>
                         <option value="editor">Editor</option>
@@ -170,11 +186,11 @@ export default function SettingsPage() {
                     </select>
                 </div>
                  <p className="text-xs text-muted-foreground">
-                    Team management features are typically available for 'admin' roles. This is a simulation. A real system would involve email invitations and a 'teams' database collection.
+                    Team management features are available for 'admin' roles. This is a UI simulation.
                 </p>
             </CardContent>
             <CardFooter>
-                 <Button type="submit" variant="outline" disabled={user.role !== 'admin' || isSendingInvite}>
+                 <Button type="submit" variant="outline" disabled={!isAdmin || isSendingInvite}>
                     {isSendingInvite ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Users className="mr-2 h-4 w-4" /> }
                     Invite User
                 </Button>
