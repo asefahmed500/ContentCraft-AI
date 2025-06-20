@@ -1,13 +1,18 @@
+
 "use client";
 import { SiteHeader } from '@/components/SiteHeader';
-import { AuthProvider, useAuth } from '@/components/AuthContext';
+import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
+import type { ReactNode} from 'react';
 import { useEffect } from 'react';
 import { Loader2 } from 'lucide-react';
 
-function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated, isLoading } = useAuth();
+function DashboardLayoutContent({ children }: { children: ReactNode }) {
+  const { data: session, status } = useSession();
   const router = useRouter();
+
+  const isAuthenticated = status === 'authenticated';
+  const isLoading = status === 'loading';
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
@@ -32,13 +37,10 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
 }
 
 
-export default function DashboardLayout({ children }: { children: React.ReactNode }) {
-  // AuthProvider is now wrapped around the entire app in RootLayout via SessionProviderWrapper
-  // but individual pages/layouts can still use it to consume context if structured this way.
-  // For this specific layout, AuthProvider here ensures useAuth() works within DashboardLayoutContent.
+export default function DashboardLayout({ children }: { children: ReactNode }) {
+  // SessionProvider is now at the root in RootLayout (via SessionProviderWrapper)
+  // This component directly uses useSession for its logic.
   return (
-    <AuthProvider>
       <DashboardLayoutContent>{children}</DashboardLayoutContent>
-    </AuthProvider>
   );
 }

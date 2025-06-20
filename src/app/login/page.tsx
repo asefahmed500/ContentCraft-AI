@@ -6,7 +6,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import Link from "next/link";
-import { AuthProvider, useAuth } from "@/components/AuthContext"; 
+import { signIn, useSession } from "next-auth/react"; 
 import type { FormEvent } from 'react';
 import { useState, useEffect } from 'react';
 import { Logo } from "@/components/Logo";
@@ -21,10 +21,13 @@ const GoogleIcon = () => (
 
 
 function LoginPageContent() {
-  const { login, isLoading: authLoading, isAuthenticated } = useAuth();
+  const { data: session, status } = useSession();
   const router = useRouter();
   const searchParams = useSearchParams();
   const callbackUrl = searchParams.get('callbackUrl') || '/dashboard';
+
+  const isAuthenticated = status === 'authenticated';
+  const authLoading = status === 'loading';
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -48,16 +51,18 @@ function LoginPageContent() {
       return;
     }
     try {
-      // Use redirect: false to handle success/error manually or rely on useEffect for redirection
-      const result = await login(undefined, { email, password, redirect: false, callbackUrl });
-      if (result?.error) { // Note: login from AuthContext might not directly return NextAuth result like this
-        setError(result.error); // Adjust based on how login in AuthContext handles errors
-      } else if (!result?.ok) {
-        // If login doesn't throw but isn't "ok", there might be a subtle issue.
-        // This part depends on what your `login` function actually returns.
-        // For now, we assume error is thrown or handled by useEffect for success.
+      const result = await signIn('credentials', { 
+        redirect: false, 
+        email, 
+        password, 
+        callbackUrl 
+      });
+
+      if (result?.error) {
+        setError(result.error === "CredentialsSignin" ? "Invalid email or password." : result.error);
+      } else if (result?.ok) {
+        // router.replace(callbackUrl); // Let useEffect handle redirection
       }
-      // Successful login redirection is handled by the useEffect hook
     } catch (e: any) {
       setError(e.message || 'Login failed. Please check your credentials.');
     } finally {
@@ -66,15 +71,16 @@ function LoginPageContent() {
   };
 
   const handleGoogleSignIn = async () => {
-    setIsSubmitting(true);
+    setIsSubmitting(true); // Consider a different state for Google Sign-In if needed
     setError('');
     try {
-      await login('google', { redirect: false, callbackUrl });
-      // Successful login redirection is handled by the useEffect hook
-    } catch (e: any) {
+      await signIn('google', { redirect: false, callbackUrl });
+      // Successful Google sign-in will trigger session update and useEffect for redirection
+    } catch (e: any) { // This catch might not be reached if signIn itself handles errors/redirects
       setError(e.message || 'Google Sign-In failed. Please try again.');
-      setIsSubmitting(false); // Only set to false if error occurs, otherwise NextAuth handles redirect
+      setIsSubmitting(false);
     }
+    // setIsSubmitting(false) might be set too early if signIn is still processing
   };
   
   if (authLoading || (!authLoading && isAuthenticated)) {
@@ -127,7 +133,7 @@ function LoginPageContent() {
           </CardContent>
           <CardFooter className="flex flex-col gap-4">
             <Button type="submit" className="w-full" disabled={isSubmitting}>
-              {isSubmitting && !error.includes("Google") ? <Loader2 className="animate-spin" /> : <LogIn />} Login
+              {isSubmitting && email ? <Loader2 className="animate-spin" /> : <LogIn />} Login
             </Button>
             <div className="relative w-full">
               <div className="absolute inset-0 flex items-center">
@@ -140,7 +146,7 @@ function LoginPageContent() {
               </div>
             </div>
             <Button variant="outline" className="w-full" onClick={handleGoogleSignIn} disabled={isSubmitting}>
-              {isSubmitting && error.includes("Google") ? <Loader2 className="animate-spin" /> : <GoogleIcon />} Google
+              {isSubmitting && !email ? <Loader2 className="animate-spin" /> : <GoogleIcon />} Google
             </Button>
             <p className="text-center text-sm text-muted-foreground">
               Don&apos;t have an account?{" "}
@@ -156,9 +162,8 @@ function LoginPageContent() {
 }
 
 export default function LoginPage() {
+  // SessionProvider is at the root
   return (
-    <AuthProvider>
       <LoginPageContent />
-    </AuthProvider>
-  )
+  );
 }

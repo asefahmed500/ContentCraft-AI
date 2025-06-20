@@ -3,17 +3,20 @@
 
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { AuthProvider, useAuth } from '@/components/AuthContext';
+import { useSession } from 'next-auth/react';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
 import { Logo } from '@/components/Logo';
 import Image from 'next/image';
-import { Loader2, Users, LayoutGrid, FlaskConical, Repeat, Share2, Zap, HelpCircle } from 'lucide-react'; // Added Users, LayoutGrid etc.
+import { Loader2, Users, LayoutGrid, FlaskConical, Repeat, Share2, Zap, HelpCircle } from 'lucide-react';
 
 
-function HomePageContent() { // Renamed from HomePage to HomePageContent
-  const { isAuthenticated, isLoading } = useAuth();
+function HomePageContent() {
+  const { data: session, status } = useSession();
   const router = useRouter();
+
+  const isAuthenticated = status === 'authenticated';
+  const isLoading = status === 'loading';
 
   useEffect(() => {
     if (!isLoading && isAuthenticated) {
@@ -30,7 +33,6 @@ function HomePageContent() { // Renamed from HomePage to HomePageContent
   }
 
   if (isAuthenticated) {
-     // Will be redirected by useEffect
     return (
       <div className="flex min-h-screen flex-col items-center justify-center bg-background">
         <Loader2 className="h-12 w-12 animate-spin text-primary" />
@@ -149,11 +151,9 @@ function HomePageContent() { // Renamed from HomePage to HomePageContent
   );
 }
 
-// Wrap the default export with AuthProvider
-export default function HomePage() { // Renamed from HomePageWithAuth
+export default function HomePage() {
+  // SessionProvider is at the root
   return (
-    <AuthProvider>
       <HomePageContent />
-    </AuthProvider>
   );
 }

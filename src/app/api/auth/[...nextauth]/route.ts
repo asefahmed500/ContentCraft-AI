@@ -12,8 +12,8 @@ import type { AdapterUser } from 'next-auth/adapters';
 
 interface MyAppUser extends NextAuthUser {
   role?: string;
-  id?: string; // This will hold the string version of _id
-  _id?: ObjectId | string; // MongoDB ObjectId or its string representation
+  id: string; // Must be string for NextAuth session
+  _id?: ObjectId | string; // MongoDB ObjectId
   totalXP?: number;
   level?: number;
   badges?: string[];
@@ -60,7 +60,7 @@ export const authOptions: NextAuthOptions = {
 
         const client: MongoClient = await clientPromise;
         const db: Db = client.db(getDbName());
-        const usersCollection = db.collection<AdapterUser>("users"); // AdapterUser for DB interaction
+        const usersCollection = db.collection<AdapterUser>("users"); 
 
         const dbUser = await usersCollection.findOne({ email: credentials.email });
 
@@ -78,9 +78,8 @@ export const authOptions: NextAuthOptions = {
           throw new Error("Incorrect password.");
         }
         
-        // Ensure gamification fields for the user object returned by authorize
         return {
-          id: dbUser._id!.toString(), // Convert ObjectId to string for NextAuth user object
+          id: dbUser._id!.toString(), 
           email: dbUser.email,
           name: dbUser.name,
           image: dbUser.image,
@@ -88,7 +87,7 @@ export const authOptions: NextAuthOptions = {
           totalXP: (dbUser as MyAppUser).totalXP ?? defaultGamification.totalXP,
           level: (dbUser as MyAppUser).level ?? defaultGamification.level,
           badges: (dbUser as MyAppUser).badges ?? defaultGamification.badges,
-        } as MyAppUser; // Cast to MyAppUser
+        } as MyAppUser; 
       }
     })
   ],
@@ -103,10 +102,11 @@ export const authOptions: NextAuthOptions = {
 
       let dbUser = await usersCollection.findOne({ email: user.email as string });
 
-      if (dbUser) {
+      if (dbUser) { // Existing user
         const updates: Partial<AdapterUser & MyAppUser> = {};
         let needsDbUpdate = false;
 
+        // Update name/image if changed from provider
         if (user.name && dbUser.name !== user.name) {
           updates.name = user.name;
           needsDbUpdate = true;
@@ -115,11 +115,13 @@ export const authOptions: NextAuthOptions = {
           updates.image = user.image;
           needsDbUpdate = true;
         }
+        // Set emailVerified if provider confirms it
         if (account?.provider === "google" && !dbUser.emailVerified && (profile as any)?.email_verified === true) {
           updates.emailVerified = new Date();
           needsDbUpdate = true;
         }
         
+        // Ensure gamification fields are present
         if (typeof (dbUser as MyAppUser).role === 'undefined') {
           updates.role = defaultGamification.role;
           needsDbUpdate = true;
@@ -139,24 +141,24 @@ export const authOptions: NextAuthOptions = {
 
         if (needsDbUpdate) {
           await usersCollection.updateOne({ _id: dbUser._id }, { $set: updates });
-          dbUser = await usersCollection.findOne({ _id: dbUser._id }); // Re-fetch to get merged data
+          dbUser = await usersCollection.findOne({ _id: dbUser._id }); // Re-fetch
         }
         
-        // Enrich the NextAuth `user` object (which is passed to JWT callback)
-        // It must have `id` as string.
-        user.id = dbUser!._id!.toString();
+        // Enrich the NextAuth `user` object passed to JWT callback
+        // IMPORTANT: user.id MUST be the string version of _id
+        user.id = dbUser!._id!.toString(); 
         (user as MyAppUser).role = (dbUser as MyAppUser).role ?? defaultGamification.role;
         (user as MyAppUser).totalXP = (dbUser as MyAppUser).totalXP ?? defaultGamification.totalXP;
         (user as MyAppUser).level = (dbUser as MyAppUser).level ?? defaultGamification.level;
         (user as MyAppUser).badges = (dbUser as MyAppUser).badges ?? defaultGamification.badges;
-        user.name = dbUser!.name;
-        user.image = dbUser!.image;
+        user.name = dbUser!.name; // Ensure name is from DB
+        user.image = dbUser!.image; // Ensure image is from DB
         user.emailVerified = dbUser!.emailVerified;
 
-      } else {
-        // This branch is for new users being created by the adapter (typically OAuth)
-        // The adapter's createUser method will be called after this.
-        // We augment the incoming `user` object so the adapter has these default values.
+      } else { 
+        // New user via OAuth (adapter's createUser will handle DB creation)
+        // Augment the incoming `user` object so adapter gets these default values.
+        // The adapter *should* create user.id as a string if using MongoDBAdapter conventions.
         (user as MyAppUser).role = defaultGamification.role;
         (user as MyAppUser).totalXP = defaultGamification.totalXP;
         (user as MyAppUser).level = defaultGamification.level;
@@ -164,27 +166,29 @@ export const authOptions: NextAuthOptions = {
         if (account?.provider === "google" && (profile as any)?.email_verified === true) {
             user.emailVerified = new Date(); 
         }
+        // user.id will be set by the adapter after createUser
       }
       return true; 
     },
-    async jwt({ token, user, trigger, session, account }) {
+    async jwt({ token, user, trigger, session: sessionUpdate, account }) {
       if (user) { // user object is available on initial sign in (enriched by signIn callback)
-        const typedUser = user as MyAppUser; // user object has id as string here
-        token.id = typedUser.id;
+        const typedUser = user as MyAppUser; 
+        token.id = typedUser.id; // This ID should be the string version from signIn
         token.role = typedUser.role;
         token.totalXP = typedUser.totalXP;
         token.level = typedUser.level;
         token.badges = typedUser.badges;
         token.name = typedUser.name;
-        token.picture = typedUser.image; // NextAuth uses 'picture' in JWT for image
+        token.picture = typedUser.image; 
         token.email = typedUser.email; 
         if (account) { 
-            token.accessToken = account.access_token;
+            token.accessToken = account.access_token; // For Google
         }
       }
 
-      if (trigger === "update" && session?.user) {
-        const sessionUser = session.user as MyAppUser;
+      // Handle session updates (e.g., user updates profile info)
+      if (trigger === "update" && sessionUpdate?.user) {
+        const sessionUser = sessionUpdate.user as MyAppUser;
         if (sessionUser.name) token.name = sessionUser.name;
         if (sessionUser.image) token.picture = sessionUser.image;
         if (sessionUser.role) token.role = sessionUser.role;
@@ -195,27 +199,26 @@ export const authOptions: NextAuthOptions = {
       return token;
     },
     async session({ session, token }) {
+      // The token object contains all the custom fields added in the jwt callback
       if (session.user) {
         const typedSessionUser = session.user as MyAppUser;
-        typedSessionUser.id = token.id as string;
+        typedSessionUser.id = token.id as string; // Ensure id is string
         typedSessionUser.role = token.role as string ?? defaultGamification.role;
         typedSessionUser.totalXP = (token.totalXP as number) ?? defaultGamification.totalXP;
         typedSessionUser.level = (token.level as number) ?? defaultGamification.level;
         typedSessionUser.badges = (token.badges as string[]) ?? defaultGamification.badges;
-        // Ensure name, email, image are also correctly populated from token
+        
         typedSessionUser.name = token.name;
         typedSessionUser.email = token.email;
-        typedSessionUser.image = token.picture as string | null | undefined;
+        typedSessionUser.image = token.picture as string | null | undefined; // 'picture' is standard in token
 
-        (session as any).accessToken = token.accessToken; // If you need access token client-side
+        (session as any).accessToken = token.accessToken;
       }
       return session;
     },
   },
   pages: {
     signIn: '/login',
-    // error: '/auth/error', // Optionally, define an error page
-    // newUser: '/auth/new-user' // Optionally, define a new user page
   },
   secret: process.env.NEXTAUTH_SECRET,
   debug: process.env.NODE_ENV === 'development',

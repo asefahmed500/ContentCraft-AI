@@ -6,17 +6,31 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
-import { useAuth } from "@/components/AuthContext";
+import { useSession, signOut } from 'next-auth/react';
 import { UserCircle, Users, ShieldCheck, Save, LogOut, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import type { FormEvent} from 'react';
 import { useState, useEffect } from "react";
+import type { User as NextAuthUser } from 'next-auth';
+
+interface SessionUser extends NextAuthUser {
+  id?: string;
+  role?: string;
+  totalXP?: number;
+  level?: number;
+  badges?: string[];
+}
+
 
 export default function SettingsPage() {
-  const { user, logout, isLoading: authIsLoading } = useAuth();
+  const { data: session, status, update: updateSession } = useSession();
   const { toast } = useToast();
   
+  const user = session?.user as SessionUser | undefined;
+  const authIsLoading = status === 'loading';
+
   const [userName, setUserName] = useState("");
-  const [userEmail, setUserEmail] = useState(""); // Email might not be editable
+  const [userEmail, setUserEmail] = useState("");
   const [isSavingProfile, setIsSavingProfile] = useState(false);
   const [isSendingInvite, setIsSendingInvite] = useState(false);
 
@@ -28,14 +42,15 @@ export default function SettingsPage() {
     }
   }, [user]);
 
-  const handleProfileSave = async (e: React.FormEvent) => {
+  const handleProfileSave = async (e: FormEvent) => {
     e.preventDefault();
     setIsSavingProfile(true);
-    // In a real app, you'd call an API to update the user's profile
-    // For example: /api/user/profile with { name: userName, currentPassword, newPassword }
-    // This might also involve re-fetching session or updating NextAuth session if name changes.
-    // For password changes, ensure backend handles verification and secure update.
-    await new Promise(resolve => setTimeout(resolve, 1000)); // Simulate API call
+    // Simulate API call
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    
+    // To reflect name change in UI immediately if successful, call update from useSession
+    // await updateSession({ user: { name: userName }}); // This is how you might update session data
+
     toast({ 
       title: "Profile Update (Simulated)", 
       description: `Name update to "${userName}" is simulated. Password changes would require a secure backend process and are also simulated here. No actual data has been changed on the server.` 
@@ -43,14 +58,14 @@ export default function SettingsPage() {
     setIsSavingProfile(false);
   };
 
-  const handleInviteUser = async (e: React.FormEvent) => {
+  const handleInviteUser = async (e: FormEvent) => {
     e.preventDefault();
     setIsSendingInvite(true);
     const target = e.target as typeof e.target & { email: { value: string }; role: { value: string } };
     const invitedEmail = target.email.value;
     const invitedRole = target.role.value;
 
-    await new Promise(resolve => setTimeout(resolve, 1000)); // Simulate API call
+    await new Promise(resolve => setTimeout(resolve, 1000)); 
     
     toast({ 
         title: "Invitation Sent (Simulated)", 
@@ -60,6 +75,10 @@ export default function SettingsPage() {
         (e.target as HTMLFormElement).reset();
     }
     setIsSendingInvite(false);
+  };
+
+  const handleLogout = async () => {
+    await signOut({ callbackUrl: '/login' });
   };
 
   if (authIsLoading) {
@@ -85,7 +104,6 @@ export default function SettingsPage() {
       <Separator />
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-        {/* User Profile Section */}
         <Card className="shadow-lg">
           <CardHeader>
             <CardTitle className="font-headline text-xl flex items-center gap-2">
@@ -123,7 +141,6 @@ export default function SettingsPage() {
           </form>
         </Card>
 
-        {/* Team Management Section (Simulated/Placeholder) */}
         <Card className="shadow-lg">
           <CardHeader>
             <CardTitle className="font-headline text-xl flex items-center gap-2">
@@ -168,11 +185,10 @@ export default function SettingsPage() {
       
       <Separator />
       <div className="flex justify-start">
-          <Button variant="destructive" onClick={() => logout()} disabled={isSavingProfile || isSendingInvite}>
+          <Button variant="destructive" onClick={handleLogout} disabled={isSavingProfile || isSendingInvite}>
             <LogOut className="mr-2 h-4 w-4" /> Log Out
           </Button>
       </div>
     </div>
   );
 }
-

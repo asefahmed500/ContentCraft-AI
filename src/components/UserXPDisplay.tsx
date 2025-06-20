@@ -1,13 +1,23 @@
 
 "use client";
 
-import { useAuth } from "@/components/AuthContext";
+import { useSession } from "next-auth/react";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { Trophy, Star } from "lucide-react";
+import type { User as NextAuthUser } from 'next-auth';
+
+interface SessionUser extends NextAuthUser {
+  id?: string;
+  role?: string;
+  totalXP?: number;
+  level?: number;
+  badges?: string[];
+}
 
 const UserXPDisplay = () => {
-  const { user } = useAuth();
+  const { data: session } = useSession();
+  const user = session?.user as SessionUser | undefined;
 
   if (!user) {
     return null;
@@ -16,19 +26,11 @@ const UserXPDisplay = () => {
   const currentLevel = user.level || 1;
   const currentXP = user.totalXP || 0;
   
-  // Simple XP formula for next level: level * 100 (e.g., Level 1 -> 100 XP, Level 2 -> 200 XP for next)
-  // This means XP to reach level L is (L-1)*100.
-  // XP needed *for the current level* to reach the next one.
   const xpForNextLevel = currentLevel * 100; 
-  
-  // XP accumulated *within the current level*
-  // If currentXP = 50, level 1 (needs 100 for L2), progress is 50.
-  // If currentXP = 150, level 2 (needs 200 for L3), progress is (150 - 100) = 50 towards level 3.
   const xpAtStartOfCurrentLevel = (currentLevel - 1) * 100;
   const xpInCurrentLevel = currentXP - xpAtStartOfCurrentLevel;
   
   const progressPercentage = xpForNextLevel > 0 ? Math.min((xpInCurrentLevel / xpForNextLevel) * 100, 100) : 0;
-
 
   return (
     <div className="p-2 space-y-2 text-sm">

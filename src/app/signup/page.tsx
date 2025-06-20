@@ -1,3 +1,4 @@
+
 "use client";
 
 import { Button } from "@/components/ui/button";
@@ -5,7 +6,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import Link from "next/link";
-import { AuthProvider, useAuth } from "@/components/AuthContext"; // Keep AuthProvider
+import { useSession } from "next-auth/react"; 
 import type { FormEvent } from 'react';
 import { useState, useEffect } from 'react';
 import { Logo } from "@/components/Logo";
@@ -13,8 +14,11 @@ import { useRouter } from "next/navigation";
 import { Loader2, UserPlus } from "lucide-react";
 
 function SignUpPageContent() {
-  const { isLoading: authLoading, isAuthenticated } = useAuth();
+  const { data: session, status } = useSession();
   const router = useRouter();
+
+  const isAuthenticated = status === 'authenticated';
+  const authLoading = status === 'loading';
 
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
@@ -65,14 +69,13 @@ function SignUpPageContent() {
         setError(data.message || 'Registration failed. Please try again.');
       } else {
         setSuccessMessage('Registration successful! Redirecting to login...');
-        // Optionally, clear form fields here
         setName('');
         setEmail('');
         setPassword('');
         setConfirmPassword('');
         setTimeout(() => {
           router.push('/login');
-        }, 2000); // Redirect after 2 seconds
+        }, 2000);
       }
     } catch (err) {
       console.error("Signup API call error:", err);
@@ -159,7 +162,6 @@ function SignUpPageContent() {
             <Button type="submit" className="w-full" disabled={isSubmitting}>
               {isSubmitting ? <Loader2 className="animate-spin" /> : <UserPlus />} Sign Up
             </Button>
-             {/* OAuth sign up can be added here later if desired, redirecting to NextAuth */}
             <p className="text-center text-sm text-muted-foreground">
               Already have an account?{" "}
               <Link href="/login" className="font-medium text-primary hover:underline">
@@ -174,9 +176,8 @@ function SignUpPageContent() {
 }
 
 export default function SignUpPage() {
+  // SessionProvider is at the root
   return (
-    <AuthProvider>
       <SignUpPageContent />
-    </AuthProvider>
   );
 }

@@ -14,11 +14,27 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { LogOut, Settings, UserCircle, LayoutDashboard } from 'lucide-react';
 import { Logo } from '@/components/Logo';
-import { useAuth } from '@/components/AuthContext'; 
-import UserXPDisplay from '@/components/UserXPDisplay'; // Import the new component
+import { useSession, signOut } from 'next-auth/react'; 
+import UserXPDisplay from '@/components/UserXPDisplay';
+import type { User as NextAuthUser } from 'next-auth';
+
+interface SessionUser extends NextAuthUser {
+  id?: string;
+  role?: string;
+  totalXP?: number;
+  level?: number;
+  badges?: string[];
+}
+
 
 export function SiteHeader() {
-  const { isAuthenticated, logout, user } = useAuth();
+  const { data: session, status } = useSession();
+  const isAuthenticated = status === 'authenticated';
+  const user = session?.user as SessionUser | undefined;
+
+  const handleLogout = async () => {
+    await signOut({ callbackUrl: '/login' });
+  };
 
   return (
     <header className="sticky top-0 z-50 w-full border-b border-border/40 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
@@ -68,7 +84,7 @@ export function SiteHeader() {
                   </Link>
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={() => logout()}>
+                <DropdownMenuItem onClick={handleLogout}>
                   <LogOut className="mr-2 h-4 w-4" />
                   <span>Log out</span>
                 </DropdownMenuItem>
