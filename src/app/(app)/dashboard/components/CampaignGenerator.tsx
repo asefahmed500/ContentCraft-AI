@@ -9,8 +9,9 @@ import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Switch } from '@/components/ui/switch';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, Wand2, Lightbulb, Users, Target, Palette, FileUp, Save, Paperclip, Tag, Info, Link2, Combine, Brain, Video, Upload } from 'lucide-react';
+import { Loader2, Wand2, Lightbulb, Users, Target, Palette, FileUp, Save, Paperclip, Tag, Info, Link2, Combine, Brain, Video, Upload, Lock, Unlock } from 'lucide-react';
 import type { Campaign } from '@/types/content'; 
 import { Separator } from '@/components/ui/separator';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -39,6 +40,7 @@ export function CampaignGenerator({
   const [targetAudience, setTargetAudience] = useState('');
   const [tone, setTone] = useState('');
   const [contentGoals, setContentGoals] = useState<string[]>([]);
+  const [isPrivate, setIsPrivate] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [andStartGeneration, setAndStartGeneration] = useState(false);
   const [referenceFiles, setReferenceFiles] = useState<FileList | null>(null);
@@ -60,6 +62,7 @@ export function CampaignGenerator({
       setTargetAudience(selectedCampaignForEdit.targetAudience || '');
       setTone(selectedCampaignForEdit.tone || '');
       setContentGoals(selectedCampaignForEdit.contentGoals || []);
+      setIsPrivate(selectedCampaignForEdit.isPrivate || false);
       setBrandVoice(''); 
       setReferenceFiles(null);
       setImportUrl('');
@@ -72,6 +75,7 @@ export function CampaignGenerator({
       setTargetAudience('');
       setTone('');
       setContentGoals([]);
+      setIsPrivate(false);
       setBrandVoice('');
       setReferenceFiles(null);
       setImportUrl('');
@@ -100,6 +104,7 @@ export function CampaignGenerator({
       targetAudience: targetAudience.trim() || undefined,
       tone: tone || undefined,
       contentGoals: contentGoals.length > 0 ? contentGoals : undefined,
+      isPrivate: isPrivate,
     };
 
     try {
@@ -124,7 +129,7 @@ export function CampaignGenerator({
       if (shouldStartGeneration) {
         await onGenerateContentForCampaign(savedCampaign, brandVoice.trim() || undefined);
       } else if (!selectedCampaignForEdit) { 
-        setCampaignTitle(''); setBrief(''); setTargetAudience(''); setTone(''); setContentGoals([]); setBrandVoice(''); setReferenceFiles(null); setImportUrl(''); setVideoUrl(''); setVideoFile(null);
+        setCampaignTitle(''); setBrief(''); setTargetAudience(''); setTone(''); setContentGoals([]); setIsPrivate(false); setBrandVoice(''); setReferenceFiles(null); setImportUrl(''); setVideoUrl(''); setVideoFile(null);
       }
 
     } catch (error) {
@@ -268,7 +273,7 @@ Please review and refine this extracted information and the suggestions above to
                     type="file"
                     accept="video/mp4,video/quicktime,video/x-msvideo,video/webm" // Common video formats
                     onChange={handleVideoFileChange}
-                    disabled={isProcessingVideo} // Keep this disabled for now as it's a placeholder
+                    disabled={isProcessingVideo || !!videoUrl.trim()} 
                 />
             </div>
             <Button 
@@ -398,6 +403,22 @@ Please review and refine this extracted information and the suggestions above to
             If a Brand DNA analysis was performed, its voice profile will be used by default. You can provide specific voice instructions here to override or augment it for this campaign.
           </p>
         </div>
+
+        <div className="flex items-center space-x-2">
+            <Switch
+                id="private-campaign"
+                checked={isPrivate}
+                onCheckedChange={setIsPrivate}
+            />
+            <Label htmlFor="private-campaign" className="text-base flex items-center gap-1">
+                {isPrivate ? <Lock className="h-4 w-4" /> : <Unlock className="h-4 w-4" />}
+                Private Mode
+            </Label>
+        </div>
+        <p className="text-xs text-muted-foreground -mt-1 ml-10">
+            If enabled, this campaign's data will not be used for future AI agent learning or analytics aggregation beyond your own account.
+        </p>
+
 
          <Alert className="mt-6 bg-primary/5 border-primary/20">
           <Brain className="mr-2 h-5 w-5 text-primary/80" />

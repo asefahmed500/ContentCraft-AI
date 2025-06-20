@@ -104,6 +104,7 @@ export interface Campaign {
   abTests?: ABTestInstance[]; // For A/B Testing feature
   
   status: CampaignStatus;
+  isPrivate?: boolean; // New field for privacy setting
   createdAt: Date;
   updatedAt: Date;
 }

@@ -1,5 +1,4 @@
 
-
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import clientPromise from '@/lib/mongodb';
@@ -29,6 +28,7 @@ export async function GET(request: NextRequest) {
       agentDebates: campaign.agentDebates || [],
       scheduledPosts: campaign.scheduledPosts || [],
       abTests: campaign.abTests || [],
+      isPrivate: campaign.isPrivate || false, // Ensure isPrivate is returned, default to false
     }));
 
     return NextResponse.json(formattedCampaigns, { status: 200 });
@@ -48,7 +48,7 @@ export async function POST(request: NextRequest) {
     const userId = token.id as string;
 
     const body = await request.json();
-    const { title, brief, targetAudience, tone, contentGoals, brandId, referenceMaterials } = body;
+    const { title, brief, targetAudience, tone, contentGoals, brandId, referenceMaterials, isPrivate } = body;
 
     if (!title || !brief) {
       return NextResponse.json({ error: 'Campaign title and brief (product/service description) are required' }, { status: 400 });
@@ -72,6 +72,7 @@ export async function POST(request: NextRequest) {
       scheduledPosts: [],
       abTests: [],
       status: 'draft', 
+      isPrivate: isPrivate || false, // Save isPrivate, default to false
       createdAt: new Date(),
       updatedAt: new Date(),
     };
@@ -116,7 +117,7 @@ export async function PUT(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { title, brief, targetAudience, tone, contentGoals, status, contentVersions, agentDebates, referenceMaterials, brandId, scheduledPosts, abTests } = body;
+    const { title, brief, targetAudience, tone, contentGoals, status, contentVersions, agentDebates, referenceMaterials, brandId, scheduledPosts, abTests, isPrivate } = body;
 
     const updateData: Partial<Omit<Campaign, 'id' | '_id' | 'userId' | 'createdAt'>> = { updatedAt: new Date() };
     
@@ -128,6 +129,7 @@ export async function PUT(request: NextRequest) {
     if (status !== undefined) updateData.status = status;
     if (referenceMaterials !== undefined) updateData.referenceMaterials = referenceMaterials;
     if (brandId !== undefined) updateData.brandId = brandId;
+    if (isPrivate !== undefined) updateData.isPrivate = isPrivate; // Update isPrivate
 
 
     if (contentVersions !== undefined && Array.isArray(contentVersions)) {
@@ -162,7 +164,7 @@ export async function PUT(request: NextRequest) {
     const db = client.db();
     const campaignsCollection = db.collection<Campaign>('campaigns');
 
-    if (updateKeys.length === 0) { 
+    if (updateKeys.length === 0 && isPrivate === undefined) { // Check if isPrivate is also undefined
         const existingCampaign = await campaignsCollection.findOne({ _id: new ObjectId(campaignId), userId: userId });
         if (!existingCampaign) {
             return NextResponse.json({ error: 'Campaign not found or user not authorized' }, { status: 404 });
@@ -174,6 +176,7 @@ export async function PUT(request: NextRequest) {
             agentDebates: existingCampaign.agentDebates || [],
             scheduledPosts: existingCampaign.scheduledPosts || [],
             abTests: existingCampaign.abTests || [],
+            isPrivate: existingCampaign.isPrivate || false,
         }, { status: 200 });
     }
 
@@ -195,6 +198,7 @@ export async function PUT(request: NextRequest) {
         agentDebates: result.value.agentDebates || [],
         scheduledPosts: result.value.scheduledPosts || [],
         abTests: result.value.abTests || [],
+        isPrivate: result.value.isPrivate || false,
     };
 
     return NextResponse.json(updatedCampaign, { status: 200 });
@@ -247,5 +251,3 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json({ error: 'Failed to delete campaign' }, { status: 500 });
   }
 }
-
-
