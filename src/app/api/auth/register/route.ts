@@ -1,3 +1,4 @@
+
 import { NextResponse } from 'next/server';
 import clientPromise from '@/lib/mongodb';
 import bcrypt from 'bcryptjs';
@@ -11,16 +12,13 @@ export async function POST(request: Request) {
       return NextResponse.json({ message: 'Missing required fields (email, password, name).' }, { status: 400 });
     }
 
-    // Basic email validation
     if (!/\S+@\S+\.\S+/.test(email)) {
         return NextResponse.json({ message: 'Invalid email format.' }, { status: 400 });
     }
 
-    // Basic password validation (e.g., minimum length)
     if (password.length < 6) {
         return NextResponse.json({ message: 'Password must be at least 6 characters long.' }, { status: 400 });
     }
-
 
     const client: MongoClient = await clientPromise;
     const db: Db = client.db();
@@ -37,10 +35,13 @@ export async function POST(request: Request) {
       name,
       email,
       password: hashedPassword,
-      role: 'viewer', // Default role for new users
+      role: 'viewer', 
       createdAt: new Date(),
       updatedAt: new Date(),
-      image: `https://placehold.co/100x100.png?text=${name.charAt(0).toUpperCase()}`, // Default placeholder image
+      image: `https://placehold.co/100x100.png?text=${name.charAt(0).toUpperCase()}`,
+      totalXP: 0,
+      level: 1,
+      badges: [],
     });
 
     if (!result.insertedId) {

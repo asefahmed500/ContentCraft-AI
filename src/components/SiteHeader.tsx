@@ -1,3 +1,4 @@
+
 "use client";
 
 import Link from 'next/link';
@@ -13,7 +14,8 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { LogOut, Settings, UserCircle, LayoutDashboard } from 'lucide-react';
 import { Logo } from '@/components/Logo';
-import { useAuth } from '@/components/AuthContext'; // Using the updated AuthContext
+import { useAuth } from '@/components/AuthContext'; 
+import UserXPDisplay from '@/components/UserXPDisplay'; // Import the new component
 
 export function SiteHeader() {
   const { isAuthenticated, logout, user } = useAuth();
@@ -32,7 +34,6 @@ export function SiteHeader() {
               </Link>
             </Button>
           )}
-          {/* Add other authenticated navigation links here if needed */}
         </nav>
         <div className="flex items-center space-x-4">
           {isAuthenticated && user ? (
@@ -47,9 +48,9 @@ export function SiteHeader() {
                   </Avatar>
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent className="w-56" align="end" forceMount>
+              <DropdownMenuContent className="w-64" align="end" forceMount>
                 <DropdownMenuLabel className="font-normal">
-                  <div className="flex flex-col space-y-1">
+                  <div className="flex flex-col space-y-1 p-1">
                     <p className="text-sm font-medium leading-none">{user.name || "User"}</p>
                     <p className="text-xs leading-none text-muted-foreground">
                       {user.email || "No email"}
@@ -57,6 +58,8 @@ export function SiteHeader() {
                      {user.role && <p className="text-xs leading-none text-muted-foreground capitalize">Role: {user.role}</p>}
                   </div>
                 </DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <UserXPDisplay /> 
                 <DropdownMenuSeparator />
                 <DropdownMenuItem asChild>
                   <Link href="/dashboard/settings">

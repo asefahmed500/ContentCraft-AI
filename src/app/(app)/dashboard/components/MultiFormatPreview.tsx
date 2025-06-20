@@ -137,14 +137,14 @@ export function MultiFormatPreview({ content, isLoading, campaignId, contentVers
         throw new Error(errorData.error || "Failed to submit feedback.");
       }
       
-      toast({ title: "Feedback Submitted!", description: `Thanks for your feedback on the ${formatLabels[formatKey]}.` });
+      toast({ title: "Feedback Submitted!", description: `Thanks for your feedback on the ${formatLabels[formatKey]}. (+10 XP)` });
       setFeedbackState(prev => ({
         ...prev,
         [formatKey]: {
           ...prev[formatKey],
           isSubmitting: false,
           submitted: true,
-          showCommentBox: false, // Optionally hide comment box after submission
+          showCommentBox: false, 
         }
       }));
     } catch (error) {

@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import { useState, useCallback, useEffect } from 'react';
@@ -213,7 +212,7 @@ export default function DashboardPage() {
       };
       setSelectedCampaignForProcessing(currentCampaignState);
       await persistCurrentCampaignUpdates(currentCampaignState); 
-      toast({ title: "Content Generation Complete!", description: "Your final draft of multi-format content is ready for preview." });
+      toast({ title: "Content Generation Complete!", description: "Your final draft of multi-format content is ready for preview. (+50 XP)" });
       
     } catch (error) {
       console.error("Campaign Generation Error:", error);
@@ -465,5 +464,3 @@ export default function DashboardPage() {
     </div>
   );
 }
-
-
