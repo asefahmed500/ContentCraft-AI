@@ -1,3 +1,4 @@
+
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { analyzeBrandDNA, type AnalyzeBrandDNAInput } from '@/ai/flows/brand-learning';
@@ -10,7 +11,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Missing required field: contentDataUri' }, { status: 400 });
     }
     
-    // Validate data URI format (basic check)
+    // Basic validation for data URI format
     if (!body.contentDataUri.startsWith('data:') || !body.contentDataUri.includes(';base64,')) {
         return NextResponse.json({ error: 'Invalid contentDataUri format. Expected data:<mimetype>;base64,<encoded_data>.' }, { status: 400 });
     }

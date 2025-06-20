@@ -1,3 +1,4 @@
+
 "use client";
 
 import type { ChangeEvent} from 'react';
@@ -7,20 +8,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
-import type { AnalyzeBrandDNAInput, AnalyzeBrandDNAOutput } from '@/ai/flows/brand-learning';
-import { analyzeBrandDNA } from '@/ai/flows/brand-learning'; // Assuming path is correct
-import { Loader2, UploadCloud, FileText, Palette, Sparkles, AlertTriangle } from 'lucide-react';
-
-async function analyzeBrandDNAAction(input: AnalyzeBrandDNAInput): Promise<AnalyzeBrandDNAOutput | { error: string }> {
-  try {
-    const result = await analyzeBrandDNA(input);
-    return result;
-  } catch (error) {
-    console.error("Error in analyzeBrandDNAAction:", error);
-    return { error: error instanceof Error ? error.message : "An unknown error occurred." };
-  }
-}
-
+import type { AnalyzeBrandDNAOutput } from '@/ai/flows/brand-learning';
+import { Loader2, UploadCloud, FileText, Palette, Sparkles, AlertTriangle, MessageSquareQuote, Paintbrush, Gem } from 'lucide-react';
 
 export function BrandDNAAnalyzer() {
   const [file, setFile] = useState<File | null>(null);
@@ -53,11 +42,20 @@ export function BrandDNAAnalyzer() {
           throw new Error("Failed to read file.");
         }
         
-        const result = await analyzeBrandDNAAction({ contentDataUri: base64File });
+        const response = await fetch('/api/brand/analyze', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ contentDataUri: base64File }),
+        });
 
-        if ('error' in result) {
-          throw new Error(result.error);
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.error || errorData.details || "Analysis request failed.");
         }
+        
+        const result: AnalyzeBrandDNAOutput = await response.json();
         
         setAnalysisResult(result);
         toast({ title: "Analysis Complete", description: "Brand DNA has been extracted." });
@@ -82,7 +80,7 @@ export function BrandDNAAnalyzer() {
           <Sparkles className="h-6 w-6 text-primary" />
           Brand DNA Analyzer
         </CardTitle>
-        <CardDescription>Upload existing brand content (e.g., .txt, .md, .pdf) to extract its unique voice, style, and values.</CardDescription>
+        <CardDescription>Upload existing brand content (e.g., .txt, .md, .pdf, .doc, .docx) to extract its unique voice, style, and values. Gemini AI will analyze the content.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
         <div className="space-y-2">
@@ -102,26 +100,26 @@ export function BrandDNAAnalyzer() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <Card>
                 <CardHeader className="pb-2">
-                  <CardTitle className="text-lg flex items-center gap-2"><FileText className="h-5 w-5 text-primary" />Voice Profile</CardTitle>
+                  <CardTitle className="text-lg flex items-center gap-2"><MessageSquareQuote className="h-5 w-5 text-primary" />Voice Profile & Tone</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <p className="text-sm">{analysisResult.brandProfile.voiceProfile}</p>
+                  <p className="text-sm whitespace-pre-wrap">{analysisResult.brandProfile.voiceProfile}</p>
                 </CardContent>
               </Card>
               <Card>
                 <CardHeader className="pb-2">
-                  <CardTitle className="text-lg flex items-center gap-2"><Palette className="h-5 w-5 text-primary" />Visual Identity</CardTitle>
+                  <CardTitle className="text-lg flex items-center gap-2"><Paintbrush className="h-5 w-5 text-primary" />Visual Language & Identity</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <p className="text-sm">{analysisResult.brandProfile.visualIdentity}</p>
+                  <p className="text-sm whitespace-pre-wrap">{analysisResult.brandProfile.visualIdentity}</p>
                 </CardContent>
               </Card>
               <Card>
                 <CardHeader className="pb-2">
-                  <CardTitle className="text-lg flex items-center gap-2"><Sparkles className="h-5 w-5 text-primary" />Core Values</CardTitle>
+                  <CardTitle className="text-lg flex items-center gap-2"><Gem className="h-5 w-5 text-primary" />Core Values</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <p className="text-sm">{analysisResult.brandProfile.values}</p>
+                  <p className="text-sm whitespace-pre-wrap">{analysisResult.brandProfile.values}</p>
                 </CardContent>
               </Card>
               <Card>
@@ -134,7 +132,7 @@ export function BrandDNAAnalyzer() {
               </Card>
             </div>
             {analysisResult.warnings && analysisResult.warnings.length > 0 && (
-              <div>
+              <div className="mt-4">
                 <h4 className="font-semibold text-destructive flex items-center gap-2"><AlertTriangle className="h-5 w-5" />Warnings:</h4>
                 <ul className="list-disc list-inside text-sm text-destructive space-y-1 mt-1">
                   {analysisResult.warnings.map((warning, index) => (
