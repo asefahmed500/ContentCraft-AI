@@ -13,7 +13,7 @@ import { AgentDebatePanel } from '@/app/(app)/dashboard/components/AgentDebatePa
 import { ContentEvolutionTimeline } from '@/app/(app)/dashboard/components/ContentEvolutionTimeline';
 import type { Campaign, CampaignStatus, ContentVersion, AgentInteraction, MultiFormatContent } from '@/types/content';
 import type { AgentRole } from '@/types/agent';
-import { BarChart, LineChart as LucideLineChart, Users, FileText, Activity, Zap, Brain, Download, HelpCircle, PieChart, ListTree, Eye, Edit, XCircle, MessageSquare } from 'lucide-react';
+import { BarChart, LineChart as LucideLineChart, Users, FileText, Activity, Zap, Brain, Download, Info, PieChart, ListTree, Eye, Edit, XCircle, MessageSquare } from 'lucide-react';
 import { ResponsiveContainer, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, BarChart as RechartsBarChart, Line, LineChart as RechartsLineChart, Pie, Cell, PieChart as RechartsPieChart } from 'recharts';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2 } from 'lucide-react';
@@ -63,7 +63,7 @@ export default function AdminDashboardPage() {
   const [activeMainTab, setActiveMainTab] = useState("overview");
 
 
-  const fetchAllCampaigns = useCallback(async () => {
+  const fetchAllCampaigns = useCallback(async (showToast = false) => {
     setIsLoadingCampaigns(true);
     setCampaignFetchError(null);
     try {
@@ -78,11 +78,17 @@ export default function AdminDashboardPage() {
         createdAt: new Date(c.createdAt),
         updatedAt: new Date(c.updatedAt),
         agentDebates: (c.agentDebates || []).map(ad => ({...ad, timestamp: new Date(ad.timestamp)})),
-        contentVersions: (c.contentVersions || []).map(cv => ({...cv, timestamp: new Date(cv.timestamp)})),
+        contentVersions: (c.contentVersions || []).map(cv => ({
+            ...cv, 
+            timestamp: new Date(cv.timestamp),
+            isFlagged: cv.isFlagged ?? false,
+            adminModerationNotes: cv.adminModerationNotes ?? ''
+        })),
         isFlagged: c.isFlagged ?? false,
         adminModerationNotes: c.adminModerationNotes ?? '',
       }));
       setAllCampaigns(campaignsWithDates);
+      if (showToast) toast({title: "Campaigns Refreshed", description: "Admin campaign list has been updated."});
     } catch (err) {
       console.error("AdminCampaignList fetch error:", err);
       const errorMessage = err instanceof Error ? err.message : "An unknown error occurred.";
@@ -103,11 +109,10 @@ export default function AdminDashboardPage() {
         throw new Error("Failed to fetch users for stats");
       }
       const usersData = await usersResponse.json();
-      // Campaigns data will be available from allCampaigns state after fetchAllCampaigns completes
       
       setStats({
         totalUsers: usersData.length,
-        totalCampaigns: allCampaigns.length, // Use length from state
+        totalCampaigns: allCampaigns.length, 
         activeUsersToday: Math.floor(Math.random() * usersData.length / 2) + 1, 
         campaignsCreatedToday: Math.floor(Math.random() * 5) + 1, 
         aiFlowsExecuted: Math.floor(Math.random() * 500) + 200,
@@ -121,14 +126,14 @@ export default function AdminDashboardPage() {
     } finally {
       setIsLoadingStats(false);
     }
-  }, [toast, allCampaigns]); // Add allCampaigns to dependency array
+  }, [toast, allCampaigns]); 
 
   useEffect(() => {
     fetchAllCampaigns();
   }, [fetchAllCampaigns]);
 
   useEffect(() => {
-    if (allCampaigns.length > 0 || !isLoadingCampaigns) { // Fetch stats once campaigns are loaded or if loading fails
+    if (allCampaigns.length > 0 || !isLoadingCampaigns) { 
         fetchStats();
     }
   }, [allCampaigns, isLoadingCampaigns, fetchStats]);
@@ -137,11 +142,10 @@ export default function AdminDashboardPage() {
   const handleAdminCampaignAction = useCallback(async (campaignId: string, action: 'view' | 'edit' | 'delete' | 'flag') => {
     if (action === 'view') {
         setIsFetchingCampaignDetail(true);
-        // Find the campaign from the allCampaigns list
         const campaignDetail = allCampaigns.find(c => c.id === campaignId);
         if (campaignDetail) {
             setSelectedCampaignForAdminView(campaignDetail);
-            setActiveMainTab("campaign_detail_view"); // Switch to a tab that shows details
+            setActiveMainTab("campaign_detail_view"); 
             toast({title: "Campaign Loaded", description: `Viewing details for "${campaignDetail.title}"`});
         } else {
             toast({title: "Error", description: "Could not find campaign details.", variant: "destructive"});
@@ -149,23 +153,79 @@ export default function AdminDashboardPage() {
         setIsFetchingCampaignDetail(false);
     } else if (action === 'edit') {
         toast({title: "Edit Action (Admin)", description: `Admin edit for campaign ${campaignId} is conceptual. A dedicated admin edit form would be needed.`, variant: "default"});
-        // Potentially load into a specific admin edit form in the future
     } else if (action === 'delete') {
-        // Placeholder for admin delete. Full API for admin delete of any campaign is needed.
-        toast({title: "Delete Action (Admin)", description: `Simulating delete for campaign ID ${campaignId}. Refreshing list...`, variant: "default"});
-        // For now, just refetch to simulate removal if API were real
-        await fetchAllCampaigns();
+        // The AdminCampaignList component now handles its own API call for deletion.
+        // This callback will be used to update the allCampaigns state here.
+        // This case is now primarily for completeness if onCampaignAction was used for delete, but handled by onCampaignDeleted.
     } else if (action === 'flag') {
-        // This action is primarily to refresh the list after flagging is done within AdminCampaignList
-        await fetchAllCampaigns();
-        // If the flagged campaign was being viewed, update its state
+        // This action is to refresh the main list if the currently viewed campaign is updated.
+        await fetchAllCampaigns(true);
         if (selectedCampaignForAdminView && selectedCampaignForAdminView.id === campaignId) {
-            const updatedCampaign = allCampaigns.find(c => c.id === campaignId);
+            const updatedCampaign = allCampaigns.find(c => c.id === campaignId) || await fetchSingleCampaign(campaignId);
             if (updatedCampaign) setSelectedCampaignForAdminView(updatedCampaign);
         }
     }
   }, [allCampaigns, toast, fetchAllCampaigns, selectedCampaignForAdminView]);
   
+  const handleAdminCampaignDeleted = (deletedCampaignId: string) => {
+    setAllCampaigns(prev => prev.filter(c => c.id !== deletedCampaignId));
+    if (selectedCampaignForAdminView && selectedCampaignForAdminView.id === deletedCampaignId) {
+        setSelectedCampaignForAdminView(null);
+        setActiveMainTab("campaigns"); // Go back to campaigns list if viewed campaign was deleted
+    }
+  };
+  
+  const fetchSingleCampaign = async (campaignId: string): Promise<Campaign | null> => {
+    try {
+        // This assumes you might need a direct fetch if not in the list,
+        // but typically the 'allCampaigns' should be up-to-date after any list-affecting action.
+        const response = await fetch(`/api/admin/campaigns`); // Get all again and find
+        if (!response.ok) throw new Error("Failed to fetch updated campaign details");
+        const campaigns: Campaign[] = await response.json();
+        const foundCampaign = campaigns.find(c => c.id === campaignId);
+        return foundCampaign 
+            ? { ...foundCampaign, createdAt: new Date(foundCampaign.createdAt), updatedAt: new Date(foundCampaign.updatedAt), agentDebates: (foundCampaign.agentDebates || []).map(ad => ({...ad, timestamp: new Date(ad.timestamp)})), contentVersions: (foundCampaign.contentVersions || []).map(cv => ({...cv, timestamp: new Date(cv.timestamp), isFlagged: cv.isFlagged ?? false, adminModerationNotes: cv.adminModerationNotes ?? ''})) } 
+            : null;
+    } catch (err) {
+        toast({title: "Error fetching campaign", description: (err as Error).message, variant: "destructive"});
+        return null;
+    }
+  };
+  
+  const handleContentVersionFlagged = (updatedCampaignFull: Campaign) => {
+    // Update the main list of campaigns
+    setAllCampaigns(prevAllCampaigns => 
+        prevAllCampaigns.map(c => c.id === updatedCampaignFull.id ? {
+            ...updatedCampaignFull,
+            createdAt: new Date(updatedCampaignFull.createdAt),
+            updatedAt: new Date(updatedCampaignFull.updatedAt),
+            agentDebates: (updatedCampaignFull.agentDebates || []).map(ad => ({...ad, timestamp: new Date(ad.timestamp)})),
+            contentVersions: (updatedCampaignFull.contentVersions || []).map(cv => ({
+                ...cv, 
+                timestamp: new Date(cv.timestamp),
+                isFlagged: cv.isFlagged ?? false,
+                adminModerationNotes: cv.adminModerationNotes ?? ''
+            }))
+        } : c)
+    );
+    // If the currently viewed campaign is the one that was updated, refresh its state
+    if (selectedCampaignForAdminView && selectedCampaignForAdminView.id === updatedCampaignFull.id) {
+        setSelectedCampaignForAdminView({
+            ...updatedCampaignFull,
+            createdAt: new Date(updatedCampaignFull.createdAt),
+            updatedAt: new Date(updatedCampaignFull.updatedAt),
+            agentDebates: (updatedCampaignFull.agentDebates || []).map(ad => ({...ad, timestamp: new Date(ad.timestamp)})),
+            contentVersions: (updatedCampaignFull.contentVersions || []).map(cv => ({
+                ...cv, 
+                timestamp: new Date(cv.timestamp),
+                isFlagged: cv.isFlagged ?? false,
+                adminModerationNotes: cv.adminModerationNotes ?? ''
+            }))
+        });
+    }
+    toast({title: "Version Moderation Updated", description: "Content version status has been reflected."});
+  };
+
 
   const handleDownloadPlaceholder = (dataType: string) => {
     toast({
@@ -175,7 +235,6 @@ export default function AdminDashboardPage() {
     });
   };
   
-  // Derived states for preview components
   const debateMessagesForPreview: AgentInteraction[] = selectedCampaignForAdminView?.agentDebates || [];
   const contentVersionsForPreview: ContentVersion[] = (selectedCampaignForAdminView?.contentVersions || []).sort((a,b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
   const latestContentVersionForPreview: ContentVersion | null = contentVersionsForPreview[0] || null;
@@ -340,10 +399,11 @@ export default function AdminDashboardPage() {
             </CardHeader>
             <CardContent>
               <AdminCampaignList 
-                onCampaignAction={handleAdminCampaignAction} 
                 allCampaigns={allCampaigns}
                 isLoadingCampaigns={isLoadingCampaigns}
                 campaignFetchError={campaignFetchError}
+                onCampaignAction={handleAdminCampaignAction} 
+                onCampaignDeleted={handleAdminCampaignDeleted}
               />
             </CardContent>
           </Card>
@@ -399,24 +459,30 @@ export default function AdminDashboardPage() {
                                 timestamp: new Date(interaction.timestamp),
                                 type: interaction.type || 'statement'
                             }))}
-                            isDebating={false} // Admin view is static
+                            isDebating={false} 
                             debateTopic={`Debate for: "${selectedCampaignForAdminView.title}"`}
                         />
                         <ContentEvolutionTimeline
                             versions={contentVersionsForPreview}
                             onViewVersion={(version) => {
-                                setSelectedCampaignForAdminView(prev => prev ? ({...prev, contentVersions: prev.contentVersions.map(v => v.id === version.id ? version : v) }) : null); // Update local state to show this version
+                                // This updates the multiFormatContentForPreview by setting the new latest version
+                                const campaignWithVersionAsLatest = {
+                                    ...selectedCampaignForAdminView,
+                                    contentVersions: [version, ...selectedCampaignForAdminView.contentVersions.filter(v => v.id !== version.id)].sort((a,b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+                                };
+                                setSelectedCampaignForAdminView(campaignWithVersionAsLatest);
                                 toast({title: `Admin viewing version ${version.versionNumber}`});
                             }}
+                            campaignId={selectedCampaignForAdminView.id}
+                            onVersionFlagged={handleContentVersionFlagged}
                         />
                     </div>
                     <MultiFormatPreview
                         content={multiFormatContentForPreview}
-                        isLoading={false} // Static view
+                        isLoading={false} 
                         campaignId={selectedCampaignForAdminView.id}
                         currentCampaign={selectedCampaignForAdminView}
                         currentContentVersion={latestContentVersionForPreview}
-                        // Feedback submission disabled for admin view for now, or could be different type of feedback
                         onFeedbackSubmittedSuccessfully={() => toast({title: "Admin Note", description: "Feedback panel is for user interaction. Admins moderate directly."})}
                     />
                 </>

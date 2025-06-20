@@ -1,18 +1,22 @@
 
 "use client";
 
-import type { ContentVersion } from '@/types/content';
+import type { ContentVersion, Campaign } from '@/types/content'; // Added Campaign
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Activity, Bot, Edit3, Clock, Eye, GitCompareArrows, History, User, Flag } from 'lucide-react'; // Added Flag
+import { Activity, Bot, Edit3, Clock, Eye, GitCompareArrows, History, User, Flag, Loader2 } from 'lucide-react'; 
 import { formatDistanceToNow, format } from 'date-fns';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { useToast } from '@/hooks/use-toast';
-import { useSession } from 'next-auth/react'; // Added useSession
-import type { User as NextAuthUser } from 'next-auth'; // Added User type
+import { useSession } from 'next-auth/react'; 
+import type { User as NextAuthUser } from 'next-auth';
+import { useState } from 'react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose } from '@/components/ui/dialog';
+import { Textarea } from '@/components/ui/textarea';
+import { Label } from '@/components/ui/label';
 
 interface SessionUser extends NextAuthUser {
   role?: 'viewer' | 'editor' | 'admin';
@@ -21,13 +25,20 @@ interface SessionUser extends NextAuthUser {
 interface ContentEvolutionTimelineProps {
   versions: ContentVersion[];
   onViewVersion: (version: ContentVersion) => void;
+  campaignId?: string; // Needed for API calls
+  onVersionFlagged?: (updatedCampaign: Campaign) => void; // Callback to update parent campaign state
 }
 
-export function ContentEvolutionTimeline({ versions, onViewVersion }: ContentEvolutionTimelineProps) {
+export function ContentEvolutionTimeline({ versions, onViewVersion, campaignId, onVersionFlagged }: ContentEvolutionTimelineProps) {
   const { toast } = useToast();
-  const { data: session } = useSession(); // Get session data
+  const { data: session } = useSession(); 
   const user = session?.user as SessionUser | undefined;
   const isAdmin = user?.role === 'admin';
+
+  const [isFlagVersionDialogOpen, setIsFlagVersionDialogOpen] = useState(false);
+  const [versionToFlag, setVersionToFlag] = useState<ContentVersion | null>(null);
+  const [versionFlaggingNotes, setVersionFlaggingNotes] = useState('');
+  const [isSubmittingVersionFlag, setIsSubmittingVersionFlag] = useState(false);
 
   const sortedVersions = versions; 
 
@@ -56,14 +67,40 @@ export function ContentEvolutionTimeline({ versions, onViewVersion }: ContentEvo
     });
   };
   
-  const handleFlagContentVersion = (versionId: string) => {
-    toast({
-        title: "Flag Content Version (Conceptual)",
-        description: `Admin action to flag version ${versionId}. Needs API endpoint and UI update logic.`,
-    });
-    // Placeholder: In a real scenario, this would call an API:
-    // e.g., await fetch(`/api/admin/contentversions/${versionId}/flag`, { method: 'PUT', body: JSON.stringify({ isFlagged: true, notes: "Some note" }) });
-    // And then refresh the campaign data or update local state.
+  const handleFlagVersionPrompt = (version: ContentVersion) => {
+    if (!isAdmin || !campaignId) return;
+    setVersionToFlag(version);
+    setVersionFlaggingNotes(version.adminModerationNotes || '');
+    setIsFlagVersionDialogOpen(true);
+  };
+
+  const handleConfirmFlagVersion = async () => {
+    if (!versionToFlag || !campaignId || !isAdmin) return;
+    setIsSubmittingVersionFlag(true);
+    const newFlagStatus = !versionToFlag.isFlagged;
+    try {
+        const response = await fetch(`/api/admin/campaigns/${campaignId}/versions/${versionToFlag.id}/flag`, {
+            method: 'PUT',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ isFlagged: newFlagStatus, adminModerationNotes: versionFlaggingNotes })
+        });
+        const result = await response.json();
+        if (!response.ok) {
+            throw new Error(result.error || "Failed to update content version flag status.");
+        }
+        toast({ title: "Content Version Moderation Updated", description: `Version ${versionToFlag.versionNumber} has been ${newFlagStatus ? 'flagged' : 'unflagged'}.`});
+        if (onVersionFlagged && result.campaign) {
+            onVersionFlagged(result.campaign); // Pass the entire updated campaign back
+        }
+        setIsFlagVersionDialogOpen(false);
+    } catch (err) {
+        const errorMessage = err instanceof Error ? err.message : "An unknown error occurred.";
+        toast({ title: "Error Updating Version Flag", description: errorMessage, variant: "destructive" });
+    } finally {
+        setIsSubmittingVersionFlag(false);
+        setVersionToFlag(null);
+        setVersionFlaggingNotes('');
+    }
   };
 
 
@@ -102,7 +139,7 @@ export function ContentEvolutionTimeline({ versions, onViewVersion }: ContentEvo
                           {getActorIcon(version.actorName)}
                           <span className="font-semibold">{version.actorName}</span>
                           <Badge variant="outline">Version {version.versionNumber || sortedVersions.length - index}</Badge>
-                          {isAdmin && version.isFlagged && (
+                          {version.isFlagged && ( // Show flag for all users if flagged, admin can interact
                             <Tooltip>
                                 <TooltipTrigger>
                                     <Flag className="h-4 w-4 text-destructive" />
@@ -119,7 +156,7 @@ export function ContentEvolutionTimeline({ versions, onViewVersion }: ContentEvo
                         </span>
                       </div>
                       <p className="text-sm text-muted-foreground mb-2 whitespace-pre-wrap">{version.changeSummary}</p>
-                       {isAdmin && version.isFlagged && version.adminModerationNotes && (
+                       {version.isFlagged && version.adminModerationNotes && (
                             <p className="text-xs text-destructive/80 italic mb-2">Admin Notes: {version.adminModerationNotes}</p>
                        )}
                       
@@ -136,7 +173,7 @@ export function ContentEvolutionTimeline({ versions, onViewVersion }: ContentEvo
                               </Button>
                             </TooltipTrigger>
                             <TooltipContent>
-                              <p>Compare with previous version</p>
+                              <p>Compare with previous version (Coming Soon)</p>
                             </TooltipContent>
                           </Tooltip>
                            <Tooltip>
@@ -146,14 +183,23 @@ export function ContentEvolutionTimeline({ versions, onViewVersion }: ContentEvo
                               </Button>
                             </TooltipTrigger>
                             <TooltipContent>
-                              <p>Revert to this version</p>
+                              <p>Revert to this version (Coming Soon)</p>
                             </TooltipContent>
                           </Tooltip>
-                          {isAdmin && ( // Conceptual button for admin to flag a version
+                          {isAdmin && campaignId && ( 
                              <Tooltip>
                                 <TooltipTrigger asChild>
-                                    <Button variant={version.isFlagged ? "destructive" : "outline"} size="sm" onClick={() => handleFlagContentVersion(version.id)}>
-                                        <Flag className="mr-1 h-3.5 w-3.5" /> {version.isFlagged ? "Unflag Version" : "Flag Version"}
+                                    <Button 
+                                        variant={version.isFlagged ? "destructive" : "outline"} 
+                                        size="sm" 
+                                        onClick={() => handleFlagVersionPrompt(version)}
+                                        disabled={isSubmittingVersionFlag && versionToFlag?.id === version.id}
+                                    >
+                                        {isSubmittingVersionFlag && versionToFlag?.id === version.id 
+                                            ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin"/>
+                                            : <Flag className="mr-1 h-3.5 w-3.5" />
+                                        }
+                                        {version.isFlagged ? "Unflag Version" : "Flag Version"}
                                     </Button>
                                 </TooltipTrigger>
                                 <TooltipContent>
@@ -171,7 +217,41 @@ export function ContentEvolutionTimeline({ versions, onViewVersion }: ContentEvo
           )}
         </CardContent>
       </Card>
+
+      <Dialog open={isFlagVersionDialogOpen} onOpenChange={setIsFlagVersionDialogOpen}>
+        <DialogContent>
+            <DialogHeader>
+                <DialogTitle className="flex items-center gap-2">
+                    <Flag className="h-5 w-5 text-primary"/>
+                    {versionToFlag?.isFlagged ? "Unflag Content Version & Edit Notes" : "Flag Content Version & Add Notes"}
+                </DialogTitle>
+                <DialogDescription>
+                    Campaign: <span className="font-semibold">&quot;{versionToFlag?.versionNumber ? `Version ${versionToFlag.versionNumber}` : ''}&quot;</span> from {campaignId}.
+                    {versionToFlag?.isFlagged ? " This version is currently flagged." : " Flagging this version will mark it for review."}
+                </DialogDescription>
+            </DialogHeader>
+            <div className="py-4 space-y-2">
+                <Label htmlFor="version-flagging-notes">Moderation Notes (Optional)</Label>
+                <Textarea 
+                    id="version-flagging-notes"
+                    value={versionFlaggingNotes}
+                    onChange={(e) => setVersionFlaggingNotes(e.target.value)}
+                    placeholder="e.g., Inaccurate claim in paragraph 3, tone mismatch."
+                    rows={3}
+                />
+            </div>
+            <DialogFooter>
+                <DialogClose asChild>
+                    <Button variant="outline" onClick={() => { setVersionToFlag(null); setVersionFlaggingNotes(''); }}>Cancel</Button>
+                </DialogClose>
+                <Button onClick={handleConfirmFlagVersion} disabled={isSubmittingVersionFlag}>
+                    {isSubmittingVersionFlag && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                    {versionToFlag?.isFlagged ? "Unflag & Save Notes" : "Flag & Save Notes"}
+                </Button>
+            </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
     </TooltipProvider>
   );
 }
-

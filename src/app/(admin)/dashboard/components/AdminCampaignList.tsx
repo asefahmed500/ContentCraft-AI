@@ -6,7 +6,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { CampaignCard } from '@/app/(app)/dashboard/components/CampaignCard'; 
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { Info, ServerCrash, Trash2, Flag, MessageSquare, Search as SearchIcon } from 'lucide-react';
+import { Info, ServerCrash, Trash2, Flag, Search as SearchIcon, Loader2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import {
   AlertDialog,
@@ -26,21 +26,24 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 interface AdminCampaignListProps {
-  onCampaignAction: (campaignId: string, action: 'view' | 'edit' | 'delete' | 'flag') => void;
-  allCampaigns: Campaign[]; // Receive all campaigns as a prop
+  allCampaigns: Campaign[]; 
   isLoadingCampaigns: boolean;
   campaignFetchError: string | null;
+  onCampaignAction: (campaignId: string, action: 'view' | 'edit' | 'delete' | 'flag') => void;
+  onCampaignDeleted: (campaignId: string) => void; // Callback after successful admin deletion
 }
 
 export function AdminCampaignList({ 
-  onCampaignAction, 
   allCampaigns,
   isLoadingCampaigns,
-  campaignFetchError
+  campaignFetchError,
+  onCampaignAction,
+  onCampaignDeleted
 }: AdminCampaignListProps) {
   const [filteredCampaigns, setFilteredCampaigns] = useState<Campaign[]>([]);
   const { toast } = useToast();
   
+  const [isDeleting, setIsDeleting] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [campaignToDelete, setCampaignToDelete] = useState<Campaign | null>(null);
 
@@ -81,10 +84,25 @@ export function AdminCampaignList({
 
   const handleDeleteCampaign = async () => {
     if (!campaignToDelete) return;
-    onCampaignAction(campaignToDelete.id, 'delete'); // Propagate delete action
-    // Actual deletion and UI update will be handled by the parent after API call
-    setIsDeleteDialogOpen(false);
-    setCampaignToDelete(null);
+    setIsDeleting(true);
+    try {
+      const response = await fetch(`/api/admin/campaigns/${campaignToDelete.id}`, {
+        method: 'DELETE',
+      });
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Failed to delete campaign by admin.");
+      }
+      toast({ title: "Campaign Deleted", description: `Campaign "${campaignToDelete.title}" has been deleted by admin.` });
+      onCampaignDeleted(campaignToDelete.id); // Notify parent to update its list
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : "An unknown error occurred.";
+      toast({ title: "Error Deleting Campaign", description: errorMessage, variant: "destructive" });
+    } finally {
+      setIsDeleting(false);
+      setIsDeleteDialogOpen(false);
+      setCampaignToDelete(null);
+    }
   };
   
   const handleFlagPrompt = (campaign: Campaign) => {
@@ -201,7 +219,7 @@ export function AdminCampaignList({
             key={campaign.id} 
             campaign={campaign} 
             onView={() => onCampaignAction(campaign.id, 'view')}
-            onEdit={() => onCampaignAction(campaign.id, 'edit')}
+            onEdit={() => onCampaignAction(campaign.id, 'edit')} // Admin edit is conceptual for now
             onDelete={() => handleDeletePrompt(campaign)}
             onFlag={() => handleFlagPrompt(campaign)}
             canEditOrDelete={true} 
@@ -213,19 +231,20 @@ export function AdminCampaignList({
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle className="flex items-center gap-2">
-                <Trash2 className="h-5 w-5 text-destructive"/> Confirm Deletion (Admin)
+                <Trash2 className="h-5 w-5 text-destructive"/> Confirm Admin Deletion
             </AlertDialogTitle>
             <AlertDialogDescription>
               This will permanently delete the campaign 
-              <span className="font-semibold"> &quot;{campaignToDelete?.title || 'this campaign'}&quot; </span>. 
-              This action is destructive and cannot be undone. (Actual admin delete logic still needs full API implementation for any campaign).
+              <span className="font-semibold"> &quot;{campaignToDelete?.title || 'this campaign'}&quot; </span> 
+              and all its associated data. This action is destructive and cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel onClick={() => setCampaignToDelete(null)}>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={handleDeleteCampaign} className="bg-destructive hover:bg-destructive/90 text-destructive-foreground">
-              Yes, Delete Campaign (Admin)
-            </AlertDialogAction>
+            <Button onClick={handleDeleteCampaign} variant="destructive" disabled={isDeleting}>
+              {isDeleting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Yes, Delete Campaign
+            </Button>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
@@ -257,7 +276,7 @@ export function AdminCampaignList({
                     <Button variant="outline" onClick={() => { setCampaignToFlag(null); setFlaggingNotes(''); }}>Cancel</Button>
                 </DialogClose>
                 <Button onClick={handleConfirmFlag} disabled={isSubmittingFlag}>
-                    {isSubmittingFlag && <ServerCrash className="mr-2 h-4 w-4 animate-spin" />}
+                    {isSubmittingFlag && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                     {campaignToFlag?.isFlagged ? "Unflag & Save Notes" : "Flag & Save Notes"}
                 </Button>
             </DialogFooter>
