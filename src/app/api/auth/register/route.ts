@@ -21,7 +21,7 @@ export async function POST(request: Request) {
     }
 
     const client: MongoClient = await clientPromise;
-    const db: Db = client.db(process.env.MONGODB_DB_NAME || undefined); // Use DB name from env if provided
+    const db: Db = client.db(process.env.MONGODB_DB_NAME || undefined);
     const usersCollection = db.collection("users");
 
     const existingUser = await usersCollection.findOne({ email });
@@ -42,7 +42,8 @@ export async function POST(request: Request) {
       totalXP: 0,
       level: 1,
       badges: [],
-      emailVerified: null, // Standard for credentials signup
+      emailVerified: null,
+      isBanned: false, // Initialize isBanned to false
     });
 
     if (!result.insertedId) {

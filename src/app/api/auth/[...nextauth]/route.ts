@@ -11,20 +11,22 @@ import type { AdapterUser } from 'next-auth/adapters';
 
 
 interface MyAppUser extends NextAuthUser {
-  role?: string;
+  role?: 'viewer' | 'editor' | 'admin';
   id: string; 
   _id?: ObjectId | string; 
   totalXP?: number;
   level?: number;
   badges?: string[];
   emailVerified?: Date | null;
+  isBanned?: boolean; 
 }
 
-const defaultGamification = {
-  role: 'viewer',
+const defaultGamificationAndStatus = {
+  role: 'viewer' as 'viewer' | 'editor' | 'admin',
   totalXP: 0,
   level: 1,
   badges: [] as string[],
+  isBanned: false,
 };
 
 const getDbName = (): string | undefined => {
@@ -79,17 +81,22 @@ export const authOptions: NextAuthOptions = {
           throw new Error("Incorrect password.");
         }
         
-        // Ensure all fields for MyAppUser are present
+        const appUser = dbUser as unknown as MyAppUser;
+        if (appUser.isBanned) {
+            throw new Error("This account has been suspended.");
+        }
+
         return {
-          id: dbUser._id!.toString(), 
-          email: dbUser.email,
-          name: dbUser.name,
-          image: dbUser.image,
-          role: (dbUser as unknown as MyAppUser).role ?? defaultGamification.role,
-          totalXP: (dbUser as unknown as MyAppUser).totalXP ?? defaultGamification.totalXP,
-          level: (dbUser as unknown as MyAppUser).level ?? defaultGamification.level,
-          badges: (dbUser as unknown as MyAppUser).badges ?? defaultGamification.badges,
-          emailVerified: dbUser.emailVerified ? new Date(dbUser.emailVerified) : null,
+          id: appUser._id!.toString(), 
+          email: appUser.email,
+          name: appUser.name,
+          image: appUser.image,
+          role: appUser.role ?? defaultGamificationAndStatus.role,
+          totalXP: appUser.totalXP ?? defaultGamificationAndStatus.totalXP,
+          level: appUser.level ?? defaultGamificationAndStatus.level,
+          badges: appUser.badges ?? defaultGamificationAndStatus.badges,
+          emailVerified: appUser.emailVerified ? new Date(appUser.emailVerified) : null,
+          isBanned: appUser.isBanned ?? defaultGamificationAndStatus.isBanned,
         } as MyAppUser; 
       }
     })
@@ -103,123 +110,88 @@ export const authOptions: NextAuthOptions = {
       const db: Db = client.db(getDbName());
       const usersCollection = db.collection<AdapterUser>("users");
       
-      // The 'user' object passed to signIn is what the adapter returns (for OAuth)
-      // or what authorize returns (for credentials).
-      // For OAuth, if it's a new user, 'user' might be the raw profile from provider,
-      // and adapter.createUser will be called after this callback if it returns true.
-      // We need to ensure the user object that eventually goes into JWT is complete.
+      let dbUser = await usersCollection.findOne({ email: user.email as string });
 
+      if (dbUser && (dbUser as unknown as MyAppUser).isBanned) {
+        throw new Error("This account has been suspended."); // Or return false for a generic error
+      }
+      
       if (account?.provider === "google") {
-        let dbUser = await usersCollection.findOne({ email: user.email as string });
         const googleProfile = profile as (Profile & { picture?: string; email_verified?: boolean });
 
-        if (dbUser) { // Existing user signed in with Google
+        if (dbUser) { 
           const updates: Partial<AdapterUser & MyAppUser> = {};
           let needsDbUpdate = false;
-
-          // Update user.id to be the string version of DB _id for JWT consistency
-          // This 'user' object will be passed to JWT callback.
           user.id = dbUser._id.toString(); 
 
           if (googleProfile?.name && dbUser.name !== googleProfile.name) {
-            updates.name = googleProfile.name;
-            user.name = googleProfile.name; 
-            needsDbUpdate = true;
+            updates.name = googleProfile.name; user.name = googleProfile.name; needsDbUpdate = true;
           }
           const googleImage = googleProfile?.picture || googleProfile?.image;
           if (googleImage && dbUser.image !== googleImage) {
-            updates.image = googleImage;
-            user.image = googleImage;
-            needsDbUpdate = true;
+            updates.image = googleImage; user.image = googleImage; needsDbUpdate = true;
           }
           if (!dbUser.emailVerified && googleProfile?.email_verified === true) {
-            updates.emailVerified = new Date();
-            (user as MyAppUser).emailVerified = updates.emailVerified;
-            needsDbUpdate = true;
+            updates.emailVerified = new Date(); (user as MyAppUser).emailVerified = updates.emailVerified; needsDbUpdate = true;
           } else {
             (user as MyAppUser).emailVerified = dbUser.emailVerified ? new Date(dbUser.emailVerified) : null;
           }
 
-          // Ensure custom fields are present in user object for JWT and update DB if needed
-          if (typeof (dbUser as unknown as MyAppUser).role === 'undefined') { 
-            updates.role = defaultGamification.role; 
-            (user as MyAppUser).role = defaultGamification.role;
-            needsDbUpdate = true; 
-          } else {
-            (user as MyAppUser).role = (dbUser as unknown as MyAppUser).role;
-          }
-
-          if (typeof (dbUser as unknown as MyAppUser).totalXP === 'undefined') { 
-            updates.totalXP = defaultGamification.totalXP; 
-            (user as MyAppUser).totalXP = defaultGamification.totalXP;
-            needsDbUpdate = true; 
-          } else {
-            (user as MyAppUser).totalXP = (dbUser as unknown as MyAppUser).totalXP;
-          }
-          
-          if (typeof (dbUser as unknown as MyAppUser).level === 'undefined') { 
-            updates.level = defaultGamification.level; 
-            (user as MyAppUser).level = defaultGamification.level;
-            needsDbUpdate = true; 
-          } else {
-            (user as MyAppUser).level = (dbUser as unknown as MyAppUser).level;
-          }
-
-          if (typeof (dbUser as unknown as MyAppUser).badges === 'undefined') { 
-            updates.badges = defaultGamification.badges; 
-            (user as MyAppUser).badges = defaultGamification.badges;
-            needsDbUpdate = true; 
-          } else {
-            (user as MyAppUser).badges = (dbUser as unknown as MyAppUser).badges;
-          }
+          const appDbUser = dbUser as unknown as MyAppUser;
+          if (typeof appDbUser.role === 'undefined') { updates.role = defaultGamificationAndStatus.role; (user as MyAppUser).role = defaultGamificationAndStatus.role; needsDbUpdate = true; } 
+          else { (user as MyAppUser).role = appDbUser.role; }
+          if (typeof appDbUser.totalXP === 'undefined') { updates.totalXP = defaultGamificationAndStatus.totalXP; (user as MyAppUser).totalXP = defaultGamificationAndStatus.totalXP; needsDbUpdate = true; } 
+          else { (user as MyAppUser).totalXP = appDbUser.totalXP; }
+          if (typeof appDbUser.level === 'undefined') { updates.level = defaultGamificationAndStatus.level; (user as MyAppUser).level = defaultGamificationAndStatus.level; needsDbUpdate = true; } 
+          else { (user as MyAppUser).level = appDbUser.level; }
+          if (typeof appDbUser.badges === 'undefined') { updates.badges = defaultGamificationAndStatus.badges; (user as MyAppUser).badges = defaultGamificationAndStatus.badges; needsDbUpdate = true; } 
+          else { (user as MyAppUser).badges = appDbUser.badges; }
+          if (typeof appDbUser.isBanned === 'undefined') { updates.isBanned = defaultGamificationAndStatus.isBanned; (user as MyAppUser).isBanned = defaultGamificationAndStatus.isBanned; needsDbUpdate = true; }
+          else { (user as MyAppUser).isBanned = appDbUser.isBanned; }
           
           if (needsDbUpdate) {
             await usersCollection.updateOne({ _id: dbUser._id }, { $set: updates });
           }
         } else { 
-          // New user via Google. Adapter will call createUser.
-          // Augment the 'user' object (from Google profile) with defaults.
-          // These will be passed to adapter.createUser.
-          (user as MyAppUser).role = defaultGamification.role;
-          (user as MyAppUser).totalXP = defaultGamification.totalXP;
-          (user as MyAppUser).level = defaultGamification.level;
-          (user as MyAppUser).badges = defaultGamification.badges;
+          (user as MyAppUser).role = defaultGamificationAndStatus.role;
+          (user as MyAppUser).totalXP = defaultGamificationAndStatus.totalXP;
+          (user as MyAppUser).level = defaultGamificationAndStatus.level;
+          (user as MyAppUser).badges = defaultGamificationAndStatus.badges;
+          (user as MyAppUser).isBanned = defaultGamificationAndStatus.isBanned;
           if (googleProfile?.email_verified === true && !(user as MyAppUser).emailVerified) {
              (user as MyAppUser).emailVerified = new Date();
           }
-          // The 'id' will be set by the adapter after createUser. The user object
-          // passed to JWT will be the result of adapter.createUser.
         }
-      } else if (user && !account) { // Credentials sign-in
-        // 'user' is already from 'authorize' and should be MyAppUser type.
-        // We just need to ensure it's correctly typed for JWT.
+      } else if (user && !account) { 
         const typedUser = user as MyAppUser;
-        user.id = typedUser.id; // ensure it's there
-        (user as MyAppUser).role = typedUser.role ?? defaultGamification.role;
-        (user as MyAppUser).totalXP = typedUser.totalXP ?? defaultGamification.totalXP;
-        (user as MyAppUser).level = typedUser.level ?? defaultGamification.level;
-        (user as MyAppUser).badges = typedUser.badges ?? defaultGamification.badges;
+        user.id = typedUser.id; 
+        (user as MyAppUser).role = typedUser.role ?? defaultGamificationAndStatus.role;
+        (user as MyAppUser).totalXP = typedUser.totalXP ?? defaultGamificationAndStatus.totalXP;
+        (user as MyAppUser).level = typedUser.level ?? defaultGamificationAndStatus.level;
+        (user as MyAppUser).badges = typedUser.badges ?? defaultGamificationAndStatus.badges;
         (user as MyAppUser).emailVerified = typedUser.emailVerified ? new Date(typedUser.emailVerified) : null;
+        (user as MyAppUser).isBanned = typedUser.isBanned ?? defaultGamificationAndStatus.isBanned;
+      }
+      
+      if ((user as MyAppUser).isBanned) {
+        return false; // Prevent sign-in for banned users
       }
       return true; 
     },
     async jwt({ token, user, trigger, session: sessionUpdate }) {
-      // The 'user' object is available on initial sign-in.
-      // For new OAuth users, 'user' is the result of adapter.createUser.
-      // For existing OAuth/Credentials, 'user' is what signIn callback prepared.
       if (user) { 
-        const typedUser = user as MyAppUser; // Cast to ensure all fields are accessible
-        token.id = typedUser.id; // This ID MUST be the string version of MongoDB _id
-        token.role = typedUser.role ?? defaultGamification.role;
-        token.totalXP = typedUser.totalXP ?? defaultGamification.totalXP;
-        token.level = typedUser.level ?? defaultGamification.level;
-        token.badges = typedUser.badges ?? defaultGamification.badges;
+        const typedUser = user as MyAppUser; 
+        token.id = typedUser.id; 
+        token.role = typedUser.role ?? defaultGamificationAndStatus.role;
+        token.totalXP = typedUser.totalXP ?? defaultGamificationAndStatus.totalXP;
+        token.level = typedUser.level ?? defaultGamificationAndStatus.level;
+        token.badges = typedUser.badges ?? defaultGamificationAndStatus.badges;
         token.name = typedUser.name;
-        token.picture = typedUser.image; // NextAuth uses 'picture' in token for image
-        token.email = typedUser.email; 
+        token.picture = typedUser.image; 
+        token.email = typedUser.email;
+        token.isBanned = typedUser.isBanned ?? defaultGamificationAndStatus.isBanned;
       }
 
-      // Handle session updates if you use `update()` from `useSession`
       if (trigger === "update" && sessionUpdate?.user) {
         const updateData = sessionUpdate.user as Partial<MyAppUser>;
         if (updateData.name) token.name = updateData.name;
@@ -228,6 +200,7 @@ export const authOptions: NextAuthOptions = {
         if (updateData.totalXP !== undefined) token.totalXP = updateData.totalXP;
         if (updateData.level !== undefined) token.level = updateData.level;
         if (updateData.badges) token.badges = updateData.badges;
+        if (updateData.isBanned !== undefined) token.isBanned = updateData.isBanned;
       }
       return token;
     },
@@ -235,20 +208,27 @@ export const authOptions: NextAuthOptions = {
       if (session.user) {
         const typedSessionUser = session.user as MyAppUser;
         typedSessionUser.id = token.id as string;
-        typedSessionUser.role = (token.role as string) ?? defaultGamification.role;
-        typedSessionUser.totalXP = (token.totalXP as number) ?? defaultGamification.totalXP;
-        typedSessionUser.level = (token.level as number) ?? defaultGamification.level;
-        typedSessionUser.badges = (token.badges as string[]) ?? defaultGamification.badges;
+        typedSessionUser.role = (token.role as MyAppUser['role']) ?? defaultGamificationAndStatus.role;
+        typedSessionUser.totalXP = (token.totalXP as number) ?? defaultGamificationAndStatus.totalXP;
+        typedSessionUser.level = (token.level as number) ?? defaultGamificationAndStatus.level;
+        typedSessionUser.badges = (token.badges as string[]) ?? defaultGamificationAndStatus.badges;
+        typedSessionUser.isBanned = (token.isBanned as boolean) ?? defaultGamificationAndStatus.isBanned;
         
         typedSessionUser.name = token.name;
         typedSessionUser.email = token.email;
         typedSessionUser.image = token.picture as string | null | undefined;
+
+        if (typedSessionUser.isBanned) {
+             // This is a good place to potentially invalidate the session or handle client-side logout
+             // For now, the middleware will catch subsequent requests from banned users.
+        }
       }
       return session;
     },
   },
   pages: {
     signIn: '/login',
+    error: '/login', // Redirect to login on auth errors, including ban
   },
   secret: process.env.NEXTAUTH_SECRET,
   debug: process.env.NODE_ENV === 'development',
@@ -257,6 +237,3 @@ export const authOptions: NextAuthOptions = {
 const handler = NextAuth(authOptions);
 
 export { handler as GET, handler as POST };
-    
-
-    
