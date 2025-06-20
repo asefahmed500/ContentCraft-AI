@@ -2,7 +2,7 @@
 "use client";
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { TestTubeDual, Construction } from 'lucide-react';
+import { TestTube, Construction } from 'lucide-react';
 import type { ABTestInstance } from '@/types/content';
 
 interface ABTestingPanelProps {
@@ -20,7 +20,7 @@ export function ABTestingPanel({ campaignId, abTests }: ABTestingPanelProps) {
     <Card className="shadow-lg">
       <CardHeader>
         <CardTitle className="font-headline text-2xl flex items-center gap-2">
-          <TestTubeDual className="h-6 w-6 text-primary" />
+          <TestTube className="h-6 w-6 text-primary" />
           A/B Testing Simulation
         </CardTitle>
         <CardDescription>
