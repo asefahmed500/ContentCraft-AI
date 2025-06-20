@@ -6,6 +6,28 @@ import { getToken } from 'next-auth/jwt';
 import { ObjectId } from 'mongodb';
 import type { Campaign, ContentVersion, AgentInteraction, ABTestInstance, ScheduledPost } from '@/types/content';
 
+const ensureDate = (dateInput: string | Date | undefined | null): Date | undefined => {
+  if (!dateInput) return undefined;
+  if (dateInput instanceof Date) return dateInput;
+  const date = new Date(dateInput);
+  return isNaN(date.getTime()) ? undefined : date;
+};
+
+const mapCampaignDocumentToCampaign = (campaignDoc: Omit<Campaign, 'id'> & { _id: ObjectId }): Campaign => {
+  return {
+    ...campaignDoc,
+    id: campaignDoc._id.toString(),
+    agentDebates: (campaignDoc.agentDebates || []).map(ad => ({ ...ad, timestamp: ensureDate(ad.timestamp) || new Date() })),
+    contentVersions: (campaignDoc.contentVersions || []).map(cv => ({ ...cv, timestamp: ensureDate(cv.timestamp) || new Date() })),
+    scheduledPosts: (campaignDoc.scheduledPosts || []).map(sp => ({ ...sp, scheduledAt: ensureDate(sp.scheduledAt) || new Date() })),
+    abTests: (campaignDoc.abTests || []).map(ab => ({ ...ab, createdAt: ensureDate(ab.createdAt) || new Date() })),
+    isPrivate: campaignDoc.isPrivate ?? false,
+    createdAt: ensureDate(campaignDoc.createdAt) || new Date(),
+    updatedAt: ensureDate(campaignDoc.updatedAt) || new Date(),
+  };
+};
+
+
 // GET /api/campaigns - List all campaigns for the authenticated user OR a single campaign
 export async function GET(request: NextRequest) {
   try {
@@ -21,7 +43,7 @@ export async function GET(request: NextRequest) {
 
     const client = await clientPromise;
     const db = client.db(process.env.MONGODB_DB_NAME);
-    const campaignsCollection = db.collection<Omit<Campaign, 'id'>>('campaigns'); // Use DB model type
+    const campaignsCollection = db.collection<Omit<Campaign, 'id'>>('campaigns'); 
     
     if (fetchSingle && campaignId) {
         if (!ObjectId.isValid(campaignId)) {
@@ -31,34 +53,12 @@ export async function GET(request: NextRequest) {
         if (!campaignDoc) {
             return NextResponse.json({ error: 'Campaign not found or user not authorized' }, { status: 404 });
         }
-        const campaign: Campaign = { // Map to client-side type with string id
-            ...campaignDoc,
-            id: campaignDoc._id!.toString(), 
-            contentVersions: (campaignDoc.contentVersions || []).map(cv => ({...cv, timestamp: new Date(cv.timestamp)})),
-            agentDebates: (campaignDoc.agentDebates || []).map(ad => ({...ad, timestamp: new Date(ad.timestamp)})),
-            scheduledPosts: (campaignDoc.scheduledPosts || []).map(sp => ({...sp, scheduledAt: new Date(sp.scheduledAt)})),
-            abTests: (campaignDoc.abTests || []).map(ab => ({...ab, createdAt: new Date(ab.createdAt)})),
-            isPrivate: campaignDoc.isPrivate || false,
-            createdAt: new Date(campaignDoc.createdAt),
-            updatedAt: new Date(campaignDoc.updatedAt),
-        };
+        const campaign = mapCampaignDocumentToCampaign({ ...campaignDoc, _id: campaignDoc._id! });
         return NextResponse.json(campaign, { status: 200 });
     }
 
-
     const userCampaignDocs = await campaignsCollection.find({ userId }).sort({ createdAt: -1 }).toArray();
-    
-    const formattedCampaigns: Campaign[] = userCampaignDocs.map(campaignDoc => ({
-      ...campaignDoc,
-      id: campaignDoc._id!.toString(), 
-      contentVersions: (campaignDoc.contentVersions || []).map(cv => ({...cv, timestamp: new Date(cv.timestamp)})),
-      agentDebates: (campaignDoc.agentDebates || []).map(ad => ({...ad, timestamp: new Date(ad.timestamp)})),
-      scheduledPosts: (campaignDoc.scheduledPosts || []).map(sp => ({...sp, scheduledAt: new Date(sp.scheduledAt)})),
-      abTests: (campaignDoc.abTests || []).map(ab => ({...ab, createdAt: new Date(ab.createdAt)})),
-      isPrivate: campaignDoc.isPrivate || false,
-      createdAt: new Date(campaignDoc.createdAt),
-      updatedAt: new Date(campaignDoc.updatedAt),
-    }));
+    const formattedCampaigns: Campaign[] = userCampaignDocs.map(doc => mapCampaignDocumentToCampaign({ ...doc, _id: doc._id! }));
 
     return NextResponse.json(formattedCampaigns, { status: 200 });
   } catch (error) {
@@ -102,7 +102,7 @@ export async function POST(request: NextRequest) {
       scheduledPosts: [],
       abTests: [],
       status: status || 'draft', 
-      isPrivate: isPrivate || false, 
+      isPrivate: isPrivate ?? false, 
       createdAt: new Date(),
       updatedAt: new Date(),
     };
@@ -112,12 +112,8 @@ export async function POST(request: NextRequest) {
     if (!result.insertedId) {
         return NextResponse.json({ error: 'Failed to create campaign' }, { status: 500 });
     }
-
-    const createdCampaign: Campaign = { // Map to client-side type
-      id: result.insertedId.toString(),
-      ...newCampaignData,
-       _id: result.insertedId, // Keep _id for internal MongoDB use if needed, but id is primary for client
-    }; 
+    
+    const createdCampaign = mapCampaignDocumentToCampaign({ ...newCampaignData, _id: result.insertedId });
 
     return NextResponse.json(createdCampaign, { status: 201 });
   } catch (error) {
@@ -147,47 +143,46 @@ export async function PUT(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { title, brief, targetAudience, tone, contentGoals, status, contentVersions, agentDebates, referenceMaterials, brandId, scheduledPosts, abTests, isPrivate } = body;
-
+    
     const updateData: Partial<Omit<Campaign, 'id' | '_id' | 'userId' | 'createdAt'>> = { updatedAt: new Date() };
     
     // Explicitly handle each field to avoid unintended overwrites with undefined
-    if (title !== undefined) updateData.title = title;
-    if (brief !== undefined) updateData.brief = brief;
-    if (targetAudience !== undefined) updateData.targetAudience = targetAudience === null ? undefined : targetAudience;
-    if (tone !== undefined) updateData.tone = tone === null ? undefined : tone;
-    if (contentGoals !== undefined) updateData.contentGoals = contentGoals === null ? [] : contentGoals;
-    if (status !== undefined) updateData.status = status;
-    if (referenceMaterials !== undefined) updateData.referenceMaterials = referenceMaterials === null ? [] : referenceMaterials;
-    if (brandId !== undefined) updateData.brandId = brandId === null ? undefined : brandId;
-    if (isPrivate !== undefined) updateData.isPrivate = isPrivate === null ? false : isPrivate;
+    if (body.title !== undefined) updateData.title = body.title;
+    if (body.brief !== undefined) updateData.brief = body.brief;
+    if (body.targetAudience !== undefined) updateData.targetAudience = body.targetAudience === null ? undefined : body.targetAudience;
+    if (body.tone !== undefined) updateData.tone = body.tone === null ? undefined : body.tone;
+    if (body.contentGoals !== undefined) updateData.contentGoals = body.contentGoals === null ? [] : body.contentGoals;
+    if (body.status !== undefined) updateData.status = body.status;
+    if (body.referenceMaterials !== undefined) updateData.referenceMaterials = body.referenceMaterials === null ? [] : body.referenceMaterials;
+    if (body.brandId !== undefined) updateData.brandId = body.brandId === null ? undefined : body.brandId;
+    if (body.isPrivate !== undefined) updateData.isPrivate = body.isPrivate ?? false;
 
 
-    if (contentVersions !== undefined) {
-      updateData.contentVersions = (contentVersions === null ? [] : contentVersions).map((v: ContentVersion) => ({
+    if (body.contentVersions !== undefined) {
+      updateData.contentVersions = (body.contentVersions === null ? [] : body.contentVersions).map((v: ContentVersion) => ({
         ...v,
-        timestamp: v.timestamp ? new Date(v.timestamp) : new Date(),
+        timestamp: ensureDate(v.timestamp) || new Date(),
       }));
     }
 
-    if (agentDebates !== undefined) {
-      updateData.agentDebates = (agentDebates === null ? [] : agentDebates).map((ad: AgentInteraction) => ({
+    if (body.agentDebates !== undefined) {
+      updateData.agentDebates = (body.agentDebates === null ? [] : body.agentDebates).map((ad: AgentInteraction) => ({
         ...ad,
-        timestamp: ad.timestamp ? new Date(ad.timestamp) : new Date(),
+        timestamp: ensureDate(ad.timestamp) || new Date(),
       }));
     }
 
-    if (scheduledPosts !== undefined) {
-      updateData.scheduledPosts = (scheduledPosts === null ? [] : scheduledPosts).map((sp: ScheduledPost) => ({ 
+    if (body.scheduledPosts !== undefined) {
+      updateData.scheduledPosts = (body.scheduledPosts === null ? [] : body.scheduledPosts).map((sp: ScheduledPost) => ({ 
         ...sp,
-        scheduledAt: sp.scheduledAt ? new Date(sp.scheduledAt) : new Date(),
+        scheduledAt: ensureDate(sp.scheduledAt) || new Date(),
       }));
     }
 
-    if (abTests !== undefined) {
-      updateData.abTests = (abTests === null ? [] : abTests).map((ab: ABTestInstance) => ({
+    if (body.abTests !== undefined) {
+      updateData.abTests = (body.abTests === null ? [] : body.abTests).map((ab: ABTestInstance) => ({
         ...ab,
-        createdAt: ab.createdAt ? new Date(ab.createdAt) : new Date(),
+        createdAt: ensureDate(ab.createdAt) || new Date(),
       }));
     }
     
@@ -205,18 +200,7 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: 'Campaign not found or user not authorized for update' }, { status: 404 });
     }
     
-    const updatedCampaignDoc = result.value;
-    const updatedCampaign: Campaign = { // Map to client-side type
-        ...updatedCampaignDoc,
-        id: updatedCampaignDoc._id!.toString(),
-        contentVersions: (updatedCampaignDoc.contentVersions || []).map(cv => ({...cv, timestamp: new Date(cv.timestamp)})),
-        agentDebates: (updatedCampaignDoc.agentDebates || []).map(ad => ({...ad, timestamp: new Date(ad.timestamp)})),
-        scheduledPosts: (updatedCampaignDoc.scheduledPosts || []).map(sp => ({...sp, scheduledAt: new Date(sp.scheduledAt)})),
-        abTests: (updatedCampaignDoc.abTests || []).map(ab => ({...ab, createdAt: new Date(ab.createdAt)})),
-        isPrivate: updatedCampaignDoc.isPrivate || false,
-        createdAt: new Date(updatedCampaignDoc.createdAt),
-        updatedAt: new Date(updatedCampaignDoc.updatedAt),
-    };
+    const updatedCampaign = mapCampaignDocumentToCampaign({ ...result.value, _id: result.value._id! });
 
     return NextResponse.json(updatedCampaign, { status: 200 });
 

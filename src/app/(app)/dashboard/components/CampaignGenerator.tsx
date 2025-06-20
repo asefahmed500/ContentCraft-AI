@@ -12,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Switch } from '@/components/ui/switch';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2, Wand2, Lightbulb, Users, Target, Palette, FileUp, Save, Paperclip, Tag, Info, Link2, Combine, Brain, Video, Upload, Lock, Unlock } from 'lucide-react';
-import type { Campaign } from '@/types/content'; 
+import type { Campaign, CampaignStatus } from '@/types/content'; 
 import { Separator } from '@/components/ui/separator';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
@@ -35,14 +35,14 @@ export function CampaignGenerator({
     selectedCampaignForEdit 
 }: CampaignGeneratorProps) {
   const [campaignTitle, setCampaignTitle] = useState('');
-  const [brief, setBrief] = useState(''); // Product/Service Description
+  const [brief, setBrief] = useState(''); 
   const [brandVoice, setBrandVoice] = useState('');
   const [targetAudience, setTargetAudience] = useState('');
   const [tone, setTone] = useState('');
   const [contentGoals, setContentGoals] = useState<string[]>([]);
   const [isPrivate, setIsPrivate] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  const [isInitiatingGeneration, setIsInitiatingGeneration] = useState(false); // For "Save & Generate" button specifically
+  const [isInitiatingGeneration, setIsInitiatingGeneration] = useState(false); 
   const [referenceFiles, setReferenceFiles] = useState<FileList | null>(null);
   
   const [importUrl, setImportUrl] = useState('');
@@ -80,9 +80,9 @@ export function CampaignGenerator({
       setTargetAudience(selectedCampaignForEdit.targetAudience || '');
       setTone(selectedCampaignForEdit.tone || '');
       setContentGoals(selectedCampaignForEdit.contentGoals || []);
-      setIsPrivate(selectedCampaignForEdit.isPrivate || false);
-      setBrandVoice(''); // Typically, brand voice override is not persisted with campaign, it's an input for generation
-      setReferenceFiles(null); // Don't repopulate files
+      setIsPrivate(selectedCampaignForEdit.isPrivate ?? false);
+      setBrandVoice(''); 
+      setReferenceFiles(null); 
       setImportUrl('');
       setVideoUrl('');
       setVideoFile(null);
@@ -106,7 +106,6 @@ export function CampaignGenerator({
         setIsInitiatingGeneration(true);
     }
 
-
     const campaignDataPayload: Partial<Omit<Campaign, 'id' | '_id' | 'userId' | 'createdAt'| 'updatedAt' | 'agentDebates' | 'contentVersions' | 'scheduledPosts' | 'abTests'>> & { status?: CampaignStatus } = {
       title: campaignTitle.trim(),
       brief: brief.trim(), 
@@ -114,16 +113,18 @@ export function CampaignGenerator({
       tone: tone || undefined,
       contentGoals: contentGoals.length > 0 ? contentGoals : undefined,
       isPrivate: isPrivate,
-      // referenceMaterials will be handled if a proper upload mechanism is implemented and passed here
-      // For now, we don't pass referenceFiles directly to backend in this manner
     };
     
-    if (selectedCampaignForEdit && !shouldStartGeneration) { // If editing and just saving, keep current status
-        campaignDataPayload.status = selectedCampaignForEdit.status;
-    } else if (!selectedCampaignForEdit) { // New campaign
+    // Determine status based on current state and action
+    if (selectedCampaignForEdit) {
+      campaignDataPayload.status = selectedCampaignForEdit.status; // Keep current status if just saving edits
+      if (shouldStartGeneration) {
+        // If regenerating, the flow will set to 'debating' etc.
+        // No specific status change needed here, but could ensure it's not 'published' or 'archived' if needed
+      }
+    } else { // New campaign
         campaignDataPayload.status = 'draft';
     }
-    // If shouldStartGeneration is true, status will be handled by the generation flow ('debating', 'generating')
 
 
     try {
@@ -143,18 +144,13 @@ export function CampaignGenerator({
       const savedCampaign: Campaign = await response.json();
       
       toast({ title: `Campaign ${selectedCampaignForEdit ? "Updated" : "Created"}!`, description: `"${savedCampaign.title}" has been ${selectedCampaignForEdit ? "updated" : "created"}.` });
-      onCampaignCreated(savedCampaign); // Update parent state
+      onCampaignCreated(savedCampaign); 
 
       if (shouldStartGeneration) {
-        // onGenerateContentForCampaign expects the full campaign object
-        // which should now have an ID if it was newly created.
-        // The status will be updated by the generation flow itself.
         await onGenerateContentForCampaign(savedCampaign, brandVoice.trim() || undefined);
       } else if (!selectedCampaignForEdit) { 
-        // If it was a new campaign and we are NOT starting generation, clear the form.
         resetFormFields();
       }
-      // If editing and not starting generation, fields remain as they are for further editing.
 
     } catch (error) {
         const errorMessage = error instanceof Error ? error.message : "An unknown error occurred.";
@@ -176,7 +172,7 @@ export function CampaignGenerator({
   const handleVideoFileChange = (e: ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
         setVideoFile(e.target.files[0]);
-        setVideoUrl(''); // Clear URL if file is selected
+        setVideoUrl(''); 
         toast({title: "Video File Selected", description: `Selected: ${e.target.files[0].name}. This is a UI placeholder for video analysis.`});
     }
   };
@@ -189,7 +185,6 @@ export function CampaignGenerator({
     setIsImportingUrl(true);
     toast({ title: "Importing Content...", description: `Attempting to fetch and analyze content from ${importUrl}. This is a simulation.`});
 
-    // Simulate API call
     await new Promise(resolve => setTimeout(resolve, 2000));
 
     const simulatedExtractedText = `Content successfully "imported" from: ${importUrl}.\n\n[Simulated extracted content appears here... This text is a placeholder. In a real system, the actual content from the URL would be fetched, parsed (e.g., using readability.js), and then displayed here or used for analysis.]\n\nPlease review and refine this text to serve as the core brief for your campaign. You can edit it directly below.`;
@@ -208,7 +203,7 @@ export function CampaignGenerator({
     setIsProcessingVideo(true);
     toast({ title: "Processing Video (Experimental)...", description: `Attempting to generate brief from ${videoFile ? videoFile.name : videoUrl}. This is a simulation.`});
 
-    await new Promise(resolve => setTimeout(resolve, 3000)); // Simulate longer processing for video
+    await new Promise(resolve => setTimeout(resolve, 3000)); 
 
     const simulatedVideoAnalysis = `[Simulated Video Analysis from: ${videoFile ? videoFile.name : videoUrl}]\n
 Transcript Highlights: 
@@ -238,7 +233,6 @@ Please review and refine this extracted information and the suggestions above to
     if (videoFileInput) videoFileInput.value = '';
   };
 
-  // Determine if primary action buttons should be disabled
   const primaryActionsDisabled = isSaving || isGenerating || isImportingUrl || isProcessingVideo;
 
   return (
@@ -395,8 +389,9 @@ Please review and refine this extracted information and the suggestions above to
                     <SelectItem 
                         key={goal} 
                         value={goal} 
-                        disabled={contentGoals.length >=3 && !contentGoals.includes(goal)}
+                        disabled={(contentGoals.length >=3 && !contentGoals.includes(goal)) || primaryActionsDisabled}
                         onPointerDown={(e) => { 
+                            if (primaryActionsDisabled) return;
                             e.preventDefault(); 
                             const newGoals = contentGoals.includes(goal) ? contentGoals.filter(g => g !== goal) : [...contentGoals, goal];
                              if (newGoals.length <= 3) {
@@ -429,7 +424,7 @@ Please review and refine this extracted information and the suggestions above to
             disabled={primaryActionsDisabled}
           />
           <p className="text-xs text-muted-foreground">
-            Provide specific voice instructions here to guide the AI for this campaign. If a Brand DNA profile has been analyzed (in the Brand DNA tab), these instructions can augment or override that profile for this specific campaign's content generation. If no profile exists or no override is given, AI will use a general approach.
+            Provide specific voice instructions here to guide the AI for this campaign. This can augment or override an analyzed Brand DNA profile for this specific campaign's content. If no profile exists or no override is given, AI will use a general approach.
           </p>
         </div>
 
@@ -446,7 +441,7 @@ Please review and refine this extracted information and the suggestions above to
             </Label>
         </div>
         <p className="text-xs text-muted-foreground -mt-1 ml-10">
-            If enabled, this campaign's data will not be used for future AI agent learning or analytics aggregation beyond your own account.
+            If enabled, this campaign's data will (conceptually) not be used for broader AI agent learning or analytics aggregation beyond your own account.
         </p>
 
 
@@ -477,7 +472,7 @@ Please review and refine this extracted information and the suggestions above to
                 </div>
              )}
             <p className="text-xs text-muted-foreground">
-                (Optional) Upload supporting documents. Full parsing & AI processing for these files are planned features. Currently, this is a UI placeholder for file selection.
+                (Optional) Upload supporting documents. Full parsing & AI processing for these files are planned features. Currently, this is a UI simulation for file selection.
             </p>
         </div>
 
