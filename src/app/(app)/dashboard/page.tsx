@@ -2,7 +2,7 @@
 "use client";
 
 import { useState, useCallback, useEffect } from 'react';
-import { useSession } from 'next-auth/react'; // Import useSession
+import { useSession } from 'next-auth/react'; 
 import { BrandDNAAnalyzer } from './components/BrandDNAAnalyzer';
 import { AgentDebatePanel } from './components/AgentDebatePanel';
 import { MultiFormatPreview } from './components/MultiFormatPreview';
@@ -47,7 +47,7 @@ async function generateContentAction(input: GenerateContentInput): Promise<Gener
 
 async function updateCampaignAPI(campaignId: string, updates: Partial<Campaign>): Promise<Campaign | { error: string }> {
   try {
-    // Ensure complex objects like dates are in ISO string format for the API
+    
     const serializedUpdates: any = { ...updates };
     if (updates.agentDebates) {
         serializedUpdates.agentDebates = updates.agentDebates.map(ad => ({...ad, timestamp: new Date(ad.timestamp).toISOString()}));
@@ -55,10 +55,12 @@ async function updateCampaignAPI(campaignId: string, updates: Partial<Campaign>)
     if (updates.contentVersions) {
         serializedUpdates.contentVersions = updates.contentVersions.map(cv => ({...cv, timestamp: new Date(cv.timestamp).toISOString()}));
     }
-    if (updates.createdAt) {
-        serializedUpdates.createdAt = new Date(updates.createdAt).toISOString();
+    
+    if (Object.prototype.hasOwnProperty.call(updates, 'createdAt') && updates.createdAt instanceof Date) {
+        serializedUpdates.createdAt = updates.createdAt.toISOString();
     }
-    serializedUpdates.updatedAt = new Date().toISOString(); // Always update 'updatedAt'
+    
+    serializedUpdates.updatedAt = new Date().toISOString(); 
 
 
     const response = await fetch(`/api/campaigns?id=${campaignId}`, {
@@ -71,7 +73,7 @@ async function updateCampaignAPI(campaignId: string, updates: Partial<Campaign>)
       throw new Error(errorData.error || 'Failed to update campaign');
     }
     const campaignResult = await response.json();
-    // Convert dates back to Date objects for client-side state
+    
     return {
         ...campaignResult,
         createdAt: new Date(campaignResult.createdAt),
@@ -90,7 +92,7 @@ async function updateCampaignAPI(campaignId: string, updates: Partial<Campaign>)
 
 
 export default function DashboardPage() {
-  const { data: session, update: updateSession } = useSession(); // Get update function
+  const { data: session, update: updateSession } = useSession(); 
   const [selectedCampaignForProcessing, setSelectedCampaignForProcessing] = useState<Campaign | null>(null);
   const [selectedCampaignForEditingInForm, setSelectedCampaignForEditingInForm] = useState<Campaign | null>(null);
 
@@ -106,7 +108,7 @@ export default function DashboardPage() {
   const agentRolesForDebate: AgentRole[] = ["Creative Director", "Content Writer", "Brand Persona", "Analytics Strategist", "SEO Optimization", "Quality Assurance"];
   const orchestratorAgentName: AgentInteraction['agent'] = "Orchestrator";
 
-  // Derived states from selectedCampaignForProcessing
+  
   const campaignStatus: CampaignStatus | undefined = selectedCampaignForProcessing?.status;
   const debateMessages: AgentInteraction[] = selectedCampaignForProcessing?.agentDebates || [];
   const contentVersions: ContentVersion[] = (selectedCampaignForProcessing?.contentVersions || []).sort((a,b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
@@ -148,7 +150,7 @@ export default function DashboardPage() {
             throw new Error(data.error || "Failed to update XP on server.");
         }
         
-        // Update client-side session to reflect new XP/Level
+        
         await updateSession({ 
             user: { 
                 totalXP: data.totalXP, 
@@ -193,7 +195,7 @@ export default function DashboardPage() {
     const currentLatestVersion = (campaignWithClientDefaults.contentVersions || []).sort((a,b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())[0];
     setMultiFormatContent(currentLatestVersion ? currentLatestVersion.multiFormatContentSnapshot : null);
 
-    setSelectedCampaignForEditingInForm(null); // Clear edit form after save/create
+    setSelectedCampaignForEditingInForm(null); 
     if(campaign.status === 'draft' && !selectedCampaignForEditingInForm) { 
       setActiveTab('generator');
     } else if (campaign.status === 'review' || (currentLatestVersion && campaign.status !== 'generating' && campaign.status !== 'debating')) {
@@ -370,7 +372,7 @@ export default function DashboardPage() {
 
       setSelectedCampaignForProcessing(currentCampaignState);
       toast({ title: "Content Generation Complete!", description: "Your final draft of multi-format content is ready for preview." });
-      await awardXP(50, "Content Generation"); // Award XP
+      await awardXP(50, "Content Generation"); 
 
 
     } catch (error) {
@@ -402,7 +404,7 @@ export default function DashboardPage() {
 
 
   const handleCampaignSelectionFromList = useCallback(async (campaignId: string | null, action: 'view' | 'edit') => {
-    setSelectedCampaignForEditingInForm(null); // Clear any ongoing edit
+    setSelectedCampaignForEditingInForm(null); 
 
     if (!campaignId) {
       setSelectedCampaignForProcessing(null);
@@ -460,6 +462,51 @@ export default function DashboardPage() {
         setSelectedCampaignForProcessing(null);
     }
   }, [toast]);
+
+
+  const handleSaveTranslatedVersion = useCallback(async (
+    formatKey: keyof MultiFormatContent,
+    translatedText: string,
+    originalVersion: ContentVersion,
+    targetLanguage: string
+  ) => {
+    if (!selectedCampaignForProcessing) {
+        toast({title: "Error", description: "No campaign selected to save translated version.", variant: "destructive"});
+        return;
+    }
+
+    const newVersionNumber = (selectedCampaignForProcessing.contentVersions?.length || 0) + 1;
+    const newMultiFormatContentSnapshot = { ...originalVersion.multiFormatContentSnapshot };
+    newMultiFormatContentSnapshot[formatKey] = translatedText;
+
+    const newVersion: ContentVersion = {
+        id: `v${newVersionNumber}-lang-${targetLanguage.toLowerCase().substring(0,3)}-${new Date().getTime()}`,
+        versionNumber: newVersionNumber,
+        timestamp: new Date(),
+        actorName: `AI Translation (${targetLanguage})`,
+        changeSummary: `Content for format "${formatLabels[formatKey] || formatKey}" translated to ${targetLanguage}. Original version: ${originalVersion.versionNumber}.`,
+        multiFormatContentSnapshot: newMultiFormatContentSnapshot,
+    };
+
+    const updatedCampaignState: Campaign = {
+        ...selectedCampaignForProcessing,
+        contentVersions: [...(selectedCampaignForProcessing.contentVersions || []), newVersion],
+        status: 'review' 
+    };
+    
+    const updatedCampaign = await persistCurrentCampaignUpdates(updatedCampaignState);
+    if (updatedCampaign && !('error' in updatedCampaign)) {
+        setSelectedCampaignForProcessing(updatedCampaign);
+        setMultiFormatContent(newMultiFormatContentSnapshot); // Update preview to show the new translated version
+        setActiveTab('preview');
+        await awardXP(15, `Translating content to ${targetLanguage}`);
+    } else {
+        toast({ title: "Failed to Save Translated Version", description: "An error occurred while updating the campaign.", variant: "destructive"});
+        // Revert optimistic updates if any were made or re-fetch campaign
+    }
+
+  }, [selectedCampaignForProcessing, persistCurrentCampaignUpdates, toast, awardXP]);
+
 
   const campaignStatusTextMap: Record<CampaignStatus, string> = {
     draft: "Draft",
@@ -581,8 +628,10 @@ export default function DashboardPage() {
                 content={multiFormatContent}
                 isLoading={isGeneratingCampaign && (campaignStatus === 'generating' || campaignStatus === 'debating') && !multiFormatContent}
                 campaignId={selectedCampaignForProcessing?.id}
-                contentVersionId={latestContentVersionId}
-                onFeedbackSubmittedSuccessfully={awardXP} // Pass awardXP callback
+                currentCampaign={selectedCampaignForProcessing}
+                currentContentVersion={latestContentVersion}
+                onFeedbackSubmittedSuccessfully={awardXP} 
+                onSaveTranslatedContent={handleSaveTranslatedVersion}
             />
         </TabsContent>
 

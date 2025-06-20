@@ -1,25 +1,28 @@
 
 "use client";
 
-import type { MultiFormatContent, UserFeedback } from '@/types/content';
+import type { MultiFormatContent, UserFeedback, ContentVersion, Campaign } from '@/types/content';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
-import { FileText, Tv2, Copy, Download, Loader2, FileType, Share2, WandSparkles, ThumbsUp, ThumbsDown, MessageSquarePlus, Languages } from 'lucide-react';
+import { FileText, Tv2, Copy, Download, Loader2, FileType, Share2, WandSparkles, ThumbsUp, ThumbsDown, MessageSquarePlus, Languages, Save } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose } from '@/components/ui/dialog';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Label } from '@/components/ui/label';
 
 interface MultiFormatPreviewProps {
   content: MultiFormatContent | null;
   isLoading: boolean;
   campaignId?: string;
-  contentVersionId?: string;
-  onFeedbackSubmittedSuccessfully?: (xpAmount: number, reason: string) => void; // Callback for XP
-  // onReviseRequest?: (formatKey: keyof MultiFormatContent, currentText: string) => void;
-  // onTranslateRequest?: (formatKey: keyof MultiFormatContent, currentText: string) => void;
+  currentCampaign?: Campaign | null; // Added to get campaign tone for translation
+  currentContentVersion?: ContentVersion | null; // Added to get original version for saving translation
+  onFeedbackSubmittedSuccessfully?: (xpAmount: number, reason: string) => void;
+  onSaveTranslatedContent?: (formatKey: keyof MultiFormatContent, translatedText: string, originalVersion: ContentVersion, targetLanguage: string) => Promise<void>;
 }
 
 const formatLabels: Record<keyof MultiFormatContent, string> = {
@@ -42,17 +45,42 @@ type FeedbackState = {
   }
 };
 
+const targetLanguages = [
+    { value: "Spanish", label: "Spanish" },
+    { value: "French", label: "French" },
+    { value: "German", label: "German" },
+    { value: "Japanese", label: "Japanese" },
+    { value: "Chinese (Simplified)", label: "Chinese (Simplified)" },
+    { value: "Portuguese", label: "Portuguese" },
+    { value: "Italian", label: "Italian" },
+    { value: "Russian", label: "Russian" },
+    { value: "Arabic", label: "Arabic" },
+    { value: "Korean", label: "Korean" },
+];
+
 export function MultiFormatPreview({ 
     content, 
     isLoading, 
-    campaignId, 
-    contentVersionId,
+    campaignId,
+    currentCampaign,
+    currentContentVersion,
     onFeedbackSubmittedSuccessfully,
-    // onReviseRequest, 
-    // onTranslateRequest 
+    onSaveTranslatedContent
 }: MultiFormatPreviewProps) {
   const { toast } = useToast();
   const [feedbackState, setFeedbackState] = useState<FeedbackState>({});
+
+  const [isTranslateDialogOpen, setIsTranslateDialogOpen] = useState(false);
+  const [translateConfig, setTranslateConfig] = useState<{
+    formatKey: keyof MultiFormatContent;
+    originalText: string;
+    campaignTone?: string;
+  } | null>(null);
+  const [targetLanguage, setTargetLanguage] = useState<string>("");
+  const [isTranslating, setIsTranslating] = useState(false);
+  const [translatedText, setTranslatedText] = useState<string | null>(null);
+  const [isSavingTranslation, setIsSavingTranslation] = useState(false);
+
 
   const availableFormats = content 
     ? Object.keys(content).filter(key => {
@@ -61,13 +89,13 @@ export function MultiFormatPreview({
       }) as (keyof MultiFormatContent)[]
     : [];
   
-  const handleCopy = (textToCopy: string | undefined) => {
+  const handleCopy = (textToCopy: string | undefined | null, entityName?: string) => {
     if (textToCopy) {
       navigator.clipboard.writeText(textToCopy)
-        .then(() => toast({ title: "Copied to clipboard!" }))
+        .then(() => toast({ title: `${entityName || 'Content'} copied to clipboard!` }))
         .catch(err => toast({ title: "Failed to copy", description: err.message, variant: "destructive" }));
     } else {
-        toast({ title: "Nothing to copy", description: "Content is empty.", variant: "destructive" });
+        toast({ title: `Nothing to copy`, description: `${entityName || 'Content'} is empty.`, variant: "destructive" });
     }
   };
 
@@ -91,6 +119,71 @@ export function MultiFormatPreview({
   const handleComingSoon = (featureName: string) => {
     toast({ title: `${featureName} is Coming Soon!`, description: `The next step is to implement the dialog for ${featureName.toLowerCase()} instructions and then call the API.`});
   };
+
+  const handleOpenTranslateDialog = (formatKey: keyof MultiFormatContent) => {
+    const originalText = content?.[formatKey];
+    if (!originalText) {
+        toast({ title: "No Content", description: "No content available for this format to translate.", variant: "destructive" });
+        return;
+    }
+    setTranslateConfig({
+        formatKey,
+        originalText,
+        campaignTone: currentCampaign?.tone
+    });
+    setTargetLanguage("");
+    setTranslatedText(null);
+    setIsTranslateDialogOpen(true);
+  };
+
+  const handleConfirmTranslation = async () => {
+    if (!translateConfig || !targetLanguage) {
+        toast({ title: "Missing Information", description: "Please select a target language.", variant: "destructive" });
+        return;
+    }
+    setIsTranslating(true);
+    setTranslatedText(null);
+    try {
+        const response = await fetch('/api/content/translate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                originalContent: translateConfig.originalText,
+                targetLanguage: targetLanguage,
+                toneDescription: translateConfig.campaignTone,
+            }),
+        });
+        const result = await response.json();
+        if (!response.ok) {
+            throw new Error(result.error || result.details || "Translation request failed.");
+        }
+        setTranslatedText(result.translatedContent);
+        toast({ title: "Translation Successful", description: `Content translated to ${targetLanguage}.` });
+    } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : "An unknown error occurred during translation.";
+        toast({ title: "Translation Failed", description: errorMessage, variant: "destructive" });
+    } finally {
+        setIsTranslating(false);
+    }
+  };
+
+  const handleSaveTranslationVersion = async () => {
+    if (!onSaveTranslatedContent || !currentContentVersion || !translateConfig || !translatedText || !targetLanguage) {
+        toast({ title: "Cannot Save", description: "Missing necessary data to save translated version.", variant: "destructive"});
+        return;
+    }
+    setIsSavingTranslation(true);
+    try {
+        await onSaveTranslatedContent(translateConfig.formatKey, translatedText, currentContentVersion, targetLanguage);
+        toast({title: "Translation Saved", description: "Translated content saved as a new version."});
+        setIsTranslateDialogOpen(false); // Close dialog on successful save
+    } catch (error) {
+        // Error toast handled by the parent `onSaveTranslatedContent` typically
+    } finally {
+        setIsSavingTranslation(false);
+    }
+  };
+
 
   const handleFeedbackRating = (formatKey: keyof MultiFormatContent, rating: 1 | -1) => {
     setFeedbackState(prev => ({
@@ -129,7 +222,7 @@ export function MultiFormatPreview({
 
     const feedbackData: UserFeedback = {
       campaignId,
-      contentVersionId,
+      contentVersionId: currentContentVersion?.id,
       contentFormat: formatKey,
       rating: currentFeedback.rating,
       comment: currentFeedback.comment,
@@ -211,7 +304,7 @@ export function MultiFormatPreview({
       <Card className="shadow-lg">
         <CardHeader>
           <CardTitle className="font-headline text-2xl flex items-center gap-2"><Tv2 className="h-6 w-6 text-primary" />Multi-Format Content Preview</CardTitle>
-          <CardDescription>Preview the generated content. Copy, download, or provide feedback to help our AI agents learn.</CardDescription>
+          <CardDescription>Preview the generated content. Copy, download, translate, or provide feedback to help our AI agents learn.</CardDescription>
         </CardHeader>
         <CardContent>
           <Tabs defaultValue={defaultTab} className="w-full">
@@ -233,7 +326,7 @@ export function MultiFormatPreview({
               return (
               <TabsContent key={formatKey} value={formatKey} className="mt-4">
                 <Card className="border shadow-md">
-                  <CardHeader className="flex flex-row items-center justify-between pb-3 bg-muted/30 rounded-t-lg">
+                  <CardHeader className="flex flex-row items-center justify-between pb-3 bg-muted/30 rounded-t-lg flex-wrap gap-2">
                     <CardTitle className="font-headline text-lg">{formatLabels[formatKey] || formatKey}</CardTitle>
                     <div className="flex flex-wrap gap-2">
                       <Button variant="outline" size="sm" onClick={() => handleCopy(content?.[formatKey])}>
@@ -254,11 +347,11 @@ export function MultiFormatPreview({
                       </Tooltip>
                        <Tooltip>
                         <TooltipTrigger asChild>
-                            <Button variant="outline" size="sm" onClick={() => handleComingSoon('Translate')}>
+                            <Button variant="outline" size="sm" onClick={() => handleOpenTranslateDialog(formatKey)}>
                                 <Languages className="mr-1 h-3 w-3" /> Translate
                             </Button>
                         </TooltipTrigger>
-                        <TooltipContent><p>Translate content (Coming Soon)</p></TooltipContent>
+                        <TooltipContent><p>Translate this content</p></TooltipContent>
                        </Tooltip>
                       <Tooltip>
                         <TooltipTrigger asChild>
@@ -340,6 +433,86 @@ export function MultiFormatPreview({
           </Tabs>
         </CardContent>
       </Card>
+
+      {/* Translation Dialog */}
+      <Dialog open={isTranslateDialogOpen} onOpenChange={setIsTranslateDialogOpen}>
+        <DialogContent className="sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2"><Languages className="h-5 w-5 text-primary"/>Translate Content</DialogTitle>
+            <DialogDescription>
+              Translate the content for &quot;{translateConfig?.formatKey ? formatLabels[translateConfig.formatKey] : ''}&quot; to another language.
+              {translateConfig?.campaignTone && <span className="block text-xs mt-1">Original Tone Hint: {translateConfig.campaignTone}</span>}
+            </DialogDescription>
+          </DialogHeader>
+          {translateConfig && (
+            <div className="space-y-4 py-4">
+                <div>
+                    <Label className="text-sm font-semibold">Original Text ({translateConfig.formatKey ? formatLabels[translateConfig.formatKey] : ''}):</Label>
+                    <ScrollArea className="h-32 mt-1 rounded-md border p-3 bg-muted/50">
+                        <pre className="whitespace-pre-wrap text-xs">{translateConfig.originalText}</pre>
+                    </ScrollArea>
+                </div>
+                <div className="space-y-1.5">
+                    <Label htmlFor="target-language" className="text-sm font-semibold">Select Target Language*</Label>
+                    <Select value={targetLanguage} onValueChange={setTargetLanguage} disabled={isTranslating}>
+                        <SelectTrigger id="target-language">
+                            <SelectValue placeholder="Choose language..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                            {targetLanguages.map(lang => (
+                                <SelectItem key={lang.value} value={lang.value}>{lang.label}</SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+                </div>
+                <Button onClick={handleConfirmTranslation} disabled={isTranslating || !targetLanguage} className="w-full sm:w-auto">
+                    {isTranslating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <WandSparkles className="mr-2 h-4 w-4"/>}
+                    Translate with AI
+                </Button>
+
+                {translatedText && (
+                    <div className="mt-4 space-y-2">
+                        <Label className="text-sm font-semibold">Translated Text ({targetLanguage}):</Label>
+                         <div className="relative">
+                            <ScrollArea className="h-32 mt-1 rounded-md border p-3 bg-background">
+                                <pre className="whitespace-pre-wrap text-xs">{translatedText}</pre>
+                            </ScrollArea>
+                            <Button 
+                                variant="outline" 
+                                size="icon" 
+                                className="absolute top-2 right-2 h-7 w-7"
+                                onClick={() => handleCopy(translatedText, "Translated text")}
+                            >
+                                <Copy className="h-3.5 w-3.5"/>
+                                <span className="sr-only">Copy translated text</span>
+                            </Button>
+                        </div>
+                        {onSaveTranslatedContent && currentContentVersion && (
+                             <Button 
+                                onClick={handleSaveTranslationVersion} 
+                                disabled={isSavingTranslation}
+                                className="w-full sm:w-auto mt-2"
+                                variant="default"
+                            >
+                                {isSavingTranslation ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4"/>}
+                                Save Translation as New Version
+                            </Button>
+                        )}
+                    </div>
+                )}
+            </div>
+          )}
+          <DialogFooter className="sm:justify-end">
+            <DialogClose asChild>
+              <Button type="button" variant="outline" onClick={() => { setTranslatedText(null); setTargetLanguage(''); }}>
+                Close
+              </Button>
+            </DialogClose>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
     </TooltipProvider>
   );
 }
+
