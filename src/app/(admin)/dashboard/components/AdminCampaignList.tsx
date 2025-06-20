@@ -26,14 +26,19 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 interface AdminCampaignListProps {
-  onCampaignSelect?: (campaignId: string | null, action: 'view' | 'edit') => void; 
+  onCampaignAction: (campaignId: string, action: 'view' | 'edit' | 'delete' | 'flag') => void;
+  allCampaigns: Campaign[]; // Receive all campaigns as a prop
+  isLoadingCampaigns: boolean;
+  campaignFetchError: string | null;
 }
 
-export function AdminCampaignList({ onCampaignSelect }: AdminCampaignListProps) {
-  const [allCampaigns, setAllCampaigns] = useState<Campaign[]>([]);
+export function AdminCampaignList({ 
+  onCampaignAction, 
+  allCampaigns,
+  isLoadingCampaigns,
+  campaignFetchError
+}: AdminCampaignListProps) {
   const [filteredCampaigns, setFilteredCampaigns] = useState<Campaign[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const { toast } = useToast();
   
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
@@ -48,41 +53,6 @@ export function AdminCampaignList({ onCampaignSelect }: AdminCampaignListProps) 
   const [statusFilter, setStatusFilter] = useState('all');
   const [flaggedFilter, setFlaggedFilter] = useState('all');
 
-
-  const fetchCampaigns = useCallback(async () => {
-    setIsLoading(true);
-    setError(null);
-    try {
-      const response = await fetch('/api/admin/campaigns'); 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || `Failed to fetch campaigns: ${response.statusText}`);
-      }
-      const data: Campaign[] = await response.json();
-      const campaignsWithDates = data.map(c => ({
-        ...c,
-        createdAt: new Date(c.createdAt),
-        updatedAt: new Date(c.updatedAt),
-        agentDebates: (c.agentDebates || []).map(ad => ({...ad, timestamp: new Date(ad.timestamp)})),
-        contentVersions: (c.contentVersions || []).map(cv => ({...cv, timestamp: new Date(cv.timestamp)})),
-        isFlagged: c.isFlagged ?? false,
-        adminModerationNotes: c.adminModerationNotes ?? '',
-      }));
-      setAllCampaigns(campaignsWithDates);
-    } catch (err) {
-      console.error("AdminCampaignList fetch error:", err);
-      const errorMessage = err instanceof Error ? err.message : "An unknown error occurred.";
-      setError(errorMessage);
-      toast({ title: "Error fetching campaigns", description: errorMessage, variant: "destructive" });
-    } finally {
-      setIsLoading(false);
-    }
-  }, [toast]);
-
-  useEffect(() => {
-    fetchCampaigns();
-  }, [fetchCampaigns]);
-
   useEffect(() => {
     let campaignsToFilter = [...allCampaigns];
     const lowerSearchTerm = searchTerm.toLowerCase();
@@ -90,7 +60,7 @@ export function AdminCampaignList({ onCampaignSelect }: AdminCampaignListProps) 
     if (searchTerm) {
       campaignsToFilter = campaignsToFilter.filter(campaign => 
         campaign.title.toLowerCase().includes(lowerSearchTerm) ||
-        campaign.brief.toLowerCase().includes(lowerSearchTerm) ||
+        (campaign.brief && campaign.brief.toLowerCase().includes(lowerSearchTerm)) ||
         (campaign.userId && campaign.userId.toLowerCase().includes(lowerSearchTerm)) ||
         (campaign.id && campaign.id.toLowerCase().includes(lowerSearchTerm))
       );
@@ -99,7 +69,7 @@ export function AdminCampaignList({ onCampaignSelect }: AdminCampaignListProps) 
       campaignsToFilter = campaignsToFilter.filter(campaign => campaign.status === statusFilter);
     }
     if (flaggedFilter !== 'all') {
-        campaignsToFilter = campaignsToFilter.filter(campaign => campaign.isFlagged === (flaggedFilter === 'flagged'));
+        campaignsToFilter = campaignsToFilter.filter(campaign => (campaign.isFlagged ?? false) === (flaggedFilter === 'flagged'));
     }
     setFilteredCampaigns(campaignsToFilter);
   }, [searchTerm, statusFilter, flaggedFilter, allCampaigns]);
@@ -111,21 +81,16 @@ export function AdminCampaignList({ onCampaignSelect }: AdminCampaignListProps) 
 
   const handleDeleteCampaign = async () => {
     if (!campaignToDelete) return;
-    toast({ title: "Delete Action (Admin)", description: `Simulating delete for campaign "${campaignToDelete.title}". Actual admin delete API for any campaign (not just own) is needed.`, variant: "default" });
-    // Example:
-    // const response = await fetch(`/api/admin/campaigns/${campaignToDelete.id}/delete`, { method: 'DELETE' }); // Needs a dedicated admin delete endpoint
-    // if (response.ok) { fetchCampaigns(); } else { toast(...error) }
+    onCampaignAction(campaignToDelete.id, 'delete'); // Propagate delete action
+    // Actual deletion and UI update will be handled by the parent after API call
     setIsDeleteDialogOpen(false);
     setCampaignToDelete(null);
   };
   
-  const handleFlagPrompt = (campaignId: string, currentFlagStatus: boolean, currentNotes?: string) => {
-    const campaign = allCampaigns.find(c => c.id === campaignId);
-    if (campaign) {
-        setCampaignToFlag(campaign);
-        setFlaggingNotes(currentNotes || '');
-        setIsFlaggingDialogOpen(true);
-    }
+  const handleFlagPrompt = (campaign: Campaign) => {
+    setCampaignToFlag(campaign);
+    setFlaggingNotes(campaign.adminModerationNotes || '');
+    setIsFlaggingDialogOpen(true);
   };
 
   const handleConfirmFlag = async () => {
@@ -143,7 +108,7 @@ export function AdminCampaignList({ onCampaignSelect }: AdminCampaignListProps) 
             throw new Error(errorData.error || "Failed to update campaign flag status.");
         }
         toast({ title: "Campaign Moderation Updated", description: `Campaign "${campaignToFlag.title}" has been ${newFlagStatus ? 'flagged' : 'unflagged'}.`});
-        fetchCampaigns(); // Refresh the list
+        onCampaignAction(campaignToFlag.id, 'flag'); // Notify parent to refresh data
         setIsFlaggingDialogOpen(false);
     } catch (err) {
         const errorMessage = err instanceof Error ? err.message : "An unknown error occurred.";
@@ -155,24 +120,7 @@ export function AdminCampaignList({ onCampaignSelect }: AdminCampaignListProps) 
     }
   };
 
-
-  const handleViewCampaign = (campaignId: string) => {
-     if (onCampaignSelect) {
-        onCampaignSelect(campaignId, 'view');
-     } else {
-        alert(`Admin view for campaign ${campaignId} - (Not fully implemented to load into main user dashboard preview from here, typically admin has separate view)`);
-     }
-  };
-
-  const handleEditCampaign = (campaignId: string) => {
-    if (onCampaignSelect) {
-        onCampaignSelect(campaignId, 'edit'); 
-    } else {
-        alert(`Admin edit for campaign ${campaignId} - (Not implemented to load into main user dashboard editor from here)`);
-    }
-  };
-
-  if (isLoading && filteredCampaigns.length === 0) {
+  if (isLoadingCampaigns && filteredCampaigns.length === 0) {
     return (
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {[...Array(3)].map((_, index) => (
@@ -189,12 +137,12 @@ export function AdminCampaignList({ onCampaignSelect }: AdminCampaignListProps) 
     );
   }
 
-  if (error) {
+  if (campaignFetchError) {
     return (
       <Alert variant="destructive">
         <ServerCrash className="h-5 w-5" />
         <AlertTitle>Failed to Load Campaigns</AlertTitle>
-        <AlertDescription>{error}</AlertDescription>
+        <AlertDescription>{campaignFetchError}</AlertDescription>
       </Alert>
     );
   }
@@ -237,7 +185,7 @@ export function AdminCampaignList({ onCampaignSelect }: AdminCampaignListProps) 
         </Select>
       </div>
 
-      {filteredCampaigns.length === 0 && !isLoading && (
+      {filteredCampaigns.length === 0 && !isLoadingCampaigns && (
         <Alert>
           <Info className="h-5 w-5" />
           <AlertTitle>No Campaigns Found</AlertTitle>
@@ -252,10 +200,10 @@ export function AdminCampaignList({ onCampaignSelect }: AdminCampaignListProps) 
           <CampaignCard 
             key={campaign.id} 
             campaign={campaign} 
-            onView={() => handleViewCampaign(campaign.id)}
-            onEdit={() => handleEditCampaign(campaign.id)}
+            onView={() => onCampaignAction(campaign.id, 'view')}
+            onEdit={() => onCampaignAction(campaign.id, 'edit')}
             onDelete={() => handleDeletePrompt(campaign)}
-            onFlag={handleFlagPrompt}
+            onFlag={() => handleFlagPrompt(campaign)}
             canEditOrDelete={true} 
             isAdminView={true}
           />
@@ -270,7 +218,7 @@ export function AdminCampaignList({ onCampaignSelect }: AdminCampaignListProps) 
             <AlertDialogDescription>
               This will permanently delete the campaign 
               <span className="font-semibold"> &quot;{campaignToDelete?.title || 'this campaign'}&quot; </span>. 
-              This action is destructive and cannot be undone by regular users. (Note: Admin delete logic may differ).
+              This action is destructive and cannot be undone. (Actual admin delete logic still needs full API implementation for any campaign).
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -318,4 +266,3 @@ export function AdminCampaignList({ onCampaignSelect }: AdminCampaignListProps) 
     </>
   );
 }
-

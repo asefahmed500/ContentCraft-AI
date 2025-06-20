@@ -8,10 +8,16 @@ import { Separator } from '@/components/ui/separator';
 import { Button } from '@/components/ui/button';
 import { UserTable } from './components/UserTable';
 import { AdminCampaignList } from './components/AdminCampaignList';
-import { BarChart, LineChart as LucideLineChart, Users, FileText, Activity, Zap, Brain, Download, HelpCircle, PieChart, ListTree } from 'lucide-react'; // Renamed LineChart to LucideLineChart
+import { MultiFormatPreview } from '@/app/(app)/dashboard/components/MultiFormatPreview';
+import { AgentDebatePanel } from '@/app/(app)/dashboard/components/AgentDebatePanel';
+import { ContentEvolutionTimeline } from '@/app/(app)/dashboard/components/ContentEvolutionTimeline';
+import type { Campaign, CampaignStatus, ContentVersion, AgentInteraction, MultiFormatContent } from '@/types/content';
+import type { AgentRole } from '@/types/agent';
+import { BarChart, LineChart as LucideLineChart, Users, FileText, Activity, Zap, Brain, Download, HelpCircle, PieChart, ListTree, Eye, Edit, XCircle, MessageSquare } from 'lucide-react';
 import { ResponsiveContainer, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, BarChart as RechartsBarChart, Line, LineChart as RechartsLineChart, Pie, Cell, PieChart as RechartsPieChart } from 'recharts';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2 } from 'lucide-react';
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
 
 interface PlatformStats {
@@ -19,8 +25,8 @@ interface PlatformStats {
   totalCampaigns: number;
   activeUsersToday: number; 
   campaignsCreatedToday: number; 
-  aiFlowsExecuted?: number; // Mocked
-  feedbackItemsSubmitted?: number; // Mocked
+  aiFlowsExecuted?: number; 
+  feedbackItemsSubmitted?: number;
 }
 
 const mockWeeklyActivityData = [
@@ -42,48 +48,124 @@ const mockTopContentFormatsData = [
 ];
 const PIE_CHART_COLORS = ['hsl(var(--primary))', 'hsl(var(--accent))', 'hsl(var(--chart-3))', 'hsl(var(--chart-4))', 'hsl(var(--chart-5))'];
 
-
 export default function AdminDashboardPage() {
   const [stats, setStats] = useState<PlatformStats | null>(null);
   const [isLoadingStats, setIsLoadingStats] = useState(true);
   const { toast } = useToast();
 
+  const [allCampaigns, setAllCampaigns] = useState<Campaign[]>([]);
+  const [isLoadingCampaigns, setIsLoadingCampaigns] = useState(true);
+  const [campaignFetchError, setCampaignFetchError] = useState<string | null>(null);
+  
+  const [selectedCampaignForAdminView, setSelectedCampaignForAdminView] = useState<Campaign | null>(null);
+  const [isFetchingCampaignDetail, setIsFetchingCampaignDetail] = useState(false);
+  
+  const [activeMainTab, setActiveMainTab] = useState("overview");
+
+
+  const fetchAllCampaigns = useCallback(async () => {
+    setIsLoadingCampaigns(true);
+    setCampaignFetchError(null);
+    try {
+      const response = await fetch('/api/admin/campaigns'); 
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || `Failed to fetch campaigns: ${response.statusText}`);
+      }
+      const data: Campaign[] = await response.json();
+      const campaignsWithDates = data.map(c => ({
+        ...c,
+        createdAt: new Date(c.createdAt),
+        updatedAt: new Date(c.updatedAt),
+        agentDebates: (c.agentDebates || []).map(ad => ({...ad, timestamp: new Date(ad.timestamp)})),
+        contentVersions: (c.contentVersions || []).map(cv => ({...cv, timestamp: new Date(cv.timestamp)})),
+        isFlagged: c.isFlagged ?? false,
+        adminModerationNotes: c.adminModerationNotes ?? '',
+      }));
+      setAllCampaigns(campaignsWithDates);
+    } catch (err) {
+      console.error("AdminCampaignList fetch error:", err);
+      const errorMessage = err instanceof Error ? err.message : "An unknown error occurred.";
+      setCampaignFetchError(errorMessage);
+      toast({ title: "Error fetching campaigns", description: errorMessage, variant: "destructive" });
+    } finally {
+      setIsLoadingCampaigns(false);
+    }
+  }, [toast]);
+
+
   const fetchStats = useCallback(async () => {
     setIsLoadingStats(true);
     try {
       const usersResponse = await fetch('/api/admin/users');
-      const campaignsResponse = await fetch('/api/admin/campaigns');
-      // const feedbackResponse = await fetch('/api/admin/feedback'); // Assuming an admin feedback endpoint
-
-      if (!usersResponse.ok || !campaignsResponse.ok) { // Add !feedbackResponse.ok if implementing
-        throw new Error("Failed to fetch platform statistics");
+      
+      if (!usersResponse.ok) {
+        throw new Error("Failed to fetch users for stats");
       }
-
       const usersData = await usersResponse.json();
-      const campaignsData = await campaignsResponse.json();
-      // const feedbackData = await feedbackResponse.json(); // Assuming an admin feedback endpoint
-
+      // Campaigns data will be available from allCampaigns state after fetchAllCampaigns completes
+      
       setStats({
         totalUsers: usersData.length,
-        totalCampaigns: campaignsData.length,
+        totalCampaigns: allCampaigns.length, // Use length from state
         activeUsersToday: Math.floor(Math.random() * usersData.length / 2) + 1, 
         campaignsCreatedToday: Math.floor(Math.random() * 5) + 1, 
-        aiFlowsExecuted: Math.floor(Math.random() * 500) + 200, // Mocked
-        feedbackItemsSubmitted: Math.floor(Math.random() * 50) + 10, // Mocked, replace with feedbackData.length
+        aiFlowsExecuted: Math.floor(Math.random() * 500) + 200,
+        feedbackItemsSubmitted: Math.floor(Math.random() * 50) + 10,
       });
 
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : "Unknown error fetching stats";
       toast({ title: "Error loading stats", description: errorMessage, variant: "destructive" });
-      setStats({ totalUsers: 0, totalCampaigns: 0, activeUsersToday: 0, campaignsCreatedToday: 0, aiFlowsExecuted: 0, feedbackItemsSubmitted: 0 }); // Default on error
+      setStats({ totalUsers: 0, totalCampaigns: 0, activeUsersToday: 0, campaignsCreatedToday: 0, aiFlowsExecuted: 0, feedbackItemsSubmitted: 0 });
     } finally {
       setIsLoadingStats(false);
     }
-  }, [toast]);
+  }, [toast, allCampaigns]); // Add allCampaigns to dependency array
 
   useEffect(() => {
-    fetchStats();
-  }, [fetchStats]);
+    fetchAllCampaigns();
+  }, [fetchAllCampaigns]);
+
+  useEffect(() => {
+    if (allCampaigns.length > 0 || !isLoadingCampaigns) { // Fetch stats once campaigns are loaded or if loading fails
+        fetchStats();
+    }
+  }, [allCampaigns, isLoadingCampaigns, fetchStats]);
+
+
+  const handleAdminCampaignAction = useCallback(async (campaignId: string, action: 'view' | 'edit' | 'delete' | 'flag') => {
+    if (action === 'view') {
+        setIsFetchingCampaignDetail(true);
+        // Find the campaign from the allCampaigns list
+        const campaignDetail = allCampaigns.find(c => c.id === campaignId);
+        if (campaignDetail) {
+            setSelectedCampaignForAdminView(campaignDetail);
+            setActiveMainTab("campaign_detail_view"); // Switch to a tab that shows details
+            toast({title: "Campaign Loaded", description: `Viewing details for "${campaignDetail.title}"`});
+        } else {
+            toast({title: "Error", description: "Could not find campaign details.", variant: "destructive"});
+        }
+        setIsFetchingCampaignDetail(false);
+    } else if (action === 'edit') {
+        toast({title: "Edit Action (Admin)", description: `Admin edit for campaign ${campaignId} is conceptual. A dedicated admin edit form would be needed.`, variant: "default"});
+        // Potentially load into a specific admin edit form in the future
+    } else if (action === 'delete') {
+        // Placeholder for admin delete. Full API for admin delete of any campaign is needed.
+        toast({title: "Delete Action (Admin)", description: `Simulating delete for campaign ID ${campaignId}. Refreshing list...`, variant: "default"});
+        // For now, just refetch to simulate removal if API were real
+        await fetchAllCampaigns();
+    } else if (action === 'flag') {
+        // This action is primarily to refresh the list after flagging is done within AdminCampaignList
+        await fetchAllCampaigns();
+        // If the flagged campaign was being viewed, update its state
+        if (selectedCampaignForAdminView && selectedCampaignForAdminView.id === campaignId) {
+            const updatedCampaign = allCampaigns.find(c => c.id === campaignId);
+            if (updatedCampaign) setSelectedCampaignForAdminView(updatedCampaign);
+        }
+    }
+  }, [allCampaigns, toast, fetchAllCampaigns, selectedCampaignForAdminView]);
+  
 
   const handleDownloadPlaceholder = (dataType: string) => {
     toast({
@@ -92,6 +174,12 @@ export default function AdminDashboardPage() {
         duration: 5000,
     });
   };
+  
+  // Derived states for preview components
+  const debateMessagesForPreview: AgentInteraction[] = selectedCampaignForAdminView?.agentDebates || [];
+  const contentVersionsForPreview: ContentVersion[] = (selectedCampaignForAdminView?.contentVersions || []).sort((a,b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+  const latestContentVersionForPreview: ContentVersion | null = contentVersionsForPreview[0] || null;
+  const multiFormatContentForPreview: MultiFormatContent | null = latestContentVersionForPreview ? latestContentVersionForPreview.multiFormatContentSnapshot : null;
 
 
   return (
@@ -104,131 +192,134 @@ export default function AdminDashboardPage() {
       </div>
       <Separator />
 
-      {isLoadingStats || !stats ? (
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-            {[...Array(6)].map((_, i) => ( // Increased skeleton cards
-                 <Card key={i}><CardHeader><CardTitle className="text-sm font-medium">Loading Stats...</CardTitle></CardHeader><CardContent><Loader2 className="h-6 w-6 animate-spin"/></CardContent></Card>
-            ))}
-        </div>
-      ) : (
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
-          <Card className="xl:col-span-1">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Total Users</CardTitle>
-              <Users className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{stats.totalUsers}</div>
-              <p className="text-xs text-muted-foreground">Registered on platform</p>
-            </CardContent>
-          </Card>
-          <Card className="xl:col-span-1">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Total Campaigns</CardTitle>
-              <FileText className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{stats.totalCampaigns}</div>
-              <p className="text-xs text-muted-foreground">Created by all users</p>
-            </CardContent>
-          </Card>
-          <Card className="xl:col-span-1">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Active Users (Today)</CardTitle>
-              <Activity className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{stats.activeUsersToday}</div>
-              <p className="text-xs text-muted-foreground">Mocked data</p>
-            </CardContent>
-          </Card>
-          <Card className="xl:col-span-1">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">New Campaigns (Today)</CardTitle>
-              <Zap className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">+{stats.campaignsCreatedToday}</div>
-              <p className="text-xs text-muted-foreground">Mocked data</p>
-            </CardContent>
-          </Card>
-           <Card className="xl:col-span-1">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">AI Flows Executed</CardTitle>
-              <Brain className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{stats.aiFlowsExecuted}</div>
-              <p className="text-xs text-muted-foreground">Mocked total (e.g., Genkit)</p>
-            </CardContent>
-          </Card>
-           <Card className="xl:col-span-1">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Feedback Items</CardTitle>
-              <HelpCircle className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{stats.feedbackItemsSubmitted}</div>
-              <p className="text-xs text-muted-foreground">Total feedback submitted</p>
-            </CardContent>
-          </Card>
-        </div>
-      )}
-      
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <Card className="lg:col-span-2">
-            <CardHeader>
-                <CardTitle className="font-headline flex items-center gap-2 text-xl"><LucideLineChart className="h-5 w-5 text-primary"/>Weekly Platform Activity (Mock)</CardTitle>
-                <CardDescription>Overview of user, campaign, and AI flow trends this week.</CardDescription>
-            </CardHeader>
-            <CardContent className="h-[350px]">
-                <ResponsiveContainer width="100%" height="100%">
-                    <RechartsLineChart data={mockWeeklyActivityData}>
-                        <CartesianGrid strokeDasharray="3 3" />
-                        <XAxis dataKey="date" stroke="hsl(var(--muted-foreground))" fontSize={12} />
-                        <YAxis yAxisId="left" stroke="hsl(var(--primary))" fontSize={12} />
-                        <YAxis yAxisId="right" orientation="right" stroke="hsl(var(--accent))" fontSize={12} />
-                        <Tooltip
-                            contentStyle={{ backgroundColor: 'hsl(var(--background))', border: '1px solid hsl(var(--border))', borderRadius: 'var(--radius)'}}
-                            itemStyle={{ color: 'hsl(var(--foreground))' }}
-                            cursor={{fill: 'hsl(var(--muted))', fillOpacity: 0.3}}
-                        />
-                        <Legend wrapperStyle={{paddingTop: '20px'}} />
-                        <Line yAxisId="left" type="monotone" dataKey="users" name="Active Users" stroke="hsl(var(--primary))" strokeWidth={2} dot={{ r: 4, fill: "hsl(var(--primary))" }} activeDot={{ r: 6 }} />
-                        <Line yAxisId="left" type="monotone" dataKey="campaigns" name="Campaigns Created" stroke="hsl(var(--chart-4))" strokeWidth={2} dot={{ r: 4, fill: "hsl(var(--chart-4))" }} activeDot={{ r: 6 }} />
-                        <Line yAxisId="right" type="monotone" dataKey="flows" name="AI Flows" stroke="hsl(var(--accent))" strokeWidth={2} dot={{ r: 4, fill: "hsl(var(--accent))" }} activeDot={{ r: 6 }} />
-                    </RechartsLineChart>
-                </ResponsiveContainer>
-            </CardContent>
-        </Card>
-        <Card>
-            <CardHeader>
-                <CardTitle className="font-headline flex items-center gap-2 text-xl"><PieChart className="h-5 w-5 text-primary"/>Top Content Formats (Mock)</CardTitle>
-                <CardDescription>Distribution of generated content formats.</CardDescription>
-            </CardHeader>
-            <CardContent className="h-[350px]">
-                <ResponsiveContainer width="100%" height="100%">
-                    <RechartsPieChart>
-                        <Pie data={mockTopContentFormatsData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={100} labelLine={false} label={({ name, percent }) => `${name} (${(percent * 100).toFixed(0)}%)`}>
-                            {mockTopContentFormatsData.map((entry, index) => (
-                                <Cell key={`cell-${index}`} fill={PIE_CHART_COLORS[index % PIE_CHART_COLORS.length]} />
-                            ))}
-                        </Pie>
-                        <Tooltip contentStyle={{ backgroundColor: 'hsl(var(--background))', border: '1px solid hsl(var(--border))', borderRadius: 'var(--radius)'}}/>
-                        <Legend wrapperStyle={{paddingTop: '20px'}}/>
-                    </RechartsPieChart>
-                </ResponsiveContainer>
-            </CardContent>
-        </Card>
-    </div>
-
-
-      <Tabs defaultValue="users" className="w-full">
-        <TabsList className="grid w-full grid-cols-2 md:grid-cols-3">
-          <TabsTrigger value="users" className="whitespace-nowrap">User Management</TabsTrigger>
-          <TabsTrigger value="campaigns" className="whitespace-nowrap">Campaign Oversight</TabsTrigger>
-          <TabsTrigger value="data_export" className="whitespace-nowrap">Data Export</TabsTrigger>
+      <Tabs value={activeMainTab} onValueChange={setActiveMainTab} className="w-full">
+        <TabsList className="grid w-full grid-cols-2 md:grid-cols-4">
+          <TabsTrigger value="overview">Overview & Stats</TabsTrigger>
+          <TabsTrigger value="users">User Management</TabsTrigger>
+          <TabsTrigger value="campaigns">Campaign Oversight</TabsTrigger>
+          <TabsTrigger value="data_export">Data Export</TabsTrigger>
         </TabsList>
+
+        <TabsContent value="overview" className="mt-6 space-y-6">
+            {isLoadingStats || !stats ? (
+                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+                    {[...Array(6)].map((_, i) => (
+                         <Card key={i}><CardHeader><CardTitle className="text-sm font-medium">Loading Stats...</CardTitle></CardHeader><CardContent><Loader2 className="h-6 w-6 animate-spin"/></CardContent></Card>
+                    ))}
+                </div>
+            ) : (
+                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+                  <Card className="xl:col-span-1">
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                      <CardTitle className="text-sm font-medium">Total Users</CardTitle>
+                      <Users className="h-4 w-4 text-muted-foreground" />
+                    </CardHeader>
+                    <CardContent>
+                      <div className="text-2xl font-bold">{stats.totalUsers}</div>
+                      <p className="text-xs text-muted-foreground">Registered on platform</p>
+                    </CardContent>
+                  </Card>
+                  <Card className="xl:col-span-1">
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                      <CardTitle className="text-sm font-medium">Total Campaigns</CardTitle>
+                      <FileText className="h-4 w-4 text-muted-foreground" />
+                    </CardHeader>
+                    <CardContent>
+                      <div className="text-2xl font-bold">{stats.totalCampaigns}</div>
+                      <p className="text-xs text-muted-foreground">Created by all users</p>
+                    </CardContent>
+                  </Card>
+                  <Card className="xl:col-span-1">
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                      <CardTitle className="text-sm font-medium">Active Users (Today)</CardTitle>
+                      <Activity className="h-4 w-4 text-muted-foreground" />
+                    </CardHeader>
+                    <CardContent>
+                      <div className="text-2xl font-bold">{stats.activeUsersToday}</div>
+                      <p className="text-xs text-muted-foreground">Mocked data</p>
+                    </CardContent>
+                  </Card>
+                  <Card className="xl:col-span-1">
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                      <CardTitle className="text-sm font-medium">New Campaigns (Today)</CardTitle>
+                      <Zap className="h-4 w-4 text-muted-foreground" />
+                    </CardHeader>
+                    <CardContent>
+                      <div className="text-2xl font-bold">+{stats.campaignsCreatedToday}</div>
+                      <p className="text-xs text-muted-foreground">Mocked data</p>
+                    </CardContent>
+                  </Card>
+                   <Card className="xl:col-span-1">
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                      <CardTitle className="text-sm font-medium">AI Flows Executed</CardTitle>
+                      <Brain className="h-4 w-4 text-muted-foreground" />
+                    </CardHeader>
+                    <CardContent>
+                      <div className="text-2xl font-bold">{stats.aiFlowsExecuted}</div>
+                      <p className="text-xs text-muted-foreground">Mocked total (e.g., Genkit)</p>
+                    </CardContent>
+                  </Card>
+                   <Card className="xl:col-span-1">
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                      <CardTitle className="text-sm font-medium">Feedback Items</CardTitle>
+                      <MessageSquare className="h-4 w-4 text-muted-foreground" />
+                    </CardHeader>
+                    <CardContent>
+                      <div className="text-2xl font-bold">{stats.feedbackItemsSubmitted}</div>
+                      <p className="text-xs text-muted-foreground">Total feedback submitted</p>
+                    </CardContent>
+                  </Card>
+                </div>
+            )}
+            
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <Card className="lg:col-span-2">
+                    <CardHeader>
+                        <CardTitle className="font-headline flex items-center gap-2 text-xl"><LucideLineChart className="h-5 w-5 text-primary"/>Weekly Platform Activity (Mock)</CardTitle>
+                        <CardDescription>Overview of user, campaign, and AI flow trends this week.</CardDescription>
+                    </CardHeader>
+                    <CardContent className="h-[350px]">
+                        <ResponsiveContainer width="100%" height="100%">
+                            <RechartsLineChart data={mockWeeklyActivityData}>
+                                <CartesianGrid strokeDasharray="3 3" />
+                                <XAxis dataKey="date" stroke="hsl(var(--muted-foreground))" fontSize={12} />
+                                <YAxis yAxisId="left" stroke="hsl(var(--primary))" fontSize={12} />
+                                <YAxis yAxisId="right" orientation="right" stroke="hsl(var(--accent))" fontSize={12} />
+                                <Tooltip
+                                    contentStyle={{ backgroundColor: 'hsl(var(--background))', border: '1px solid hsl(var(--border))', borderRadius: 'var(--radius)'}}
+                                    itemStyle={{ color: 'hsl(var(--foreground))' }}
+                                    cursor={{fill: 'hsl(var(--muted))', fillOpacity: 0.3}}
+                                />
+                                <Legend wrapperStyle={{paddingTop: '20px'}} />
+                                <Line yAxisId="left" type="monotone" dataKey="users" name="Active Users" stroke="hsl(var(--primary))" strokeWidth={2} dot={{ r: 4, fill: "hsl(var(--primary))" }} activeDot={{ r: 6 }} />
+                                <Line yAxisId="left" type="monotone" dataKey="campaigns" name="Campaigns Created" stroke="hsl(var(--chart-4))" strokeWidth={2} dot={{ r: 4, fill: "hsl(var(--chart-4))" }} activeDot={{ r: 6 }} />
+                                <Line yAxisId="right" type="monotone" dataKey="flows" name="AI Flows" stroke="hsl(var(--accent))" strokeWidth={2} dot={{ r: 4, fill: "hsl(var(--accent))" }} activeDot={{ r: 6 }} />
+                            </RechartsLineChart>
+                        </ResponsiveContainer>
+                    </CardContent>
+                </Card>
+                <Card>
+                    <CardHeader>
+                        <CardTitle className="font-headline flex items-center gap-2 text-xl"><PieChart className="h-5 w-5 text-primary"/>Top Content Formats (Mock)</CardTitle>
+                        <CardDescription>Distribution of generated content formats.</CardDescription>
+                    </CardHeader>
+                    <CardContent className="h-[350px]">
+                        <ResponsiveContainer width="100%" height="100%">
+                            <RechartsPieChart>
+                                <Pie data={mockTopContentFormatsData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={100} labelLine={false} label={({ name, percent }) => `${name} (${(percent * 100).toFixed(0)}%)`}>
+                                    {mockTopContentFormatsData.map((entry, index) => (
+                                        <Cell key={`cell-${index}`} fill={PIE_CHART_COLORS[index % PIE_CHART_COLORS.length]} />
+                                    ))}
+                                </Pie>
+                                <Tooltip contentStyle={{ backgroundColor: 'hsl(var(--background))', border: '1px solid hsl(var(--border))', borderRadius: 'var(--radius)'}}/>
+                                <Legend wrapperStyle={{paddingTop: '20px'}}/>
+                            </RechartsPieChart>
+                        </ResponsiveContainer>
+                    </CardContent>
+                </Card>
+            </div>
+        </TabsContent>
+
         <TabsContent value="users" className="mt-6">
           <Card>
             <CardHeader>
@@ -240,17 +331,98 @@ export default function AdminDashboardPage() {
             </CardContent>
           </Card>
         </TabsContent>
+
         <TabsContent value="campaigns" className="mt-6">
           <Card>
             <CardHeader>
               <CardTitle className="font-headline text-xl">All Campaigns</CardTitle>
-              <CardDescription>View, manage, and moderate all campaigns on the platform.</CardDescription>
+              <CardDescription>View, manage, and moderate all campaigns on the platform. Click &quot;View&quot; on a campaign to see its details below.</CardDescription>
             </CardHeader>
             <CardContent>
-              <AdminCampaignList />
+              <AdminCampaignList 
+                onCampaignAction={handleAdminCampaignAction} 
+                allCampaigns={allCampaigns}
+                isLoadingCampaigns={isLoadingCampaigns}
+                campaignFetchError={campaignFetchError}
+              />
             </CardContent>
           </Card>
         </TabsContent>
+
+        <TabsContent value="campaign_detail_view" className="mt-6 space-y-6">
+             {isFetchingCampaignDetail && (
+                <div className="flex justify-center items-center min-h-[300px]">
+                    <Loader2 className="h-12 w-12 animate-spin text-primary" />
+                    <p className="ml-3">Loading campaign details...</p>
+                </div>
+            )}
+            {!isFetchingCampaignDetail && !selectedCampaignForAdminView && (
+                <Alert>
+                    <Info className="h-5 w-5"/>
+                    <AlertTitle>No Campaign Selected</AlertTitle>
+                    <AlertDescription>Please select a campaign from the &quot;Campaign Oversight&quot; tab to view its details here.</AlertDescription>
+                </Alert>
+            )}
+            {selectedCampaignForAdminView && !isFetchingCampaignDetail && (
+                <>
+                    <Card>
+                        <CardHeader>
+                            <CardTitle className="font-headline text-2xl flex items-center justify-between">
+                                <span>Campaign: &quot;{selectedCampaignForAdminView.title}&quot;</span>
+                                <Button variant="outline" size="sm" onClick={() => { setSelectedCampaignForAdminView(null); setActiveMainTab("campaigns");}}>
+                                    <XCircle className="mr-2 h-4 w-4"/> Close Detail View
+                                </Button>
+                            </CardTitle>
+                            <CardDescription>
+                                User ID: {selectedCampaignForAdminView.userId} | Status: {selectedCampaignForAdminView.status}
+                                {selectedCampaignForAdminView.isFlagged && <span className="ml-2 text-destructive font-semibold">(FLAGGED)</span>}
+                            </CardDescription>
+                            {selectedCampaignForAdminView.isFlagged && selectedCampaignForAdminView.adminModerationNotes && (
+                                <p className="text-sm text-destructive">Admin Notes: {selectedCampaignForAdminView.adminModerationNotes}</p>
+                            )}
+                        </CardHeader>
+                        <CardContent>
+                            <p><span className="font-semibold">Brief:</span> {selectedCampaignForAdminView.brief}</p>
+                            {selectedCampaignForAdminView.targetAudience && <p><span className="font-semibold">Audience:</span> {selectedCampaignForAdminView.targetAudience}</p>}
+                            {selectedCampaignForAdminView.tone && <p><span className="font-semibold">Tone:</span> {selectedCampaignForAdminView.tone}</p>}
+                            {selectedCampaignForAdminView.contentGoals && selectedCampaignForAdminView.contentGoals.length > 0 && <p><span className="font-semibold">Goals:</span> {selectedCampaignForAdminView.contentGoals.join(', ')}</p>}
+                        </CardContent>
+                    </Card>
+
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                        <AgentDebatePanel
+                             debateMessages={debateMessagesForPreview.map(interaction => ({
+                                agentId: interaction.agentId || `agent-${interaction.agent.replace(/\s+/g, '-').toLowerCase()}`,
+                                agentName: interaction.agentName || interaction.agent,
+                                agentRole: (interaction.role || 'Orchestrator') as AgentRole,
+                                message: interaction.message,
+                                timestamp: new Date(interaction.timestamp),
+                                type: interaction.type || 'statement'
+                            }))}
+                            isDebating={false} // Admin view is static
+                            debateTopic={`Debate for: "${selectedCampaignForAdminView.title}"`}
+                        />
+                        <ContentEvolutionTimeline
+                            versions={contentVersionsForPreview}
+                            onViewVersion={(version) => {
+                                setSelectedCampaignForAdminView(prev => prev ? ({...prev, contentVersions: prev.contentVersions.map(v => v.id === version.id ? version : v) }) : null); // Update local state to show this version
+                                toast({title: `Admin viewing version ${version.versionNumber}`});
+                            }}
+                        />
+                    </div>
+                    <MultiFormatPreview
+                        content={multiFormatContentForPreview}
+                        isLoading={false} // Static view
+                        campaignId={selectedCampaignForAdminView.id}
+                        currentCampaign={selectedCampaignForAdminView}
+                        currentContentVersion={latestContentVersionForPreview}
+                        // Feedback submission disabled for admin view for now, or could be different type of feedback
+                        onFeedbackSubmittedSuccessfully={() => toast({title: "Admin Note", description: "Feedback panel is for user interaction. Admins moderate directly."})}
+                    />
+                </>
+            )}
+        </TabsContent>
+
          <TabsContent value="data_export" className="mt-6">
           <Card>
             <CardHeader>
@@ -283,4 +455,3 @@ export default function AdminDashboardPage() {
     </div>
   );
 }
-
