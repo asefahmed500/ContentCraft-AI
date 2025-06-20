@@ -49,11 +49,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const updateSessionUser = async (dataToUpdate: Partial<AuthContextType['user']>) => {
-    // This function is a wrapper around NextAuth's update if you need to trigger a session update from client.
-    // Note: This typically re-fetches the session based on the JWT. 
-    // For direct modifications like XP, you'd usually make an API call to your backend,
-    // update the DB, and then the new session (on next load or if update() re-fetches) would reflect it.
-    // Or, you can pass data directly to update() if your JWT callback handles merging it.
     await updateNextAuthSession({ user: dataToUpdate });
   };
   

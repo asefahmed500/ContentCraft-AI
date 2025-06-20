@@ -75,9 +75,9 @@ export const authOptions: NextAuthOptions = {
           name: user.name,
           image: user.image,
           role: user.role || 'viewer',
-          totalXP: user.totalXP || defaultGamification.totalXP,
-          level: user.level || defaultGamification.level,
-          badges: user.badges || defaultGamification.badges,
+          totalXP: user.totalXP ?? defaultGamification.totalXP,
+          level: user.level ?? defaultGamification.level,
+          badges: user.badges || defaultGamification.badges, // `||` is fine for arrays defaulting to empty
         } as MyAppUser;
       }
     })
@@ -88,11 +88,8 @@ export const authOptions: NextAuthOptions = {
   callbacks: {
     async jwt({ token, user, trigger, session }) {
       if (trigger === "update" && session?.user) {
-        // If session update is triggered, merge new user data into token
-        // This is useful if you update user details like name, role, XP from settings page
-        // For XP updates, the session object passed to update() should have the new XP values
         if (session.user.name) token.name = session.user.name;
-        if (session.user.image) token.picture = session.user.image; // NextAuth token uses 'picture' for image
+        if (session.user.image) token.picture = session.user.image; 
         if ((session.user as MyAppUser).role) token.role = (session.user as MyAppUser).role;
         if ((session.user as MyAppUser).totalXP !== undefined) token.totalXP = (session.user as MyAppUser).totalXP;
         if ((session.user as MyAppUser).level !== undefined) token.level = (session.user as MyAppUser).level;
@@ -104,8 +101,8 @@ export const authOptions: NextAuthOptions = {
         const typedUser = user as MyAppUser;
         token.id = typedUser.id || (typedUser as any)._id?.toString();
         token.role = typedUser.role || 'viewer';
-        token.totalXP = typedUser.totalXP || defaultGamification.totalXP;
-        token.level = typedUser.level || defaultGamification.level;
+        token.totalXP = typedUser.totalXP ?? defaultGamification.totalXP;
+        token.level = typedUser.level ?? defaultGamification.level;
         token.badges = typedUser.badges || defaultGamification.badges;
       }
       return token;
@@ -115,9 +112,9 @@ export const authOptions: NextAuthOptions = {
         const typedSessionUser = session.user as MyAppUser;
         typedSessionUser.id = token.id as string;
         typedSessionUser.role = token.role as string;
-        typedSessionUser.totalXP = token.totalXP as number;
-        typedSessionUser.level = token.level as number;
-        typedSessionUser.badges = token.badges as string[];
+        typedSessionUser.totalXP = (token.totalXP as number) ?? defaultGamification.totalXP;
+        typedSessionUser.level = (token.level as number) ?? defaultGamification.level;
+        typedSessionUser.badges = (token.badges as string[]) || defaultGamification.badges;
       }
       return session;
     },
@@ -136,13 +133,16 @@ export const authOptions: NextAuthOptions = {
             image: user.image,
             emailVerified: new Date(),
             role: 'viewer',
-            ...defaultGamification,
+            totalXP: defaultGamification.totalXP,
+            level: defaultGamification.level,
+            badges: defaultGamification.badges,
           };
-          const result = await usersCollection.insertOne(newUserDoc as any); // Cast to any if schema mismatch temporarily
+          const result = await usersCollection.insertOne(newUserDoc as any); 
           dbUser = { ...newUserDoc, _id: result.insertedId } as any;
         } else {
           const updates: Partial<MyAppUser> = {};
-          if (dbUser.image !== user.image) updates.image = user.image;
+          if (dbUser.image !== user.image && user.image) updates.image = user.image; // check user.image exists
+          if (dbUser.name !== user.name && user.name) updates.name = user.name; // update name if changed via Google
           if (dbUser.totalXP === undefined) updates.totalXP = defaultGamification.totalXP;
           if (dbUser.level === undefined) updates.level = defaultGamification.level;
           if (dbUser.badges === undefined) updates.badges = defaultGamification.badges;
@@ -151,15 +151,17 @@ export const authOptions: NextAuthOptions = {
                 { email: user.email as string },
                 { $set: updates }
             );
+            // After updating, re-fetch dbUser to get the latest data
+            dbUser = await usersCollection.findOne({ email: user.email as string });
           }
         }
       }
-      // Ensure gamification fields are set on the user object passed to JWT callback
+      
       if (dbUser) {
-        user.id = dbUser._id!.toString(); // NextAuth expects id as string
+        user.id = dbUser._id!.toString(); 
         (user as MyAppUser).role = dbUser.role || 'viewer';
-        (user as MyAppUser).totalXP = dbUser.totalXP || defaultGamification.totalXP;
-        (user as MyAppUser).level = dbUser.level || defaultGamification.level;
+        (user as MyAppUser).totalXP = dbUser.totalXP ?? defaultGamification.totalXP;
+        (user as MyAppUser).level = dbUser.level ?? defaultGamification.level;
         (user as MyAppUser).badges = dbUser.badges || defaultGamification.badges;
       }
       return true;
