@@ -4,10 +4,8 @@ import type { NextRequest } from 'next/server';
 import { getToken } from 'next-auth/jwt';
 import clientPromise from '@/lib/mongodb';
 import { MongoClient, Db, ObjectId } from 'mongodb';
-import type { Campaign, ContentVersion } from '@/types/content'; 
-import { mapCampaignDocumentToCampaign } from '@/app/api/campaigns/route'; // Import the shared mapper
-
-// ensureDate function is implicitly available via mapCampaignDocumentToCampaign
+import type { Campaign } from '@/types/content'; 
+import { mapCampaignDocumentToCampaign } from '@/app/api/campaigns/route'; 
 
 export async function GET(request: NextRequest) {
   try {
@@ -20,7 +18,6 @@ export async function GET(request: NextRequest) {
     const db: Db = client.db(process.env.MONGODB_DB_NAME || undefined);
     const campaignsCollection = db.collection<Omit<Campaign, 'id'>>('campaigns');
     
-    // New: Support fetching a single campaign by ID for admin detail view
     const { searchParams } = new URL(request.url);
     const campaignId = searchParams.get('id');
     const fetchSingle = searchParams.get('single') === 'true';
@@ -29,7 +26,6 @@ export async function GET(request: NextRequest) {
         if (!ObjectId.isValid(campaignId)) {
             return NextResponse.json({ error: 'Invalid Campaign ID format for single fetch' }, { status: 400 });
         }
-        // Admins can view any campaign
         const campaignDoc = await campaignsCollection.findOne({ _id: new ObjectId(campaignId) });
         if (!campaignDoc) {
             return NextResponse.json({ error: 'Campaign not found' }, { status: 404 });
@@ -38,7 +34,6 @@ export async function GET(request: NextRequest) {
         return NextResponse.json(campaign, { status: 200 });
     }
     
-    // Fetch all campaigns for admin overview
     const allCampaignDocs = await campaignsCollection.find({}).sort({ updatedAt: -1, createdAt: -1 }).toArray();
     
     const formattedCampaigns: Campaign[] = allCampaignDocs.map(doc => 

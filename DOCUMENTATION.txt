@@ -1,6 +1,6 @@
 
 ContentCraft AI - Project Documentation
-Version: 2.0 (Reflecting Admin-Centric Structure after (app) folder removal)
+Version: 2.1 (Reflecting (app) folder removal & Admin-Centric Structure)
 
 Table of Contents
 -----------------
@@ -18,13 +18,11 @@ Table of Contents
 -----------------
 1. Project Overview
 -----------------
-ContentCraft AI is a Next.js web application designed as a multi-agent AI content creation system. It aims to assist users (primarily administrators and editors via the admin dashboard or direct API interaction) in generating comprehensive content campaigns by leveraging specialized AI agents that collaborate, analyze brand identity, debate strategies, and produce content in multiple formats. The platform includes features for user authentication (with roles: viewer, editor, admin), campaign management, brand analysis, simulated agent interactions, content generation, performance prediction (simulated), user feedback mechanisms (API-based), content translation, and a gamification system. It incorporates a dedicated admin dashboard for platform oversight, user management, campaign and content version moderation (including a dedicated flagged content view), and platform analytics. APIs exist for users to manage their profile settings (name/password if credential account), but the dedicated UI for this has been removed.
+ContentCraft AI is a Next.js web application designed as a multi-agent AI content creation system. After the removal of the `src/app/(app)` directory (which housed a dedicated user dashboard and settings page), the platform is primarily admin-centric. Administrators and editors (conceptually via direct API interaction or through admin-managed campaigns) can leverage specialized AI agents to generate comprehensive content campaigns. The system supports brand analysis, simulated agent debates, and multi-format content production. Key platform features include robust user authentication (with roles: viewer, editor, admin), campaign management, content translation, and a gamification system. A comprehensive admin dashboard provides tools for platform oversight, user management (roles, banning), campaign and content version moderation (including a dedicated flagged content view), and platform analytics. User-specific settings like profile name and password changes (for credential accounts) are available via API endpoints, though a dedicated user-facing UI for these is no longer present.
 
 -----------------
 2. Core Architecture
 -----------------
-The application is built using a modern JavaScript stack:
-
 *   **Frontend**:
     *   Next.js 15+ (App Router)
     *   React 18+ (Functional Components, Hooks)
@@ -35,7 +33,7 @@ The application is built using a modern JavaScript stack:
     *   Recharts (for data visualization in admin dashboard)
 
 *   **Backend**:
-    *   Next.js API Routes (for RESTful services, including admin-specific and user profile endpoints)
+    *   Next.js API Routes (for RESTful services, including admin-specific and user profile/password change endpoints)
     *   Genkit (for orchestrating AI model interactions, specifically Google Gemini)
     *   Node.js runtime environment
 
@@ -49,7 +47,7 @@ The application is built using a modern JavaScript stack:
     *   User roles ('viewer', 'editor', 'admin') stored in DB and included in session token.
 
 *   **Middleware**:
-    *   Next.js middleware (`src/middleware.ts`) protects admin routes (`/admin/*`), redirecting unauthorized users. It also handles banned user access. Non-admin authenticated users are directed to the homepage.
+    *   Next.js middleware (`src/middleware.ts`) protects admin routes (`/admin/*`) and API routes. It redirects unauthorized users or non-admin users attempting to access admin areas to the home page or login page. It also handles banned user access, redirecting them to login with an error.
 
 *   **AI Models**:
     *   Google Gemini (via Genkit and `@genkit-ai/googleai` plugin) for text generation, analysis, translation.
@@ -62,28 +60,28 @@ The application is built using a modern JavaScript stack:
     ------------------------
     *   **User Authentication & Role Awareness**:
         *   Purpose: Secure user access and tailor experience based on roles.
-        *   How: NextAuth.js with MongoDB adapter. Users can register/login via email/password or Google. Session JWTs manage authentication and include user roles. UI elements and API access are restricted based on role.
+        *   How: NextAuth.js with MongoDB adapter. Users can register/login via email/password or Google. Session JWTs manage authentication and include user roles. UI elements (like admin dashboard access) and API access are restricted based on role.
         *   Key Files: `src/app/api/auth/`, `src/middleware.ts`, `/login`, `/signup` pages.
 
-    *   **Core Content Creation Capabilities (Exposed via Admin Dashboard or Direct API)**:
-        *   Campaign Creation/Management: Admins manage all campaigns. Editors can create/edit/delete their own campaigns via API.
-        *   Creative Brief Input.
-        *   Brand DNA Analysis (Upload via Data URI).
-        *   Creative War Room Simulation (Data viewable by admin).
-        *   Multi-Format Content Generation.
-        *   Content Translation.
+    *   **Core Content Creation Capabilities (Accessed via Admin Dashboard or Direct API)**:
+        *   Campaign Creation/Management: Admins manage all campaigns. Editors can create/edit/delete their own campaigns via API or if an admin initiates a campaign for them.
+        *   Creative Brief Input: Admins input briefs.
+        *   Brand DNA Analysis (Upload via Data URI): Admins can initiate.
+        *   Creative War Room Simulation (Data viewable by admin in campaign details).
+        *   Multi-Format Content Generation: Triggered by admins or automated flows.
+        *   Content Translation: Available for generated content.
         *   Content Evolution Tracking (Admin can view raw campaign version data).
         *   Performance Prediction (Simulated, data viewable in Admin Campaign Detail).
         *   User Feedback Loop (API exists for submitting feedback `POST /api/feedback`).
-        *   Private Mode for Campaigns (Conceptual boolean flag).
+        *   Private Mode for Campaigns (Boolean flag in campaign data).
 
     *   **Gamification / Creative XP System**:
         *   Purpose: Engage users by awarding points and levels.
-        *   How: User profiles store `totalXP`, `level`, `badges`. XP awarded for activities via `/api/user/update-xp`. Progress displayed in site header for logged-in users.
-        *   Key Files: `src/components/UserXPDisplay.tsx`, `src/components/SiteHeader.tsx`, `src/app/api/user/update-xp/route.ts`.
+        *   How: User profiles store `totalXP`, `level`, `badges`. XP awarded for activities (e.g., feedback submission) via `/api/user/update-xp`. Progress displayed in site header for logged-in users and on the Admin XP Leaderboard.
+        *   Key Files: `src/components/UserXPDisplay.tsx`, `src/components/SiteHeader.tsx`, `src/app/api/user/update-xp/route.ts`, `src/app/(admin)/dashboard/page.tsx` (for leaderboard).
 
-    *   **User Settings & Profile Management (API-Only)**:
-        *   Purpose: Allow users to manage their profile (name, password if credential account) via API.
+    *   **User Settings & Profile Management (API-Only for Users)**:
+        *   Purpose: Allow users to manage their profile name and password (for credential accounts) via API.
         *   How: The UI for these settings (`/dashboard/settings`) has been removed.
             *   `PUT /api/user/profile` to update user's name.
             *   `POST /api/user/change-password` to change password (for credential accounts).
@@ -93,17 +91,17 @@ The application is built using a modern JavaScript stack:
     ------------------
     *   **Admin Dashboard & Platform Overview**:
         *   Purpose: Centralized control panel for administrators.
-        *   How: Accessible via `/admin/dashboard`. Displays summary statistics, charts for platform activity (some mocked), XP leaderboard, and provides navigation to user, campaign, and flagged content management sections.
+        *   How: Accessible via `/admin/dashboard`. Displays summary statistics (total users, campaigns), charts for platform activity (some mocked), an XP leaderboard, and provides navigation to user, campaign, flagged content management, and data export sections.
         *   Key Files: `src/app/(admin)/dashboard/page.tsx`, `src/app/(admin)/layout.tsx`.
 
     *   **User Management (Roles & Banning)**:
         *   Purpose: Admins can manage user accounts, roles, and access.
-        *   How: Admins can view a table of all users, change their roles (viewer, editor, admin), and ban/unban users. Changes are persisted to the `users` collection via `PUT /api/admin/users/[userId]`. Middleware and NextAuth callbacks enforce bans.
+        *   How: Admins can view a table of all users, change their roles (viewer, editor, admin), and ban/unban users. Changes are persisted to the `users` collection via `PUT /api/admin/users/[userId]`. Middleware and NextAuth callbacks enforce bans and role permissions. Admins cannot ban themselves or change their own role to non-admin through this panel.
         *   Key Files: `src/app/(admin)/dashboard/components/UserTable.tsx`, `src/app/api/admin/users/route.ts`, `src/app/api/admin/users/[userId]/route.ts`.
 
     *   **Campaign Oversight & Moderation**:
         *   Purpose: Admins can view, manage, and moderate all campaigns.
-        *   How: Admins list all campaigns (from `/api/admin/campaigns`). They can filter, view full details (brief, raw debates & versions), flag/unflag campaigns, add moderation notes (via `PUT /api/admin/campaigns/[campaignId]/flag`), and delete any campaign (via `DELETE /api/admin/campaigns/[campaignId]`).
+        *   How: Admins list all campaigns (from `/api/admin/campaigns`). They can filter, view full details (brief, raw debates & versions in a simplified view), flag/unflag campaigns, add moderation notes (via `PUT /api/admin/campaigns/[campaignId]/flag`), and delete any campaign (via `DELETE /api/admin/campaigns/[campaignId]`).
         *   Key Files: `src/app/(admin)/dashboard/components/AdminCampaignList.tsx`, `src/app/(admin)/dashboard/page.tsx` (for detail view tab), `src/app/api/admin/campaigns/route.ts`, `src/app/api/admin/campaigns/[campaignId]/route.ts`, `src/app/api/admin/campaigns/[campaignId]/flag/route.ts`.
 
     *   **Content Version Moderation (Flagged Content View)**:
@@ -167,8 +165,8 @@ The application is built using a modern JavaScript stack:
         *   `isPrivate`: Boolean (default false)
         *   `isFlagged`: Boolean (default false, for admin campaign moderation)
         *   `adminModerationNotes`: String (default '', for admin campaign moderation)
-        *   `scheduledPosts`: Array (optional)
-        *   `abTests`: Array (optional)
+        *   `scheduledPosts`: Array (optional, of `ScheduledPost` structure)
+        *   `abTests`: Array (optional, of `ABTestInstance` structure)
         *   `createdAt`: Date
         *   `updatedAt`: Date
 
@@ -183,12 +181,12 @@ The application is built using a modern JavaScript stack:
 
 
     *   **ContentVersion** (embedded in Campaign):
-        *   `id`: String (unique version identifier)
+        *   `id`: String (unique version identifier, auto-generated if not provided)
         *   `versionNumber`: Number
         *   `timestamp`: Date
         *   `actorName`: String
         *   `changeSummary`: String
-        *   `multiFormatContentSnapshot`: Object (MultiFormatContent)
+        *   `multiFormatContentSnapshot`: Object (MultiFormatContent, defaults to empty object)
         *   `isFlagged`: Boolean (default false, for admin moderation of this version)
         *   `adminModerationNotes`: String (default '', admin notes for this version)
 
@@ -220,15 +218,15 @@ Refer to `README.md`. Key `.env.local` variables: `MONGODB_URI`, `NEXTAUTH_SECRE
 -----------------
 7. Middleware & Security
 -----------------
-*   **Route Protection**: `src/middleware.ts` protects `/admin/*` (authentication + 'admin' role). Unauthorized users are redirected to `/login`. Authenticated non-admin users are redirected to `/` if they attempt to access `/admin/*`.
+*   **Route Protection**: `src/middleware.ts` protects `/admin/*` routes (authentication + 'admin' role). Unauthorized users are redirected to `/login`. Authenticated non-admin users are redirected to `/` if they attempt to access `/admin/*`.
+*   **API Protection**: Most API routes check for general authentication. Admin-specific APIs (`/api/admin/*`) additionally check for the 'admin' role in the JWT.
 *   **Banned Users**: NextAuth `signIn` callback prevents login if `isBanned` is true. Middleware redirects already authenticated but subsequently banned users from protected routes to `/login` (which will then show an error).
-*   **API Security**: Admin APIs (`/api/admin/*`) check for 'admin' role in JWT. Other sensitive APIs check for general authentication. Role-based access for campaign creation/editing is handled in respective API routes.
 
 -----------------
 8. Future Enhancements
 -----------------
 *   Reintroduction of a simplified User Dashboard for non-admin authenticated users (e.g., for campaign viewing and API-key management if direct interaction is desired).
-*   UI for users to manage their profile (name, password) if the `(app)/dashboard/settings` page is restored or a new settings page is created.
+*   UI for users to manage their profile (name, password) if a new settings page is created.
 *   Real-time Agent Debates (WebSockets).
 *   Full File Uploads & Processing (Cloud Storage instead of data URIs for large files).
 *   Advanced BrandDNA persistence, evolution tracking, and usage in generation.

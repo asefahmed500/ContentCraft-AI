@@ -40,15 +40,16 @@ export const mapCampaignDocumentToCampaign = (campaignDoc: Omit<Campaign, 'id'> 
         id: cv.id || new ObjectId().toString(), // Ensure version ID exists
         versionNumber: cv.versionNumber || 0,
         timestamp: ensureDate(cv.timestamp) || new Date(),
+        multiFormatContentSnapshot: cv.multiFormatContentSnapshot || {},
         isFlagged: cv.isFlagged ?? false,
-        adminModerationNotes: cv.adminModerationNotes ?? '', // Default to empty string
+        adminModerationNotes: cv.adminModerationNotes ?? '', 
     })),
     scheduledPosts: (campaignDoc.scheduledPosts || []).map(sp => ({ ...sp, id: sp.id || new ObjectId().toString(), scheduledAt: ensureDate(sp.scheduledAt) || new Date() })),
     abTests: (campaignDoc.abTests || []).map(ab => ({ ...ab, id: ab.id || new ObjectId().toString(), createdAt: ensureDate(ab.createdAt) || new Date() })),
     status: campaignDoc.status || 'draft',
     isPrivate: campaignDoc.isPrivate ?? false,
     isFlagged: campaignDoc.isFlagged ?? false, 
-    adminModerationNotes: campaignDoc.adminModerationNotes ?? '', // Default to empty string
+    adminModerationNotes: campaignDoc.adminModerationNotes ?? '',
     createdAt: ensureDate(campaignDoc.createdAt) || new Date(),
     updatedAt: ensureDate(campaignDoc.updatedAt) || new Date(),
   };
@@ -65,13 +66,12 @@ export async function GET(request: NextRequest) {
 
     const { searchParams } = new URL(request.url);
     const campaignId = searchParams.get('id');
-    // const fetchSingle = searchParams.get('single') === 'true'; // This param seems specific to admin endpoint
-
+    
     const client = await clientPromise;
     const db = client.db(process.env.MONGODB_DB_NAME);
     const campaignsCollection = db.collection<Omit<Campaign, 'id'>>('campaigns'); 
     
-    if (campaignId) { // Fetch a single campaign by ID for the logged-in user
+    if (campaignId) { 
         if (!ObjectId.isValid(campaignId)) {
             return NextResponse.json({ error: 'Invalid Campaign ID format' }, { status: 400 });
         }
@@ -83,7 +83,6 @@ export async function GET(request: NextRequest) {
         return NextResponse.json(campaign, { status: 200 });
     }
 
-    // Fetch all campaigns for the logged-in user
     const userCampaignDocs = await campaignsCollection.find({ userId }).sort({ updatedAt: -1, createdAt: -1 }).toArray();
     const formattedCampaigns: Campaign[] = userCampaignDocs.map(doc => mapCampaignDocumentToCampaign({ ...doc, _id: doc._id! }));
 
@@ -101,7 +100,6 @@ export async function POST(request: NextRequest) {
     if (!token || !token.id) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
-    // Allow 'editor' or 'admin' to create campaigns
     if (token.role !== 'editor' && token.role !== 'admin') {
       return NextResponse.json({ error: 'Forbidden: Insufficient permissions to create campaigns.' }, { status: 403 });
     }
@@ -180,7 +178,6 @@ export async function PUT(request: NextRequest) {
     
     const updateData: Partial<Omit<Campaign, 'id' | '_id' | 'userId' | 'createdAt'>> = { updatedAt: new Date() };
     
-    // Only update fields that are present in the body
     if (Object.prototype.hasOwnProperty.call(body, 'title')) updateData.title = body.title;
     if (Object.prototype.hasOwnProperty.call(body, 'brief')) updateData.brief = body.brief;
     if (Object.prototype.hasOwnProperty.call(body, 'targetAudience')) updateData.targetAudience = body.targetAudience === null ? undefined : body.targetAudience;
@@ -190,9 +187,6 @@ export async function PUT(request: NextRequest) {
     if (Object.prototype.hasOwnProperty.call(body, 'referenceMaterials')) updateData.referenceMaterials = body.referenceMaterials === null ? [] : body.referenceMaterials;
     if (Object.prototype.hasOwnProperty.call(body, 'brandId')) updateData.brandId = body.brandId === null ? undefined : body.brandId;
     if (Object.prototype.hasOwnProperty.call(body, 'isPrivate')) updateData.isPrivate = body.isPrivate ?? false;
-    // Admin-only fields should not be updatable here by regular users.
-    // if (Object.prototype.hasOwnProperty.call(body, 'isFlagged')) updateData.isFlagged = body.isFlagged ?? false;
-    // if (Object.prototype.hasOwnProperty.call(body, 'adminModerationNotes')) updateData.adminModerationNotes = body.adminModerationNotes ?? '';
 
 
     if (Object.prototype.hasOwnProperty.call(body, 'contentVersions')) {
@@ -200,6 +194,7 @@ export async function PUT(request: NextRequest) {
         ...v,
         id: v.id || new ObjectId().toString(),
         timestamp: ensureDate(v.timestamp) || new Date(),
+        multiFormatContentSnapshot: v.multiFormatContentSnapshot || {},
         isFlagged: v.isFlagged ?? false,
         adminModerationNotes: v.adminModerationNotes ?? '',
       }));
@@ -229,7 +224,6 @@ export async function PUT(request: NextRequest) {
     const db = client.db(process.env.MONGODB_DB_NAME);
     const campaignsCollection = db.collection<Omit<Campaign, 'id'>>('campaigns');
 
-    // Ensure user can only update their own campaigns
     const query = { _id: new ObjectId(campaignId), userId: userId };
     
     const result = await campaignsCollection.findOneAndUpdate(
@@ -280,7 +274,6 @@ export async function DELETE(request: NextRequest) {
     const db = client.db(process.env.MONGODB_DB_NAME);
     const campaignsCollection = db.collection('campaigns');
     
-    // User can only delete their own campaigns
     const query = { _id: new ObjectId(campaignId), userId: userId };
         
     const result = await campaignsCollection.deleteOne(query);
@@ -289,7 +282,6 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: 'Campaign not found or user not authorized to delete' }, { status: 404 });
     }
 
-    // Also delete associated feedback logs for this campaign
     const feedbackCollection = db.collection('feedback_logs');
     await feedbackCollection.deleteMany({ campaignId: new ObjectId(campaignId), userId: new ObjectId(userId) });
 

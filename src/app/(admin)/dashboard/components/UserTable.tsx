@@ -26,6 +26,7 @@ import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, MoreHorizontal, UserX, UserCheck, ShieldAlert, Edit, Search as SearchIcon } from 'lucide-react';
 import { format } from 'date-fns';
+import { useSession } from 'next-auth/react'; // Import useSession
 
 interface AdminUser extends NextAuthUser {
   id: string;
@@ -33,11 +34,12 @@ interface AdminUser extends NextAuthUser {
   totalXP?: number;
   level?: number;
   isBanned?: boolean;
-  createdAt?: Date | string; // Allow string for initial fetch, convert to Date
-  updatedAt?: Date | string; // Allow string for initial fetch, convert to Date
+  createdAt?: Date | string; 
+  updatedAt?: Date | string; 
 }
 
 export function UserTable() {
+  const { data: session } = useSession(); // Get current admin's session
   const [allUsers, setAllUsers] = useState<AdminUser[]>([]);
   const [filteredUsers, setFilteredUsers] = useState<AdminUser[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -85,6 +87,14 @@ export function UserTable() {
 
   const handleUpdateUser = async (userId: string, updates: { role?: AdminUser['role'], isBanned?: boolean }) => {
     setUpdatingUserId(userId);
+
+    // Prevent admin from changing their own role to non-admin or banning themselves
+    if (session?.user?.id === userId && (updates.role && updates.role !== 'admin' || updates.isBanned === true)) {
+        toast({ title: "Action Not Allowed", description: "You cannot change your own role to non-admin or ban yourself.", variant: "destructive" });
+        setUpdatingUserId(null);
+        return;
+    }
+
     try {
       const response = await fetch(`/api/admin/users/${userId}`, {
         method: 'PUT',
@@ -96,7 +106,7 @@ export function UserTable() {
         throw new Error(result.error || "Failed to update user");
       }
       toast({ title: "User Updated", description: `User ${result.user?.name || userId} has been updated.` });
-      fetchUsers(); // Refresh user list
+      fetchUsers(); 
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : "An unknown error occurred";
       toast({ title: "Update Failed", description: errorMessage, variant: "destructive" });
@@ -148,7 +158,7 @@ export function UserTable() {
                     <Select
                         value={user.role}
                         onValueChange={(newRole) => handleUpdateUser(user.id, { role: newRole as AdminUser['role'] })}
-                        disabled={updatingUserId === user.id || user.id === (allUsers.find(u => u.email === 'admin@example.com')?.id) /* Example: Lock admin role for a superadmin */}
+                        disabled={updatingUserId === user.id || user.id === session?.user?.id}
                         >
                         <SelectTrigger className="h-8 w-[100px] text-xs">
                         <SelectValue placeholder="Select role" />
@@ -173,7 +183,7 @@ export function UserTable() {
                     ) : (
                         <DropdownMenu>
                         <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" className="h-8 w-8 p-0">
+                            <Button variant="ghost" className="h-8 w-8 p-0" disabled={user.id === session?.user?.id && user.role === 'admin'}>
                             <span className="sr-only">Open menu</span>
                             <MoreHorizontal className="h-4 w-4" />
                             </Button>
@@ -185,16 +195,25 @@ export function UserTable() {
                             </DropdownMenuItem>
                             <DropdownMenuSeparator />
                             {user.isBanned ? (
-                            <DropdownMenuItem onSelect={() => handleUpdateUser(user.id, { isBanned: false })}>
+                            <DropdownMenuItem 
+                                onSelect={() => handleUpdateUser(user.id, { isBanned: false })}
+                                disabled={user.id === session?.user?.id}
+                            >
                                 <UserCheck className="mr-2 h-4 w-4 text-green-500" /> Unban User
                             </DropdownMenuItem>
                             ) : (
-                            <DropdownMenuItem onSelect={() => handleUpdateUser(user.id, { isBanned: true })}>
+                            <DropdownMenuItem 
+                                onSelect={() => handleUpdateUser(user.id, { isBanned: true })}
+                                disabled={user.id === session?.user?.id}
+                            >
                                 <UserX className="mr-2 h-4 w-4 text-destructive" /> Ban User
                             </DropdownMenuItem>
                             )}
                             {user.role !== 'admin' && (
-                            <DropdownMenuItem onSelect={() => handleUpdateUser(user.id, { role: 'admin' })}>
+                            <DropdownMenuItem 
+                                onSelect={() => handleUpdateUser(user.id, { role: 'admin' })}
+                                disabled={user.id === session?.user?.id}
+                            >
                                 <ShieldAlert className="mr-2 h-4 w-4 text-orange-500" /> Promote to Admin
                             </DropdownMenuItem>
                             )}
@@ -211,4 +230,3 @@ export function UserTable() {
     </div>
   );
 }
-
