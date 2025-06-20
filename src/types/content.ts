@@ -1,3 +1,4 @@
+
 export interface ContentPiece {
   id: string;
   format: ContentFormat;
@@ -25,39 +26,58 @@ export type ContentFormat =
   | 'generic';
 
 
-export type CampaignStatus = 'draft' | 'debating' | 'generating' | 'review' | 'published' | 'archived';
+export type CampaignStatus = 
+  | 'draft' 
+  | 'debating' // Orchestrator Agent is working, debate phase
+  | 'generating' // Content Writer & Visual Agents are working
+  | 'review' // Finalized content ready for user review
+  | 'published' 
+  | 'archived';
+
+export interface AgentInteraction {
+  agent: string; // e.g., "seo-optimizer", "Brand Persona"
+  message: string;
+  timestamp: Date;
+  // Optional: type: 'suggestion', 'critique', 'vote'
+}
 
 export interface ContentVersion {
-  id: string;
+  id: string; // Could be a simple sequential ID like "v1", "v2" or a UUID
+  versionNumber: number; // e.g. 1, 2, 3
   timestamp: Date;
-  actorName: string; // e.g., "AI Team", "User Edit", specific agent name
-  changeSummary: string; // Brief description of what changed or what was generated
+  actorName: string; // e.g., "AI Team", "User Edit", specific agent name like "Creative Director"
+  changeSummary: string; // Brief description of what changed or what was generated in this version
   multiFormatContentSnapshot: MultiFormatContent; // A snapshot of all generated formats at this version
+  // Optional: performanceMetrics?: Record<ContentFormat, { ctr?: number; engagement?: number; conversion?: number; openRate?: number; ctaClick?: number; audienceMatchScore?: number }>;
 }
 
 export interface Campaign {
   _id?: any; // MongoDB ObjectId
-  id: string;
-  brief: string; // Serves as title/main description
+  id: string; // String representation of _id
+  userId: string; // To associate with a user
+  title: string; // Campaign name/title from CampaignGenerator
+  brief: string; // Product or service description
   targetAudience?: string;
   tone?: string;
   contentGoals?: string[];
-  brandProfileId?: string; // Link to a BrandDNA document
-  agentDebates?: string[]; // IDs of debates (or embedded debate summaries)
-  contentHistory: ContentVersion[]; // For content evolution timeline
+  brandProfileId?: string; // Link to a BrandDNA document (optional)
+  referenceMaterials?: Array<{ type: 'url' | 'fileId' | 'text'; value: string; name?: string }>; // For uploaded links or file references
+  
+  agentDebates: AgentInteraction[]; // Stores the history of agent interactions during the debate phase
+  contentVersions: ContentVersion[]; // For content evolution timeline and storing different output versions
+  
   status: CampaignStatus;
   createdAt: Date;
   updatedAt: Date;
-  userId: string; // To associate with a user
 }
 
 export interface MultiFormatContent {
   blogPost?: string;
   tweet?: string;
   linkedInArticle?: string;
-  instagramPost?: string;
+  instagramPost?: string; // Could be text for carousel
   tiktokScript?: string;
   emailCampaign?: string;
-  adsCopy?: string;
+  adsCopy?: string; // E.g. Google Ads copy
   [key: string]: string | undefined; // For additional formats
 }

@@ -1,9 +1,10 @@
+
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import clientPromise from '@/lib/mongodb';
 import { getToken } from 'next-auth/jwt';
 import { ObjectId } from 'mongodb';
-import type { Campaign, ContentVersion } from '@/types/content';
+import type { Campaign, ContentVersion, AgentInteraction } from '@/types/content';
 
 // GET /api/campaigns - List all campaigns for the authenticated user
 export async function GET(request: NextRequest) {
@@ -20,11 +21,11 @@ export async function GET(request: NextRequest) {
     
     const userCampaigns = await campaignsCollection.find({ userId }).sort({ createdAt: -1 }).toArray();
     
-    // Ensure _id is converted to id string and contentHistory is initialized if missing
     const formattedCampaigns = userCampaigns.map(campaign => ({
       ...campaign,
       id: campaign._id!.toString(), 
-      contentHistory: campaign.contentHistory || [], // Ensure contentHistory is an array
+      contentVersions: campaign.contentVersions || [],
+      agentDebates: campaign.agentDebates || [],
     }));
 
     return NextResponse.json(formattedCampaigns, { status: 200 });
@@ -44,10 +45,10 @@ export async function POST(request: NextRequest) {
     const userId = token.id as string;
 
     const body = await request.json();
-    const { brief, targetAudience, tone, contentGoals, brandProfileId } = body;
+    const { title, brief, targetAudience, tone, contentGoals, brandProfileId, referenceMaterials } = body;
 
-    if (!brief) {
-      return NextResponse.json({ error: 'Campaign brief is required' }, { status: 400 });
+    if (!title || !brief) {
+      return NextResponse.json({ error: 'Campaign title and brief are required' }, { status: 400 });
     }
 
     const client = await clientPromise;
@@ -56,13 +57,15 @@ export async function POST(request: NextRequest) {
 
     const newCampaignData: Omit<Campaign, 'id' | '_id'> = { 
       userId,
+      title,
       brief,
       targetAudience,
       tone,
       contentGoals,
       brandProfileId, 
+      referenceMaterials: referenceMaterials || [],
       agentDebates: [],
-      contentHistory: [], // Initialize with empty content history
+      contentVersions: [],
       status: 'draft', 
       createdAt: new Date(),
       updatedAt: new Date(),
@@ -74,10 +77,11 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: 'Failed to create campaign' }, { status: 500 });
     }
 
-    const createdCampaign = {
+    const createdCampaign: Campaign = {
       id: result.insertedId.toString(),
-      ...newCampaignData
-    } as Campaign; 
+      ...newCampaignData,
+       _id: result.insertedId, // Add _id back for consistency if needed elsewhere, though id is primary
+    }; 
 
     return NextResponse.json(createdCampaign, { status: 201 });
   } catch (error) {
@@ -107,27 +111,32 @@ export async function PUT(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { brief, targetAudience, tone, contentGoals, status, contentHistory } = body;
+    const { title, brief, targetAudience, tone, contentGoals, status, contentVersions, agentDebates, referenceMaterials } = body;
 
-    const updateData: Partial<Campaign> & { $set?: any } = { updatedAt: new Date() };
+    const updateData: Partial<Omit<Campaign, 'id' | '_id' | 'userId' | 'createdAt'>> & { $set?: any } = { updatedAt: new Date() };
+    if (title !== undefined) updateData.title = title;
     if (brief !== undefined) updateData.brief = brief;
     if (targetAudience !== undefined) updateData.targetAudience = targetAudience;
     if (tone !== undefined) updateData.tone = tone;
     if (contentGoals !== undefined) updateData.contentGoals = contentGoals;
     if (status !== undefined) updateData.status = status;
-    if (contentHistory !== undefined) {
-      // Ensure contentHistory versions have valid timestamps
-      const validatedHistory = contentHistory.map((v: ContentVersion) => ({
+    if (referenceMaterials !== undefined) updateData.referenceMaterials = referenceMaterials;
+
+    if (contentVersions !== undefined && Array.isArray(contentVersions)) {
+      updateData.contentVersions = contentVersions.map((v: ContentVersion) => ({
         ...v,
         timestamp: v.timestamp ? new Date(v.timestamp) : new Date(),
       }));
-      updateData.contentHistory = validatedHistory;
+    }
+    if (agentDebates !== undefined && Array.isArray(agentDebates)) {
+      updateData.agentDebates = agentDebates.map((ad: AgentInteraction) => ({
+        ...ad,
+        timestamp: ad.timestamp ? new Date(ad.timestamp) : new Date(),
+      }));
     }
     
-    // Prevent updating with only updatedAt if no other fields are provided
     const updateKeys = Object.keys(updateData).filter(key => key !== 'updatedAt');
     if (updateKeys.length === 0) {
-        // If only updatedAt is present, fetch and return current campaign data without an update
         const client = await clientPromise;
         const db = client.db();
         const campaignsCollection = db.collection<Campaign>('campaigns');
@@ -135,9 +144,8 @@ export async function PUT(request: NextRequest) {
         if (!existingCampaign) {
             return NextResponse.json({ error: 'Campaign not found or user not authorized' }, { status: 404 });
         }
-        return NextResponse.json({ ...existingCampaign, id: existingCampaign._id.toString() }, { status: 200 });
+        return NextResponse.json({ ...existingCampaign, id: existingCampaign._id!.toString(), contentVersions: existingCampaign.contentVersions || [], agentDebates: existingCampaign.agentDebates || [] }, { status: 200 });
     }
-
 
     const client = await clientPromise;
     const db = client.db();
@@ -150,13 +158,14 @@ export async function PUT(request: NextRequest) {
     );
 
     if (!result.value) {
-      return NextResponse.json({ error: 'Campaign not found or user not authorized' }, { status: 404 });
+      return NextResponse.json({ error: 'Campaign not found or user not authorized for update' }, { status: 404 });
     }
     
     const updatedCampaign = {
         ...result.value,
         id: result.value._id!.toString(),
-        contentHistory: result.value.contentHistory || [], // Ensure contentHistory exists
+        contentVersions: result.value.contentVersions || [],
+        agentDebates: result.value.agentDebates || [],
     };
 
     return NextResponse.json(updatedCampaign, { status: 200 });

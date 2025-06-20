@@ -1,6 +1,7 @@
+
 "use client";
 
-import type { FormEvent} from 'react';
+import type { FormEvent, ChangeEvent} from 'react';
 import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
@@ -9,7 +10,7 @@ import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, Wand2, Lightbulb, Users, Target, Palette, FileUp, Save, Paperclip } from 'lucide-react';
+import { Loader2, Wand2, Lightbulb, Users, Target, Palette, FileUp, Save, Paperclip, Tag } from 'lucide-react';
 import type { Campaign } from '@/types/content'; 
 
 interface CampaignGeneratorProps {
@@ -19,7 +20,7 @@ interface CampaignGeneratorProps {
   selectedCampaignForEdit?: Campaign | null; 
 }
 
-const availableTones = ["Formal", "Informal", "Playful", "Serious", "Witty", "Empathetic", "Authoritative", "Casual", "Professional", "Friendly", "Bold", "Authentic"];
+const availableTones = ["Formal", "Informal", "Playful", "Serious", "Witty", "Empathetic", "Authoritative", "Casual", "Professional", "Friendly", "Bold", "Authentic", "Luxury", "Confident"];
 const availableGoals = ["Brand Awareness", "Lead Generation", "Sales Conversion", "Engagement", "Education", "Community Building", "Website Traffic", "Product Launch"];
 
 
@@ -29,51 +30,62 @@ export function CampaignGenerator({
     isGenerating,
     selectedCampaignForEdit 
 }: CampaignGeneratorProps) {
+  const [campaignTitle, setCampaignTitle] = useState('');
   const [brief, setBrief] = useState('');
   const [brandVoice, setBrandVoice] = useState('');
   const [targetAudience, setTargetAudience] = useState('');
   const [tone, setTone] = useState('');
   const [contentGoals, setContentGoals] = useState<string[]>([]);
   const [isSaving, setIsSaving] = useState(false);
+  // Placeholder for file uploads
+  const [referenceFiles, setReferenceFiles] = useState<FileList | null>(null);
 
   const { toast } = useToast();
 
   useEffect(() => {
     if (selectedCampaignForEdit) {
+      setCampaignTitle(selectedCampaignForEdit.title || '');
       setBrief(selectedCampaignForEdit.brief || '');
       setTargetAudience(selectedCampaignForEdit.targetAudience || '');
       setTone(selectedCampaignForEdit.tone || '');
       setContentGoals(selectedCampaignForEdit.contentGoals || []);
-      // Assuming brandVoice might be part of campaign or fetched separately
+      // brandVoice might be associated with brandDNA or overridden per campaign
+      // setBrandVoice(selectedCampaignForEdit.brandVoiceOverride || ''); 
     } else {
       // Reset form for new campaign
+      setCampaignTitle('');
       setBrief('');
       setTargetAudience('');
       setTone('');
       setContentGoals([]);
       setBrandVoice('');
+      setReferenceFiles(null);
     }
   }, [selectedCampaignForEdit]);
 
 
   const handleSaveCampaign = async (andStartGeneration: boolean = false) => {
+    if (!campaignTitle.trim()) {
+      toast({ title: "Campaign Name is empty", description: "Please provide a campaign name/title.", variant: "destructive" });
+      return;
+    }
     if (!brief.trim()) {
-      toast({ title: "Brief is empty", description: "Please provide a campaign brief/description.", variant: "destructive" });
+      toast({ title: "Product/Brand Description is empty", description: "Please provide a campaign brief/description.", variant: "destructive" });
       return;
     }
     setIsSaving(true);
 
     const campaignData = {
-      id: selectedCampaignForEdit?.id, // Include ID if editing
+      id: selectedCampaignForEdit?.id, 
+      title: campaignTitle.trim(),
       brief: brief.trim(),
       targetAudience: targetAudience.trim() || undefined,
       tone: tone || undefined,
       contentGoals: contentGoals.length > 0 ? contentGoals : undefined,
+      // referenceMaterials would need to be processed and uploaded here if implemented
     };
 
     try {
-      // If selectedCampaignForEdit, it's an update (PUT), else it's a create (POST)
-      // For this example, we'll use POST for create and assume PUT for update would be on /api/campaigns/[id] or similar
       const method = selectedCampaignForEdit ? 'PUT' : 'POST';
       const url = selectedCampaignForEdit ? `/api/campaigns?id=${selectedCampaignForEdit.id}` : '/api/campaigns';
 
@@ -89,14 +101,13 @@ export function CampaignGenerator({
       }
       const savedCampaign: Campaign = await response.json();
       
-      toast({ title: `Campaign ${selectedCampaignForEdit ? "Updated" : "Saved"}!`, description: `Your campaign brief has been ${selectedCampaignForEdit ? "updated" : "saved"}.` });
+      toast({ title: `Campaign ${selectedCampaignForEdit ? "Updated" : "Saved"}!`, description: `Your campaign "${savedCampaign.title}" has been ${selectedCampaignForEdit ? "updated" : "saved"}.` });
       onCampaignCreated(savedCampaign); 
 
       if (andStartGeneration) {
         await onGenerateContentForCampaign(savedCampaign, brandVoice.trim() || undefined);
       } else if (!selectedCampaignForEdit) { 
-        // Reset form only if creating a new campaign and not immediately generating
-        setBrief(''); setTargetAudience(''); setTone(''); setContentGoals([]); setBrandVoice('');
+        setCampaignTitle(''); setBrief(''); setTargetAudience(''); setTone(''); setContentGoals([]); setBrandVoice(''); setReferenceFiles(null);
       }
 
     } catch (error) {
@@ -104,6 +115,16 @@ export function CampaignGenerator({
         toast({ title: "Failed to Save Campaign", description: errorMessage, variant: "destructive" });
     } finally {
         setIsSaving(false);
+    }
+  };
+
+  const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
+    setReferenceFiles(e.target.files);
+    // In a real app, you'd handle file upload to GCS/GridFS here or upon form submission.
+    // For now, just store them in state and maybe display names.
+    if (e.target.files && e.target.files.length > 0) {
+        const fileNames = Array.from(e.target.files).map(f => f.name).join(', ');
+        toast({title: "Files Selected (Simulated)", description: `Selected: ${fileNames}. Full upload functionality pending.`});
     }
   };
 
@@ -118,13 +139,25 @@ export function CampaignGenerator({
         <CardDescription>
             {selectedCampaignForEdit 
                 ? "Update the details for your campaign. Agents will use this information."
-                : "Describe your campaign, target audience, tone, and goals. Our AI agents will take it from there."
+                : "Describe your campaign name, product, target audience, tone, and goals. Our AI agents will take it from there."
             }
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
         <div className="space-y-2">
-          <Label htmlFor="campaign-brief" className="text-base">Campaign Brief / Product Description*</Label>
+          <Label htmlFor="campaign-title" className="text-base flex items-center gap-1"><Tag className="h-4 w-4"/>Campaign Name/Title*</Label>
+          <Input
+            id="campaign-title"
+            placeholder="e.g., Spring Collection Launch, Q4 SaaS Promotion"
+            value={campaignTitle}
+            onChange={(e) => setCampaignTitle(e.target.value)}
+            className="text-base"
+            required
+          />
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="campaign-brief" className="text-base">Product/Service Description*</Label>
           <Textarea
             id="campaign-brief"
             placeholder="e.g., Launch campaign for new eco-friendly skincare line targeting young adults..."
@@ -141,14 +174,14 @@ export function CampaignGenerator({
             <Label htmlFor="target-audience" className="text-base flex items-center gap-1"><Users className="h-4 w-4"/>Target Audience</Label>
             <Input
               id="target-audience"
-              placeholder="e.g., Gen Z, Millennial Moms, B2B Tech"
+              placeholder="e.g., Gen Z, Millennial Moms, B2B Tech Decision Makers"
               value={targetAudience}
               onChange={(e) => setTargetAudience(e.target.value)}
               className="text-base"
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="tone" className="text-base flex items-center gap-1"><Palette className="h-4 w-4"/>Tone</Label>
+            <Label htmlFor="tone" className="text-base flex items-center gap-1"><Palette className="h-4 w-4"/>Desired Tone</Label>
             <Select value={tone} onValueChange={setTone}>
               <SelectTrigger id="tone" className="text-base">
                 <SelectValue placeholder="Select tone (e.g., Playful, Bold)" />
@@ -162,11 +195,7 @@ export function CampaignGenerator({
 
         <div className="space-y-2">
           <Label htmlFor="content-goals" className="text-base flex items-center gap-1"><Target className="h-4 w-4"/>Content Goals (Select up to 3)</Label>
-           <Select onValueChange={(value) => {
-              const newGoals = contentGoals.includes(value) ? contentGoals.filter(g => g !== value) : [...contentGoals, value];
-              if (newGoals.length <= 3) setContentGoals(newGoals);
-              else toast({ title: "Goal Limit Reached", description: "You can select up to 3 goals.", variant: "default"});
-           }}>
+           <Select onValueChange={(value) => { /* This component is not ideal for multi-select out of box */ }}>
             <SelectTrigger id="content-goals" className="text-base h-auto min-h-10 py-2">
                 <SelectValue placeholder="Select up to 3 goals">
                   {contentGoals.length > 0 ? contentGoals.join(', ') : "Select up to 3 goals"}
@@ -178,11 +207,14 @@ export function CampaignGenerator({
                         key={goal} 
                         value={goal} 
                         disabled={contentGoals.length >=3 && !contentGoals.includes(goal)}
-                        onPointerDown={(e) => e.preventDefault()} // Prevents closing on item click for multi-select like behavior
-                        onClick={() => { // Manages selection state
+                        onPointerDown={(e) => { // Allow clicking without closing for multi-select like behavior
+                            e.preventDefault(); // Prevent focus loss
                             const newGoals = contentGoals.includes(goal) ? contentGoals.filter(g => g !== goal) : [...contentGoals, goal];
-                             if (newGoals.length <= 3) setContentGoals(newGoals);
-                             else toast({ title: "Goal Limit Reached", description: "You can select up to 3 goals.", variant: "default"});
+                             if (newGoals.length <= 3) {
+                                setContentGoals(newGoals);
+                             } else {
+                                toast({ title: "Goal Limit Reached", description: "You can select up to 3 goals.", variant: "default"});
+                             }
                         }}
                     >
                         {goal} {contentGoals.includes(goal) ? ' ✓' : ''}
@@ -207,23 +239,30 @@ export function CampaignGenerator({
             className="text-base"
           />
           <p className="text-xs text-muted-foreground">
-            If a Brand DNA analysis was performed, its voice profile will be used. You can provide specific voice instructions here to override or augment it for this campaign.
+            If a Brand DNA analysis was performed, its voice profile will be used by default. You can provide specific voice instructions here to override or augment it for this campaign.
           </p>
         </div>
 
         <div className="space-y-2">
             <Label htmlFor="reference-materials" className="text-base flex items-center gap-1">
-                <Paperclip className="h-4 w-4" /> Reference Materials (Optional)
+                <Paperclip className="h-4 w-4" /> Reference Materials (PDFs, URLs, Docs - Placeholder)
             </Label>
             <Input 
                 id="reference-materials" 
                 type="file" 
                 multiple 
-                disabled // File upload requires more backend setup
+                onChange={handleFileChange}
                 className="text-base"
+                accept=".pdf, .txt, .md, .doc, .docx" // Restrict file types
+                disabled // Full implementation requires backend storage & processing
             />
+             {referenceFiles && referenceFiles.length > 0 && (
+                <div className="pt-2 text-sm text-muted-foreground">
+                    Selected files: {Array.from(referenceFiles).map(f => f.name).join(', ')}
+                </div>
+             )}
             <p className="text-xs text-muted-foreground">
-                Upload PDFs, URLs, or documents. (File upload functionality is planned for a future update).
+                (File upload functionality for AI processing (e.g. GCS/GridFS & Gemini analysis) is a planned feature and currently simulated).
             </p>
         </div>
 
@@ -240,7 +279,7 @@ export function CampaignGenerator({
         </Button>
         <Button 
             onClick={() => handleSaveCampaign(true)} 
-            disabled={isSaving || isGenerating || !brief.trim()} 
+            disabled={isSaving || isGenerating || !campaignTitle.trim() || !brief.trim()} 
             size="lg" 
             className="w-full sm:w-auto"
         >

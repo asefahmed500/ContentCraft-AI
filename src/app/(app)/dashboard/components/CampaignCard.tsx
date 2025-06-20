@@ -1,3 +1,4 @@
+
 "use client";
 
 import type { Campaign } from '@/types/content';
@@ -18,9 +19,18 @@ const statusColors: Record<Campaign['status'], string> = {
     draft: "bg-gray-500",
     debating: "bg-blue-500",
     generating: "bg-purple-500",
-    review: "bg-yellow-500",
+    review: "bg-yellow-500 text-yellow-foreground", // Use a contrasting text color
     published: "bg-green-500",
     archived: "bg-slate-600",
+};
+
+const statusText: Record<Campaign['status'], string> = {
+    draft: "Draft",
+    debating: "Debating",
+    generating: "Generating",
+    review: "Review",
+    published: "Published",
+    archived: "Archived",
 };
 
 
@@ -30,18 +40,22 @@ export function CampaignCard({ campaign, onView, onEdit, onDelete }: CampaignCar
       <CardHeader className="pb-3">
         <div className="flex justify-between items-start">
             <CardTitle className="font-headline text-xl leading-tight line-clamp-2">
-            {campaign.brief || "Untitled Campaign"}
+            {campaign.title || "Untitled Campaign"}
             </CardTitle>
             <Badge className={`${statusColors[campaign.status]} text-white capitalize`}>
-                {campaign.status}
+                {statusText[campaign.status]}
             </Badge>
         </div>
         <CardDescription className="text-xs text-muted-foreground flex items-center pt-1">
           <CalendarDays className="h-3 w-3 mr-1" />
-          Created: {format(new Date(campaign.createdAt), "MMM d, yyyy")} ({formatDistanceToNow(new Date(campaign.createdAt), { addSuffix: true })})
+          Created: {campaign.createdAt ? format(new Date(campaign.createdAt), "MMM d, yyyy") : 'N/A'} 
+          {campaign.createdAt ? ` (${formatDistanceToNow(new Date(campaign.createdAt), { addSuffix: true })})` : ''}
         </CardDescription>
       </CardHeader>
       <CardContent className="flex-grow space-y-2 text-sm text-muted-foreground">
+        {campaign.brief && (
+             <p className="line-clamp-2"><span className="font-medium text-foreground">Brief:</span> {campaign.brief}</p>
+        )}
         {campaign.targetAudience && (
             <p className="line-clamp-1"><span className="font-medium text-foreground">Audience:</span> {campaign.targetAudience}</p>
         )}
@@ -51,7 +65,7 @@ export function CampaignCard({ campaign, onView, onEdit, onDelete }: CampaignCar
         {campaign.contentGoals && campaign.contentGoals.length > 0 && (
              <p className="line-clamp-1"><span className="font-medium text-foreground">Goals:</span> {campaign.contentGoals.join(', ')}</p>
         )}
-        {( !campaign.targetAudience && !campaign.tone && (!campaign.contentGoals || campaign.contentGoals.length === 0) ) && (
+        {( !campaign.targetAudience && !campaign.tone && (!campaign.contentGoals || campaign.contentGoals.length === 0) && !campaign.brief) && (
             <div className="flex items-center text-muted-foreground/80">
                 <Info className="h-4 w-4 mr-2"/>
                 <p>No additional details provided for this campaign.</p>
