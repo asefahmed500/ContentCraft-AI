@@ -45,10 +45,10 @@ export async function POST(request: NextRequest) {
     const userId = token.id as string;
 
     const body = await request.json();
-    const { title, brief, targetAudience, tone, contentGoals, brandProfileId, referenceMaterials } = body;
+    const { title, brief, targetAudience, tone, contentGoals, brandId, referenceMaterials } = body;
 
     if (!title || !brief) {
-      return NextResponse.json({ error: 'Campaign title and brief are required' }, { status: 400 });
+      return NextResponse.json({ error: 'Campaign title and brief (product/service description) are required' }, { status: 400 });
     }
 
     const client = await clientPromise;
@@ -62,7 +62,7 @@ export async function POST(request: NextRequest) {
       targetAudience,
       tone,
       contentGoals,
-      brandProfileId, 
+      brandId, 
       referenceMaterials: referenceMaterials || [],
       agentDebates: [],
       contentVersions: [],
@@ -80,7 +80,7 @@ export async function POST(request: NextRequest) {
     const createdCampaign: Campaign = {
       id: result.insertedId.toString(),
       ...newCampaignData,
-       _id: result.insertedId, // Add _id back for consistency if needed elsewhere, though id is primary
+       _id: result.insertedId, 
     }; 
 
     return NextResponse.json(createdCampaign, { status: 201 });
@@ -111,9 +111,10 @@ export async function PUT(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { title, brief, targetAudience, tone, contentGoals, status, contentVersions, agentDebates, referenceMaterials } = body;
+    const { title, brief, targetAudience, tone, contentGoals, status, contentVersions, agentDebates, referenceMaterials, brandId } = body;
 
-    const updateData: Partial<Omit<Campaign, 'id' | '_id' | 'userId' | 'createdAt'>> & { $set?: any } = { updatedAt: new Date() };
+    const updateData: Partial<Omit<Campaign, 'id' | '_id' | 'userId' | 'createdAt'>> = { updatedAt: new Date() };
+    
     if (title !== undefined) updateData.title = title;
     if (brief !== undefined) updateData.brief = brief;
     if (targetAudience !== undefined) updateData.targetAudience = targetAudience;
@@ -121,6 +122,8 @@ export async function PUT(request: NextRequest) {
     if (contentGoals !== undefined) updateData.contentGoals = contentGoals;
     if (status !== undefined) updateData.status = status;
     if (referenceMaterials !== undefined) updateData.referenceMaterials = referenceMaterials;
+    if (brandId !== undefined) updateData.brandId = brandId;
+
 
     if (contentVersions !== undefined && Array.isArray(contentVersions)) {
       updateData.contentVersions = contentVersions.map((v: ContentVersion) => ({
@@ -136,20 +139,24 @@ export async function PUT(request: NextRequest) {
     }
     
     const updateKeys = Object.keys(updateData).filter(key => key !== 'updatedAt');
-    if (updateKeys.length === 0) {
-        const client = await clientPromise;
-        const db = client.db();
-        const campaignsCollection = db.collection<Campaign>('campaigns');
+    
+    const client = await clientPromise;
+    const db = client.db();
+    const campaignsCollection = db.collection<Campaign>('campaigns');
+
+    if (updateKeys.length === 0) { // No actual data change, just fetching existing
         const existingCampaign = await campaignsCollection.findOne({ _id: new ObjectId(campaignId), userId: userId });
         if (!existingCampaign) {
             return NextResponse.json({ error: 'Campaign not found or user not authorized' }, { status: 404 });
         }
-        return NextResponse.json({ ...existingCampaign, id: existingCampaign._id!.toString(), contentVersions: existingCampaign.contentVersions || [], agentDebates: existingCampaign.agentDebates || [] }, { status: 200 });
+        return NextResponse.json({ 
+            ...existingCampaign, 
+            id: existingCampaign._id!.toString(), 
+            contentVersions: existingCampaign.contentVersions || [], 
+            agentDebates: existingCampaign.agentDebates || [] 
+        }, { status: 200 });
     }
 
-    const client = await clientPromise;
-    const db = client.db();
-    const campaignsCollection = db.collection<Campaign>('campaigns');
 
     const result = await campaignsCollection.findOneAndUpdate(
       { _id: new ObjectId(campaignId), userId: userId },
@@ -218,3 +225,4 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json({ error: 'Failed to delete campaign' }, { status: 500 });
   }
 }
+

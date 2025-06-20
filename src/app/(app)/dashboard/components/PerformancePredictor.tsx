@@ -4,24 +4,25 @@
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { BarChart, Loader2, TrendingUp, AlertTriangle, FileText, Info } from 'lucide-react';
+import { BarChartBig, Loader2, TrendingUp, AlertTriangle, FileText, Info, Percent, MousePointerClick, Users } from 'lucide-react'; // Updated BarChart to BarChartBig
 import { useToast } from '@/hooks/use-toast';
 import type { MultiFormatContent } from '@/types/content';
 import {ResponsiveContainer, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, BarChart as RechartsBarChart } from 'recharts';
 
 
 // Mock AI call for prediction
-async function predictPerformanceAPI(content: MultiFormatContent): Promise<Record<string, { engagement: number; ctr: number; conversion: number }>> {
+async function predictPerformanceAPI(content: MultiFormatContent): Promise<Record<string, { ctr: number; engagement: number; conversion: number; audienceMatch?: number }>> {
   return new Promise(resolve => {
     setTimeout(() => {
-      const predictions: Record<string, { engagement: number; ctr: number; conversion: number }> = {};
+      const predictions: Record<string, { ctr: number; engagement: number; conversion: number; audienceMatch?: number }> = {};
       Object.keys(content).forEach(key => {
         const contentKey = key as keyof MultiFormatContent;
-        if(content[contentKey] && typeof content[contentKey] === 'string' && content[contentKey]!.length > 0) { // Ensure content exists
+        if(content[contentKey] && typeof content[contentKey] === 'string' && content[contentKey]!.length > 0) { 
             predictions[key] = {
-            engagement: Math.random() * 10 + 5, // e.g. 5-15%
-            ctr: Math.random() * 5 + 1,       // e.g. 1-6%
-            conversion: Math.random() * 2 + 0.5 // e.g. 0.5-2.5%
+            ctr: Math.random() * 5 + 1,       // e.g. 1-6% (Click-Through Rate)
+            engagement: Math.random() * 10 + 5, // e.g. 5-15% (Engagement Rate)
+            conversion: Math.random() * 2 + 0.5, // e.g. 0.5-2.5% (Conversion Rate for ads/emails)
+            audienceMatch: Math.random() * 50 + 50, // e.g. 50-100% (Audience Match Score)
             };
         }
       });
@@ -31,15 +32,16 @@ async function predictPerformanceAPI(content: MultiFormatContent): Promise<Recor
 }
 
 interface PerformancePredictorProps {
-  campaignId: string | undefined; // Can be undefined if no campaign selected
+  campaignId: string | undefined; 
   contentToAnalyze: MultiFormatContent | null;
 }
 
 type PredictionData = {
   format: string;
-  engagement: number;
   ctr: number;
+  engagement: number;
   conversion: number;
+  audienceMatch?: number;
 };
 
 
@@ -49,21 +51,21 @@ export function PerformancePredictor({ campaignId, contentToAnalyze }: Performan
   const [error, setError] = useState<string | null>(null);
   const { toast } = useToast();
 
-  const hasContentToAnalyze = contentToAnalyze && Object.values(contentToAnalyze).some(val => val && val.length > 0);
+  const hasContentToAnalyze = contentToAnalyze && Object.values(contentToAnalyze).some(val => typeof val === 'string' && val.length > 0);
 
   const fetchPredictions = async () => {
-    if (!hasContentToAnalyze || !contentToAnalyze) { // Check again before fetching
+    if (!hasContentToAnalyze || !contentToAnalyze) { 
       toast({ title: "No Content", description: "Cannot predict performance without content.", variant: "destructive"});
       setPredictions(null);
       return;
     }
     setIsLoading(true);
     setError(null);
-    setPredictions(null); // Clear previous predictions
+    setPredictions(null); 
     try {
       const result = await predictPerformanceAPI(contentToAnalyze);
       const formattedData = Object.entries(result).map(([format, metrics]) => ({
-        format: format.charAt(0).toUpperCase() + format.slice(1).replace(/([A-Z])/g, ' $1').trim(), // Format name nicely
+        format: format.charAt(0).toUpperCase() + format.slice(1).replace(/([A-Z])/g, ' $1').trim(), 
         ...metrics
       }));
       
@@ -83,7 +85,6 @@ export function PerformancePredictor({ campaignId, contentToAnalyze }: Performan
     }
   };
   
-  // Clear predictions if the campaign or content changes
   useEffect(() => {
     setPredictions(null);
     setError(null);
@@ -98,7 +99,7 @@ export function PerformancePredictor({ campaignId, contentToAnalyze }: Performan
           Performance Predictor
         </CardTitle>
         <CardDescription>
-          Estimate potential engagement, CTR, and conversion rates for your generated content formats using AI simulation.
+          Estimate potential CTR, engagement, conversion, and audience match for your generated content formats using AI simulation.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
@@ -110,7 +111,7 @@ export function PerformancePredictor({ campaignId, contentToAnalyze }: Performan
           </div>
         ) : (
              <Button onClick={fetchPredictions} disabled={isLoading || !hasContentToAnalyze}>
-                {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <BarChart className="mr-2 h-4 w-4" />}
+                {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <BarChartBig className="mr-2 h-4 w-4" />}
                 Predict Performance
             </Button>
         )}
@@ -132,26 +133,35 @@ export function PerformancePredictor({ campaignId, contentToAnalyze }: Performan
 
         {!isLoading && !error && predictions && predictions.length > 0 && (
           <div className="space-y-4 pt-4">
-            <h3 className="font-semibold text-lg">Predicted Metrics (%):</h3>
-             <ResponsiveContainer width="100%" height={300}>
-                <RechartsBarChart data={predictions} margin={{ top: 5, right: 0, left: 0, bottom: 50 }}>
+            <h3 className="font-semibold text-lg">Predicted Metrics:</h3>
+             <ResponsiveContainer width="100%" height={350}>
+                <RechartsBarChart data={predictions} margin={{ top: 5, right: 0, left: 0, bottom: 70 }}>
                     <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="format" angle={-35} textAnchor="end" height={70} interval={0} />
-                    <YAxis />
+                    <XAxis dataKey="format" angle={-40} textAnchor="end" height={80} interval={0} />
+                    <YAxis unit="%" />
                     <Tooltip 
-                        formatter={(value) => `${(value as number).toFixed(2)}%`}
+                        formatter={(value, name) => [`${(value as number).toFixed(2)}%`, name]}
                         contentStyle={{ backgroundColor: 'hsl(var(--background))', border: '1px solid hsl(var(--border))', borderRadius: 'var(--radius)'}}
                         itemStyle={{ color: 'hsl(var(--foreground))' }}
                         cursor={{fill: 'hsl(var(--muted))', fillOpacity: 0.3}}
                     />
-                    <Legend wrapperStyle={{paddingTop: '20px'}} />
-                    <Bar dataKey="engagement" fill="hsl(var(--primary))" name="Engagement" radius={[4, 4, 0, 0]} />
-                    <Bar dataKey="ctr" fill="hsl(var(--accent))" name="CTR" radius={[4, 4, 0, 0]} />
-                    <Bar dataKey="conversion" fill="hsl(var(--secondary))" name="Conversion" radius={[4, 4, 0, 0]} />
+                    <Legend 
+                        wrapperStyle={{paddingTop: '20px'}} 
+                        payload={[
+                            { value: 'CTR (Click-Through Rate)', type: 'square', id: 'ctr', color: 'hsl(var(--primary))', iconType: 'square' },
+                            { value: 'Engagement %', type: 'square', id: 'engagement', color: 'hsl(var(--accent))', iconType: 'square' },
+                            { value: 'Conversion %', type: 'square', id: 'conversion', color: 'hsl(var(--secondary))', iconType: 'square' },
+                            { value: 'Audience Match %', type: 'square', id: 'audienceMatch', color: 'hsl(var(--chart-4))', iconType: 'square' }
+                        ]}
+                    />
+                    <Bar dataKey="ctr" fill="hsl(var(--primary))" name="CTR (Click-Through Rate)" radius={[4, 4, 0, 0]} unit="%" />
+                    <Bar dataKey="engagement" fill="hsl(var(--accent))" name="Engagement %" radius={[4, 4, 0, 0]} unit="%" />
+                    <Bar dataKey="conversion" fill="hsl(var(--secondary))" name="Conversion %" radius={[4, 4, 0, 0]} unit="%" />
+                    <Bar dataKey="audienceMatch" fill="hsl(var(--chart-4))" name="Audience Match %" radius={[4, 4, 0, 0]} unit="%" />
                 </RechartsBarChart>
             </ResponsiveContainer>
             <p className="text-xs text-muted-foreground">
-                Note: These are AI-driven estimations and actual performance may vary.
+                Note: These are AI-driven estimations and actual performance may vary. CTR and Conversion are more relevant for Ads/Email formats. Audience Match is a general score.
             </p>
           </div>
         )}

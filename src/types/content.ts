@@ -1,4 +1,5 @@
 
+
 export interface ContentPiece {
   id: string;
   format: ContentFormat;
@@ -30,7 +31,7 @@ export type CampaignStatus =
   | 'draft' 
   | 'debating' // Orchestrator Agent is working, debate phase
   | 'generating' // Content Writer & Visual Agents are working
-  | 'review' // Finalized content ready for user review
+  | 'review' // Finalized content ready for user review (maps to "finalized" in some contexts)
   | 'published' 
   | 'archived';
 
@@ -45,8 +46,8 @@ export interface ContentVersion {
   id: string; // Could be a simple sequential ID like "v1", "v2" or a UUID
   versionNumber: number; // e.g. 1, 2, 3
   timestamp: Date;
-  actorName: string; // e.g., "AI Team", "User Edit", specific agent name like "Creative Director"
-  changeSummary: string; // Brief description of what changed or what was generated in this version
+  actorName: string; // e.g., "AI Team", "User Edit", specific agent name like "Creative Director" (maps to modifiedBy)
+  changeSummary: string; // Brief description of what changed or what was generated in this version (maps to changes)
   multiFormatContentSnapshot: MultiFormatContent; // A snapshot of all generated formats at this version
   // Optional: performanceMetrics?: Record<ContentFormat, { ctr?: number; engagement?: number; conversion?: number; openRate?: number; ctaClick?: number; audienceMatchScore?: number }>;
 }
@@ -60,7 +61,7 @@ export interface Campaign {
   targetAudience?: string;
   tone?: string;
   contentGoals?: string[];
-  brandProfileId?: string; // Link to a BrandDNA document (optional)
+  brandId?: string; // Link to a BrandDNA document (optional) - For future use
   referenceMaterials?: Array<{ type: 'url' | 'fileId' | 'text'; value: string; name?: string }>; // For uploaded links or file references
   
   agentDebates: AgentInteraction[]; // Stores the history of agent interactions during the debate phase
@@ -81,3 +82,4 @@ export interface MultiFormatContent {
   adsCopy?: string; // E.g. Google Ads copy
   [key: string]: string | undefined; // For additional formats
 }
+

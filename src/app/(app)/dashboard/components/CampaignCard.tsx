@@ -17,18 +17,18 @@ interface CampaignCardProps {
 
 const statusColors: Record<Campaign['status'], string> = {
     draft: "bg-gray-500",
-    debating: "bg-blue-500",
+    debating: "bg-blue-500", // "under debate"
     generating: "bg-purple-500",
-    review: "bg-yellow-500 text-yellow-foreground", // Use a contrasting text color
+    review: "bg-yellow-500 text-yellow-foreground", // "finalized"
     published: "bg-green-500",
     archived: "bg-slate-600",
 };
 
 const statusText: Record<Campaign['status'], string> = {
     draft: "Draft",
-    debating: "Debating",
-    generating: "Generating",
-    review: "Review",
+    debating: "Under Debate",
+    generating: "Generating Content",
+    review: "Finalized (Review)",
     published: "Published",
     archived: "Archived",
 };
@@ -54,7 +54,7 @@ export function CampaignCard({ campaign, onView, onEdit, onDelete }: CampaignCar
       </CardHeader>
       <CardContent className="flex-grow space-y-2 text-sm text-muted-foreground">
         {campaign.brief && (
-             <p className="line-clamp-2"><span className="font-medium text-foreground">Brief:</span> {campaign.brief}</p>
+             <p className="line-clamp-3"><span className="font-medium text-foreground">Brief:</span> {campaign.brief}</p>
         )}
         {campaign.targetAudience && (
             <p className="line-clamp-1"><span className="font-medium text-foreground">Audience:</span> {campaign.targetAudience}</p>
@@ -86,3 +86,4 @@ export function CampaignCard({ campaign, onView, onEdit, onDelete }: CampaignCar
     </Card>
   );
 }
+
