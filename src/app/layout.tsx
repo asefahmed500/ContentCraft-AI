@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import './globals.css';
 import { Toaster } from '@/components/ui/toaster';
+import SessionProviderWrapper from '@/components/SessionProviderWrapper'; // Import the wrapper
 
 export const metadata: Metadata = {
   title: 'ContentCraft AI',
@@ -21,8 +22,10 @@ export default function RootLayout({
         <link href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap" rel="stylesheet" />
       </head>
       <body className="font-body antialiased min-h-screen flex flex-col">
-        {children}
-        <Toaster />
+        <SessionProviderWrapper> {/* Wrap children with SessionProviderWrapper */}
+          {children}
+          <Toaster />
+        </SessionProviderWrapper>
       </body>
     </html>
   );

@@ -11,13 +11,13 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
-      router.replace('/login');
+      router.replace('/login?callbackUrl=/dashboard');
     }
   }, [isAuthenticated, isLoading, router]);
 
   if (isLoading || !isAuthenticated) {
     return (
-      <div className="flex h-screen items-center justify-center">
+      <div className="flex h-screen items-center justify-center bg-background">
         <Loader2 className="h-12 w-12 animate-spin text-primary" />
       </div>
     );
@@ -33,6 +33,9 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
 
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
+  // AuthProvider is now wrapped around the entire app in RootLayout via SessionProviderWrapper
+  // but individual pages/layouts can still use it to consume context if structured this way.
+  // For this specific layout, AuthProvider here ensures useAuth() works within DashboardLayoutContent.
   return (
     <AuthProvider>
       <DashboardLayoutContent>{children}</DashboardLayoutContent>

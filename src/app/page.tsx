@@ -2,14 +2,14 @@
 
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { useAuth, AuthProvider } from '@/components/AuthContext'; // Assuming AuthContext is in src/components
+import { AuthProvider, useAuth } from '@/components/AuthContext';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
 import { Logo } from '@/components/Logo';
 import Image from 'next/image';
 import { Loader2 } from 'lucide-react';
 
-function HomePage() {
+function HomePageContent() { // Renamed from HomePage to HomePageContent
   const { isAuthenticated, isLoading } = useAuth();
   const router = useRouter();
 
@@ -145,10 +145,10 @@ function HomePage() {
 }
 
 // Wrap the default export with AuthProvider
-const HomePageWithAuth = () => (
-  <AuthProvider>
-    <HomePage />
-  </AuthProvider>
-);
-
-export default HomePageWithAuth;
+export default function HomePage() { // Renamed from HomePageWithAuth
+  return (
+    <AuthProvider>
+      <HomePageContent />
+    </AuthProvider>
+  );
+}
