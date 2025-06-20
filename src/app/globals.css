@@ -2,9 +2,7 @@
 @tailwind components;
 @tailwind utilities;
 
-body {
-  font-family: Arial, Helvetica, sans-serif;
-}
+/* Removed conflicting body font-family rule to allow Tailwind config and layout.tsx to control fonts */
 
 @layer base {
   :root {

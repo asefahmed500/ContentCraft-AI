@@ -2,14 +2,14 @@
 
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { useAuth } from '@/components/AuthContext'; // Assuming AuthContext is in src/components
+import { useAuth, AuthProvider } from '@/components/AuthContext'; // Assuming AuthContext is in src/components
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
 import { Logo } from '@/components/Logo';
 import Image from 'next/image';
 import { Loader2 } from 'lucide-react';
 
-export default function HomePage() {
+function HomePage() {
   const { isAuthenticated, isLoading } = useAuth();
   const router = useRouter();
 
