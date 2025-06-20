@@ -144,4 +144,14 @@ export interface UserFeedback {
   timestamp: Date;
 }
 
+export interface CampaignMemory {
+  userId?: string; // Or brandId if memory is per-brand
+  bestPerformingTone?: string;
+  popularCTA?: string;
+  successfulTopics?: string[];
+  failedTopics?: string[];
+  // other learned insights can be added here
+  lastUpdatedAt?: Date;
+}
+
 

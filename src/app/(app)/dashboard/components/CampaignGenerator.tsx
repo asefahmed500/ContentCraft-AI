@@ -10,9 +10,11 @@ import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, Wand2, Lightbulb, Users, Target, Palette, FileUp, Save, Paperclip, Tag, Info, Link2, Combine } from 'lucide-react';
+import { Loader2, Wand2, Lightbulb, Users, Target, Palette, FileUp, Save, Paperclip, Tag, Info, Link2, Combine, Brain } from 'lucide-react';
 import type { Campaign } from '@/types/content'; 
 import { Separator } from '@/components/ui/separator';
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+
 
 interface CampaignGeneratorProps {
   onCampaignCreated: (newCampaign: Campaign) => void; 
@@ -38,6 +40,7 @@ export function CampaignGenerator({
   const [tone, setTone] = useState('');
   const [contentGoals, setContentGoals] = useState<string[]>([]);
   const [isSaving, setIsSaving] = useState(false);
+  const [andStartGeneration, setAndStartGeneration] = useState(false);
   const [referenceFiles, setReferenceFiles] = useState<FileList | null>(null);
   const [importUrl, setImportUrl] = useState('');
   const [isImportingUrl, setIsImportingUrl] = useState(false);
@@ -69,7 +72,7 @@ export function CampaignGenerator({
   }, [selectedCampaignForEdit]);
 
 
-  const handleSaveCampaign = async (andStartGeneration: boolean = false) => {
+  const handleSaveCampaign = async (shouldStartGeneration: boolean = false) => {
     if (!campaignTitle.trim()) {
       toast({ title: "Campaign Title is empty", description: "Please provide a campaign title.", variant: "destructive" });
       return;
@@ -79,6 +82,8 @@ export function CampaignGenerator({
       return;
     }
     setIsSaving(true);
+    setAndStartGeneration(shouldStartGeneration);
+
 
     const campaignData: Partial<Campaign> = {
       title: campaignTitle.trim(),
@@ -107,7 +112,7 @@ export function CampaignGenerator({
       toast({ title: `Campaign ${selectedCampaignForEdit ? "Updated" : "Created"}!`, description: `"${savedCampaign.title}" has been ${selectedCampaignForEdit ? "updated" : "created"}.` });
       onCampaignCreated(savedCampaign); 
 
-      if (andStartGeneration) {
+      if (shouldStartGeneration) {
         await onGenerateContentForCampaign(savedCampaign, brandVoice.trim() || undefined);
       } else if (!selectedCampaignForEdit) { 
         setCampaignTitle(''); setBrief(''); setTargetAudience(''); setTone(''); setContentGoals([]); setBrandVoice(''); setReferenceFiles(null); setImportUrl('');
@@ -118,6 +123,7 @@ export function CampaignGenerator({
         toast({ title: "Failed to Save Campaign", description: errorMessage, variant: "destructive" });
     } finally {
         setIsSaving(false);
+        setAndStartGeneration(false);
     }
   };
 
@@ -288,6 +294,14 @@ export function CampaignGenerator({
           </p>
         </div>
 
+         <Alert className="mt-6 bg-primary/5 border-primary/20">
+          <Brain className="h-5 w-5 text-primary/80" />
+          <AlertTitle className="font-semibold text-primary/90">Campaign Intelligence (Coming Soon!)</AlertTitle>
+          <AlertDescription className="text-sm text-primary/70">
+            ContentCraft AI will learn from your past campaign performance to offer smarter suggestions for tone, topics, and CTAs right here, helping you optimize new campaign briefs.
+          </AlertDescription>
+        </Alert>
+
         <div className="space-y-2">
             <Label htmlFor="reference-materials" className="text-base flex items-center gap-1">
                 <Paperclip className="h-4 w-4" /> Upload PDFs or Links (Reference Materials)
@@ -319,7 +333,7 @@ export function CampaignGenerator({
             variant="outline"
             className="w-full sm:w-auto"
         >
-          {isSaving && !andStartGeneration ? <Loader2 className="animate-spin" /> : <Save />} 
+          {isSaving && !andStartGeneration ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />} 
           {selectedCampaignForEdit ? "Save Changes" : "Save Draft"}
         </Button>
         <Button 
@@ -328,7 +342,7 @@ export function CampaignGenerator({
             size="lg" 
             className="w-full sm:w-auto"
         >
-          {(isSaving || isGenerating) && andStartGeneration ? <Loader2 className="animate-spin" /> : <Wand2 />} 
+          {(isSaving || isGenerating) && andStartGeneration ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Wand2 className="mr-2 h-4 w-4" />} 
           {selectedCampaignForEdit ? "Update & Regenerate" : "Save & Generate Campaign"}
         </Button>
       </CardFooter>
