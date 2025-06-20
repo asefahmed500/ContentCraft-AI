@@ -1,0 +1,237 @@
+ContentCraft AI - Project Documentation
+Version: 1.0 (as of current development state)
+
+Table of Contents
+-----------------
+1. Project Overview
+2. Core Architecture
+3. Detailed Feature Breakdown
+4. Data Models
+5. AI Integration
+6. Setup & Configuration
+7. Future Enhancements
+
+-----------------
+1. Project Overview
+-----------------
+ContentCraft AI is a Next.js web application designed as a multi-agent AI content creation system. It aims to assist users in generating comprehensive content campaigns by leveraging specialized AI agents that collaborate, analyze brand identity, debate strategies, and produce content in multiple formats. The platform includes features for user authentication, campaign management, brand analysis, simulated agent interactions, content generation, performance prediction, and user feedback mechanisms.
+
+-----------------
+2. Core Architecture
+-----------------
+The application is built using a modern JavaScript stack:
+
+*   **Frontend**:
+    *   Next.js 15+ (App Router)
+    *   React 18+ (Functional Components, Hooks)
+    *   TypeScript
+    *   ShadCN UI Components (for UI primitives)
+    *   Tailwind CSS (for styling)
+    *   React Context API (for global state like authentication)
+    *   Recharts (for data visualization)
+
+*   **Backend**:
+    *   Next.js API Routes (for RESTful services)
+    *   Genkit (for orchestrating AI model interactions, specifically Google Gemini)
+    *   Node.js runtime environment
+
+*   **Database**:
+    *   MongoDB (NoSQL database for storing user data, campaigns, etc.)
+    *   Accessed via the official `mongodb` Node.js driver.
+
+*   **Authentication**:
+    *   NextAuth.js (handles user sign-in, sign-up, session management)
+    *   Supports Credentials (email/password) and Google OAuth providers.
+
+*   **AI Models**:
+    *   Google Gemini (via Genkit and `@genkit-ai/googleai` plugin) for text generation, analysis, and (conceptually) vision/audio tasks.
+
+-----------------
+3. Detailed Feature Breakdown
+-----------------
+
+    *   **User Authentication & Role Management**:
+        *   Purpose: Secure user access and manage permissions.
+        *   How: NextAuth.js with MongoDB adapter. Users can register/login via email/password or Google. Session JWTs manage authentication. User roles ('viewer', 'editor', 'admin' - conceptual) stored in DB, intended for future permission checks.
+        *   Key Files: `src/app/api/auth/`, `src/components/AuthContext.tsx`, `src/middleware.ts`.
+
+    *   **Dashboard & Campaign Overview**:
+        *   Purpose: Central hub for users to view and manage their content campaigns.
+        *   How: Displays a list of campaigns fetched from `/api/campaigns`. Each campaign is shown as a card with title, status, and actions (view, edit, delete).
+        *   Key Files: `src/app/(app)/dashboard/page.tsx`, `src/app/(app)/dashboard/components/CampaignList.tsx`, `src/app/(app)/dashboard/components/CampaignCard.tsx`.
+
+    *   **Creative Brief Input**:
+        *   Purpose: Allow users to define the parameters for a new content campaign.
+        *   How: A form captures campaign title, product/service description (brief), target audience, desired tone, and content goals. This data is POSTed to `/api/campaigns` to create a new campaign document in 'draft' status.
+        *   Key Files: `src/app/(app)/dashboard/components/CampaignGenerator.tsx`.
+
+    *   **Brand DNA Upload & Analysis**:
+        *   Purpose: Extract brand identity (voice, style, values) from sample content.
+        *   How: Users upload text files/PDFs (simulated for PDFs beyond text extraction). The content (as a data URI) is sent to `/api/brand/analyze`, which uses the `brand-learning` Genkit flow with Gemini to analyze and return a structured Brand DNA profile.
+        *   Key Files: `src/app/(app)/dashboard/components/BrandDNAAnalyzer.tsx`, `src/ai/flows/brand-learning.ts`, `src/app/api/brand/analyze/route.ts`.
+
+    *   **Creative War Room (Simulated Agent Debate)**:
+        *   Purpose: Simulate collaboration between different AI agent personas to refine content strategy.
+        *   How: After a campaign brief is submitted for generation, a (simulated) debate occurs. The `agent-debate` Genkit flow generates a summary and suggestions. The dashboard page then creates a sequence of `AgentInteraction` messages from various roles (Creative Director, Writer, Brand Persona, QA, Analytics, SEO) based on this output and stores them in the campaign's `agentDebates` array. This is displayed in a chat-like interface.
+        *   Key Files: `src/app/(app)/dashboard/components/AgentDebatePanel.tsx`, `src/ai/flows/agent-debate.ts`, `src/app/(app)/dashboard/page.tsx` (for simulation logic).
+
+    *   **Multi-Format Content Generation**:
+        *   Purpose: Generate diverse content pieces tailored to different platforms from a single, refined brief.
+        *   How: The `content-generation` Genkit flow takes the campaign brief (augmented by debate insights) and uses Gemini to produce text for formats like blog posts, tweets, LinkedIn articles, etc. The output is stored as a `ContentVersion` within the campaign.
+        *   Key Files: `src/app/(app)/dashboard/components/MultiFormatPreview.tsx`, `src/ai/flows/content-generation.ts`.
+
+    *   **Content Evolution Timeline**:
+        *   Purpose: Allow users to track the history of generated content for a campaign.
+        *   How: Each significant generation or revision step creates a `ContentVersion` object, which includes a snapshot of the `MultiFormatContent`, timestamp, actor, and a change summary. These versions are displayed chronologically.
+        *   Key Files: `src/app/(app)/dashboard/components/ContentEvolutionTimeline.tsx`.
+
+    *   **Performance Predictor**:
+        *   Purpose: Provide users with AI-driven estimates of how their content might perform.
+        *   How: A UI component allows users to trigger a (mocked) API call. The component then displays example performance metrics (CTR, engagement, conversion, audience match) using Recharts bar charts.
+        *   Key Files: `src/app/(app)/dashboard/components/PerformancePredictor.tsx`.
+
+    *   **User Feedback Loop**:
+        *   Purpose: Collect user opinions on generated content to (conceptually) improve AI agents over time.
+        *   How: Users can rate content (thumbs up/down) and add comments in the `MultiFormatPreview`. This feedback is sent to `/api/feedback` and logged (simulation of agent learning).
+        *   Key Files: `src/app/(app)/dashboard/components/MultiFormatPreview.tsx`, `src/app/api/feedback/route.ts`.
+
+    *   **Private Mode / Confidentiality Setting**:
+        *   Purpose: Allow users to mark campaigns as private, indicating data should not be used for broader AI model training.
+        *   How: A boolean `isPrivate` flag is added to the `Campaign` schema and UI. This flag is saved in the database.
+        *   Key Files: `src/app/(app)/dashboard/components/CampaignGenerator.tsx`, `src/app/api/campaigns/route.ts`.
+
+    *   **Gamification / Creative XP System**:
+        *   Purpose: Engage users by awarding points for activities and allowing them to level up.
+        *   How: User profiles store `totalXP`, `level`, and `badges`. XP is (simulated via toasts) awarded for generating content and giving feedback. A UI component in the site header displays level and XP progress.
+        *   Key Files: `src/components/UserXPDisplay.tsx`, `src/components/SiteHeader.tsx`, `src/app/api/auth/`, `src/types/content.ts` (for user type updates).
+
+    *   **Placeholders/Simulated Features**:
+        *   **Content Calendar & Scheduling**: UI placeholder exists.
+        *   **A/B Testing Simulation**: UI placeholder and data structures exist.
+        *   **Multilingual Content Generation**: Backend Genkit flow and API exist; UI placeholder for "Translate" button.
+        *   **Content Import (URL/Doc/Social)**: UI simulation for URL import to brief; Video import UI simulated. Brand DNA analyzer handles text.
+        *   **Compliance Check**: QA Agent role simulated in debates.
+        *   **Content Template Library**: UI placeholder with mock templates.
+        *   **Memory Mode / Campaign Intelligence**: UI placeholder notice.
+
+-----------------
+4. Data Models (Key MongoDB Schemas - Conceptual)
+-----------------
+
+    *   **User** (`users` collection):
+        *   `_id`: ObjectId
+        *   `name`: String
+        *   `email`: String (unique)
+        *   `password`: String (hashed, if using credentials)
+        *   `image`: String (URL to avatar)
+        *   `role`: String (e.g., 'viewer', 'admin')
+        *   `emailVerified`: Date (if using OAuth)
+        *   `createdAt`: Date
+        *   `updatedAt`: Date
+        *   `totalXP`: Number
+        *   `level`: Number
+        *   `badges`: Array of Strings
+
+    *   **Campaign** (`campaigns` collection):
+        *   `_id`: ObjectId
+        *   `id`: String (string version of _id)
+        *   `userId`: String (links to User who created it)
+        *   `title`: String
+        *   `brief`: String (product/service description)
+        *   `targetAudience`: String (optional)
+        *   `tone`: String (optional)
+        *   `contentGoals`: Array of Strings (optional)
+        *   `brandId`: String (optional, links to a BrandDNA document)
+        *   `referenceMaterials`: Array of Objects (optional, for URLs/file IDs)
+        *   `agentDebates`: Array of `AgentInteraction` objects
+        *   `contentVersions`: Array of `ContentVersion` objects
+        *   `scheduledPosts`: Array of `ScheduledPost` objects (optional)
+        *   `abTests`: Array of `ABTestInstance` objects (optional)
+        *   `status`: String (e.g., 'draft', 'debating', 'generating', 'review', 'published', 'archived')
+        *   `isPrivate`: Boolean (default false)
+        *   `createdAt`: Date
+        *   `updatedAt`: Date
+
+    *   **AgentInteraction** (embedded in Campaign):
+        *   `agent`: String (agent name/role)
+        *   `message`: String
+        *   `timestamp`: Date
+
+    *   **ContentVersion** (embedded in Campaign):
+        *   `id`: String (unique version identifier)
+        *   `versionNumber`: Number
+        *   `timestamp`: Date
+        *   `actorName`: String (who/what created this version, e.g., "AI Team", "User Edit")
+        *   `changeSummary`: String
+        *   `multiFormatContentSnapshot`: Object (keys are formats like 'blogPost', values are content strings)
+
+    *   **UserFeedback** (`feedback_logs` collection - conceptual):
+        *   `_id`: ObjectId
+        *   `userId`: String
+        *   `campaignId`: String
+        *   `contentVersionId`: String (optional)
+        *   `contentFormat`: String
+        *   `rating`: Number (1 or -1)
+        *   `comment`: String (optional)
+        *   `timestamp`: Date
+
+    *   **BrandDNA** (`brand_dna` collection - conceptual for future use, currently analysis is ephemeral):
+        *   `_id`: ObjectId
+        *   `brandId`: String
+        *   `userId`: String
+        *   `voiceProfile`: Object { tone, values, languageStyle, keywords }
+        *   `visualStyle`: Object { colorPalette, fontPreferences, imageryStyle }
+        *   `contentPatterns`: Object { commonThemes, preferredFormats, negativeKeywords }
+        *   `consistencyScore`: Number
+        *   `warnings`: Array of Strings
+        *   `evolutionHistory`: Array of Objects
+        *   `createdAt`: Date
+        *   `updatedAt`: Date
+
+-----------------
+5. AI Integration
+-----------------
+*   **Genkit**: Used as the primary framework for defining and running AI flows. It simplifies interactions with AI models, manages prompts, and structures input/output schemas (using Zod).
+    *   Location: `src/ai/`
+    *   Key Files: `genkit.ts` (global setup), `dev.ts` (dev server), flow files in `src/ai/flows/`.
+*   **Google Gemini**: The primary Large Language Model (LLM) accessed via Genkit's `googleAI` plugin. Used for:
+    *   Brand DNA analysis
+    *   Simulating agent debates (generating strategic suggestions)
+    *   Generating multi-format content
+    *   Revising content
+    *   Translating content
+*   **Prompts**: Defined within each Genkit flow using Handlebars templating for dynamic input. Zod schemas for input and output are used by Genkit to structure prompts and parse model responses, sometimes enabling JSON mode or structured output.
+
+-----------------
+6. Setup & Configuration
+-----------------
+Refer to the `README.md` for detailed setup instructions. Key environment variables to configure in `.env.local`:
+
+*   `MONGODB_URI`: Connection string for your MongoDB database.
+*   `MONGODB_DB_NAME`: (Optional) Name of the database to use.
+*   `NEXTAUTH_SECRET`: A strong secret for NextAuth.js session encryption.
+*   `NEXTAUTH_URL`: The canonical URL of your application (e.g., `http://localhost:9002` for local dev).
+*   `GOOGLE_CLIENT_ID` & `GOOGLE_CLIENT_SECRET`: For Google OAuth via NextAuth.js.
+*   `GOOGLE_API_KEY` (or other Google Cloud auth methods): For Genkit to access Gemini models.
+
+**Running the Application**:
+1.  Start the Genkit server: `npm run genkit:dev` (or `genkit:watch`)
+2.  Start the Next.js server: `npm run dev`
+
+-----------------
+7. Future Enhancements
+-----------------
+Many features are currently placeholders or simulations and can be expanded:
+*   **Real-time Agent Debates**: Implement WebSockets for live updates.
+*   **Full File Uploads & Processing**: Integrate cloud storage (GCS/S3) and parsing for PDFs/Docs (e.g., Google Vision API for OCR).
+*   **Advanced Brand DNA**: Store BrandDNA in DB, use it to actively guide content generation, and implement consistency checks.
+*   **Content Calendar**: Build a functional drag-and-drop calendar with scheduling capabilities and potential third-party integrations (Zapier, Buffer).
+*   **A/B Testing**: Develop UI for creating variations, integrate AI for predicting performance of these variations, and display side-by-side comparisons.
+*   **Multilingual UI**: Add UI for language selection and displaying translated content, including RTL support.
+*   **True Campaign Intelligence**: Implement backend data analysis to derive insights from `CampaignMemory` and suggest optimizations.
+*   **Full Compliance Engine**: Develop a more robust rules engine or specialized AI prompts for the QA Agent.
+*   **Content Template Management**: API and UI to create, edit, and delete templates; integrate them into content generation.
+*   **Team Collaboration**: Implement the `teams` collection and role-based access control for shared campaigns.
+*   **Actual XP & Leveling System**: Backend logic to update user XP in the database and unlock features based on levels/badges.
+*   **Advanced Content Export**: More export formats and direct CMS integrations.
+```
