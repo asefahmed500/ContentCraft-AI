@@ -3,9 +3,8 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { getToken } from 'next-auth/jwt';
 import type { UserFeedback } from '@/types/content';
-
-// This is a mock implementation. In a real scenario, you'd save this to a database.
-// For example, you might have a 'feedback' collection, or embed feedback within campaign documents.
+import clientPromise from '@/lib/mongodb';
+import { MongoClient, Db, ObjectId } from 'mongodb';
 
 export async function POST(request: NextRequest) {
   try {
@@ -15,7 +14,7 @@ export async function POST(request: NextRequest) {
     }
     const userId = token.id as string;
 
-    const body = await request.json() as Omit<UserFeedback, 'timestamp'>;
+    const body = await request.json() as Omit<UserFeedback, 'timestamp' | 'userId'>;
 
     if (!body.campaignId || !body.contentFormat || body.rating === undefined) {
       return NextResponse.json({ error: 'Missing required fields: campaignId, contentFormat, rating' }, { status: 400 });
@@ -25,23 +24,28 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: 'Invalid rating value. Must be 1 or -1.' }, { status: 400 });
     }
 
-    const feedbackEntry: UserFeedback = {
+    const feedbackEntry: UserFeedback & { userId: string } = {
       ...body,
+      userId: userId, // Add the authenticated user's ID
       timestamp: new Date(),
-      // In a real system, you might add userId here too
-      // userId: userId, 
     };
 
-    // Simulate saving feedback to agent logs or a database
-    console.log("User Feedback Received:", JSON.stringify(feedbackEntry, null, 2));
+    // Store in 'feedback_logs' collection in MongoDB
+    const client: MongoClient = await clientPromise;
+    const db: Db = client.db(process.env.MONGODB_DB_NAME || undefined);
+    const feedbackCollection = db.collection('feedback_logs');
+    
+    const result = await feedbackCollection.insertOne(feedbackEntry);
 
-    // Example: Store in a 'feedback' collection in MongoDB (conceptual)
-    // const client = await clientPromise;
-    // const db = client.db();
-    // const feedbackCollection = db.collection('feedback_logs');
-    // await feedbackCollection.insertOne({ ...feedbackEntry, userId });
+    if (!result.insertedId) {
+        console.error("Failed to insert feedback into MongoDB:", feedbackEntry);
+        return NextResponse.json({ error: 'Failed to save feedback entry.' }, { status: 500 });
+    }
 
-    return NextResponse.json({ message: 'Feedback submitted successfully.', data: feedbackEntry }, { status: 200 });
+    // The toast for XP is handled client-side.
+    // If actual XP update is needed here, that would be an additional step to update user document.
+
+    return NextResponse.json({ message: 'Feedback submitted successfully.', data: { ...feedbackEntry, _id: result.insertedId } }, { status: 200 });
 
   } catch (error) {
     console.error("Feedback API Error:", error);
