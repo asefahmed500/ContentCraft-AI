@@ -1,19 +1,22 @@
 
 "use client";
 
-import type { MultiFormatContent } from '@/types/content';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import type { MultiFormatContent, UserFeedback } from '@/types/content';
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Button } from '@/components/ui/button';
-import { FileText, Tv2, Copy, Download, Loader2, FileType, Share2, WandSparkles } from 'lucide-react'; // Added WandSparkles
+import { Textarea } from '@/components/ui/textarea';
+import { FileText, Tv2, Copy, Download, Loader2, FileType, Share2, WandSparkles, ThumbsUp, ThumbsDown, MessageSquarePlus } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-
+import { useState } from 'react';
 
 interface MultiFormatPreviewProps {
   content: MultiFormatContent | null;
   isLoading: boolean;
+  campaignId?: string;
+  contentVersionId?: string;
 }
 
 const formatLabels: Record<keyof MultiFormatContent, string> = {
@@ -26,9 +29,20 @@ const formatLabels: Record<keyof MultiFormatContent, string> = {
   adsCopy: "Ads Copy",
 };
 
-export function MultiFormatPreview({ content, isLoading }: MultiFormatPreviewProps) {
+type FeedbackState = {
+  [formatKey: string]: {
+    rating: 1 | -1 | null;
+    comment: string;
+    showCommentBox: boolean;
+    isSubmitting: boolean;
+    submitted: boolean;
+  }
+};
+
+export function MultiFormatPreview({ content, isLoading, campaignId, contentVersionId }: MultiFormatPreviewProps) {
   const { toast } = useToast();
-  
+  const [feedbackState, setFeedbackState] = useState<FeedbackState>({});
+
   const availableFormats = content 
     ? Object.keys(content).filter(key => {
         const contentKey = key as keyof MultiFormatContent;
@@ -48,7 +62,7 @@ export function MultiFormatPreview({ content, isLoading }: MultiFormatPreviewPro
 
   const handleDownload = (textToDownload: string | undefined, formatName: string) => {
      if (textToDownload) {
-      const blob = new Blob([textToDownload], { type: 'text/plain;charset=utf-h' });
+      const blob = new Blob([textToDownload], { type: 'text/plain;charset=utf-8' });
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
@@ -65,6 +79,79 @@ export function MultiFormatPreview({ content, isLoading }: MultiFormatPreviewPro
 
   const handleComingSoon = (featureName: string) => {
     toast({ title: `${featureName} is Coming Soon!`, description: "This feature is under development."});
+  };
+
+  const handleFeedbackRating = (formatKey: keyof MultiFormatContent, rating: 1 | -1) => {
+    setFeedbackState(prev => ({
+      ...prev,
+      [formatKey]: {
+        ...prev[formatKey],
+        rating: rating,
+        showCommentBox: true,
+        submitted: false,
+      }
+    }));
+  };
+
+  const handleFeedbackCommentChange = (formatKey: keyof MultiFormatContent, comment: string) => {
+    setFeedbackState(prev => ({
+      ...prev,
+      [formatKey]: {
+        ...prev[formatKey],
+        comment: comment,
+      }
+    }));
+  };
+
+  const handleSubmitFeedback = async (formatKey: keyof MultiFormatContent) => {
+    if (!campaignId) {
+      toast({ title: "Error", description: "Campaign ID is missing. Cannot submit feedback.", variant: "destructive" });
+      return;
+    }
+    const currentFeedback = feedbackState[formatKey];
+    if (!currentFeedback || currentFeedback.rating === null) {
+      toast({ title: "Error", description: "Please select a rating.", variant: "destructive" });
+      return;
+    }
+
+    setFeedbackState(prev => ({ ...prev, [formatKey]: { ...prev[formatKey], isSubmitting: true } }));
+
+    const feedbackData: UserFeedback = {
+      campaignId,
+      contentVersionId,
+      contentFormat: formatKey,
+      rating: currentFeedback.rating,
+      comment: currentFeedback.comment,
+      timestamp: new Date(),
+    };
+
+    try {
+      const response = await fetch('/api/feedback', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(feedbackData),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Failed to submit feedback.");
+      }
+      
+      toast({ title: "Feedback Submitted!", description: `Thanks for your feedback on the ${formatLabels[formatKey]}.` });
+      setFeedbackState(prev => ({
+        ...prev,
+        [formatKey]: {
+          ...prev[formatKey],
+          isSubmitting: false,
+          submitted: true,
+          showCommentBox: false, // Optionally hide comment box after submission
+        }
+      }));
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "An unknown error occurred.";
+      toast({ title: "Feedback Submission Failed", description: errorMessage, variant: "destructive" });
+      setFeedbackState(prev => ({ ...prev, [formatKey]: { ...prev[formatKey], isSubmitting: false } }));
+    }
   };
   
   if (isLoading) {
@@ -109,7 +196,7 @@ export function MultiFormatPreview({ content, isLoading }: MultiFormatPreviewPro
       <Card className="shadow-lg">
         <CardHeader>
           <CardTitle className="font-headline text-2xl flex items-center gap-2"><Tv2 className="h-6 w-6 text-primary" />Multi-Format Content Preview</CardTitle>
-          <CardDescription>Preview the generated content across different platforms. Copy, download, or export individual pieces.</CardDescription>
+          <CardDescription>Preview the generated content. Copy, download, or provide feedback to help our AI agents learn.</CardDescription>
         </CardHeader>
         <CardContent>
           <Tabs defaultValue={defaultTab} className="w-full">
@@ -126,7 +213,9 @@ export function MultiFormatPreview({ content, isLoading }: MultiFormatPreviewPro
                 ))}
               </TabsList>
             </ScrollArea>
-            {availableFormats.map((formatKey) => (
+            {availableFormats.map((formatKey) => {
+              const currentFeedback = feedbackState[formatKey] || { rating: null, comment: '', showCommentBox: false, isSubmitting: false, submitted: false };
+              return (
               <TabsContent key={formatKey} value={formatKey} className="mt-4">
                 <Card className="border shadow-md">
                   <CardHeader className="flex flex-row items-center justify-between pb-3 bg-muted/30 rounded-t-lg">
@@ -177,9 +266,55 @@ export function MultiFormatPreview({ content, isLoading }: MultiFormatPreviewPro
                       </pre>
                     </ScrollArea>
                   </CardContent>
+                  <CardFooter className="flex-col items-start gap-3 pt-4 border-t">
+                    <div className="text-sm font-medium">Rate this content:</div>
+                    <div className="flex items-center gap-2">
+                      <Button 
+                        variant={currentFeedback.rating === 1 ? "default" : "outline"} 
+                        size="sm" 
+                        onClick={() => handleFeedbackRating(formatKey, 1)}
+                        disabled={currentFeedback.isSubmitting || currentFeedback.submitted}
+                        className={currentFeedback.rating === 1 ? "border-green-500 text-green-500 hover:bg-green-500/10" : ""}
+                      >
+                        <ThumbsUp className="mr-1 h-4 w-4" /> Good
+                      </Button>
+                      <Button 
+                        variant={currentFeedback.rating === -1 ? "destructive" : "outline"} 
+                        size="sm" 
+                        onClick={() => handleFeedbackRating(formatKey, -1)}
+                        disabled={currentFeedback.isSubmitting || currentFeedback.submitted}
+                        className={currentFeedback.rating === -1 ? "" : ""}
+                      >
+                        <ThumbsDown className="mr-1 h-4 w-4" /> Needs Improvement
+                      </Button>
+                    </div>
+                    {currentFeedback.showCommentBox && !currentFeedback.submitted && (
+                      <div className="w-full space-y-2 mt-2">
+                        <Textarea 
+                          placeholder="Optional: Add a comment (e.g., 'Too formal', 'Try a pun')" 
+                          value={currentFeedback.comment}
+                          onChange={(e) => handleFeedbackCommentChange(formatKey, e.target.value)}
+                          rows={2}
+                          className="text-sm"
+                          disabled={currentFeedback.isSubmitting}
+                        />
+                        <Button 
+                          size="sm" 
+                          onClick={() => handleSubmitFeedback(formatKey)} 
+                          disabled={currentFeedback.isSubmitting}
+                        >
+                          {currentFeedback.isSubmitting ? <Loader2 className="animate-spin h-4 w-4 mr-1" /> : <MessageSquarePlus className="mr-1 h-4 w-4" />}
+                          Submit Feedback
+                        </Button>
+                      </div>
+                    )}
+                    {currentFeedback.submitted && (
+                        <p className="text-sm text-green-600 mt-2">Thanks for your feedback!</p>
+                    )}
+                  </CardFooter>
                 </Card>
               </TabsContent>
-            ))}
+            )})}
           </Tabs>
         </CardContent>
       </Card>

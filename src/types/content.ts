@@ -1,5 +1,4 @@
 
-
 export interface ContentPiece {
   id: string;
   format: ContentFormat;
@@ -93,9 +92,17 @@ export interface ContentTemplate {
   templateId: string;
   title: string;
   description?: string; // A short description of what the template is for
-  type: ContentFormat | 'general' | 'campaignBrief'; // What kind of content this template generates or helps with
+  type: ContentFormat | 'generic' | 'campaignBrief'; // What kind of content this template generates or helps with
   tokens: TemplateToken[]; // Placeholders like {{productName}}
   body: string; // The template string itself with tokens
   // Optional: category: string; tags: string[]; previewImageUrl?: string;
 }
 
+export interface UserFeedback {
+  campaignId: string;
+  contentVersionId?: string; // Optional: if feedback is tied to a specific version
+  contentFormat: keyof MultiFormatContent | string; // e.g., 'blogPost', 'tweet'
+  rating: 1 | -1; // 1 for positive, -1 for negative
+  comment?: string;
+  timestamp: Date;
+}
