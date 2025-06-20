@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useEffect } from 'react';
@@ -15,7 +16,8 @@ async function predictPerformanceAPI(content: MultiFormatContent): Promise<Recor
     setTimeout(() => {
       const predictions: Record<string, { engagement: number; ctr: number; conversion: number }> = {};
       Object.keys(content).forEach(key => {
-        if(content[key as keyof MultiFormatContent]) {
+        const contentKey = key as keyof MultiFormatContent;
+        if(content[contentKey] && typeof content[contentKey] === 'string' && content[contentKey]!.length > 0) { // Ensure content exists
             predictions[key] = {
             engagement: Math.random() * 10 + 5, // e.g. 5-15%
             ctr: Math.random() * 5 + 1,       // e.g. 1-6%
@@ -29,7 +31,7 @@ async function predictPerformanceAPI(content: MultiFormatContent): Promise<Recor
 }
 
 interface PerformancePredictorProps {
-  campaignId: string;
+  campaignId: string | undefined; // Can be undefined if no campaign selected
   contentToAnalyze: MultiFormatContent | null;
 }
 
@@ -47,23 +49,31 @@ export function PerformancePredictor({ campaignId, contentToAnalyze }: Performan
   const [error, setError] = useState<string | null>(null);
   const { toast } = useToast();
 
+  const hasContentToAnalyze = contentToAnalyze && Object.values(contentToAnalyze).some(val => val && val.length > 0);
+
   const fetchPredictions = async () => {
-    if (!contentToAnalyze) {
+    if (!hasContentToAnalyze || !contentToAnalyze) { // Check again before fetching
       toast({ title: "No Content", description: "Cannot predict performance without content.", variant: "destructive"});
       setPredictions(null);
       return;
     }
     setIsLoading(true);
     setError(null);
-    setPredictions(null);
+    setPredictions(null); // Clear previous predictions
     try {
       const result = await predictPerformanceAPI(contentToAnalyze);
       const formattedData = Object.entries(result).map(([format, metrics]) => ({
         format: format.charAt(0).toUpperCase() + format.slice(1).replace(/([A-Z])/g, ' $1').trim(), // Format name nicely
         ...metrics
       }));
-      setPredictions(formattedData);
-      toast({ title: "Prediction Complete", description: "Performance metrics are estimated." });
+      
+      if (formattedData.length === 0) {
+        setPredictions([]);
+        toast({ title: "No Metrics Available", description: "Could not generate predictions for the provided content." });
+      } else {
+        setPredictions(formattedData);
+        toast({ title: "Prediction Complete", description: "Performance metrics are estimated." });
+      }
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : "Failed to get predictions.";
       setError(errorMessage);
@@ -73,15 +83,11 @@ export function PerformancePredictor({ campaignId, contentToAnalyze }: Performan
     }
   };
   
-  // Automatically fetch if content is available on mount or content change
-  // useEffect(() => {
-  //   if (contentToAnalyze && Object.keys(contentToAnalyze).length > 0) {
-  //     fetchPredictions();
-  //   } else {
-  //     setPredictions(null); // Clear predictions if no content
-  //   }
-  // // eslint-disable-next-line react-hooks/exhaustive-deps
-  // }, [contentToAnalyze]);
+  // Clear predictions if the campaign or content changes
+  useEffect(() => {
+    setPredictions(null);
+    setError(null);
+  }, [campaignId, contentToAnalyze]);
 
 
   return (
@@ -92,31 +98,31 @@ export function PerformancePredictor({ campaignId, contentToAnalyze }: Performan
           Performance Predictor
         </CardTitle>
         <CardDescription>
-          Estimate potential engagement, CTR, and conversion rates for your generated content formats.
+          Estimate potential engagement, CTR, and conversion rates for your generated content formats using AI simulation.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
-        {!contentToAnalyze || Object.keys(contentToAnalyze).length === 0 ? (
+        {!hasContentToAnalyze ? (
            <div className="flex flex-col items-center justify-center h-64 text-muted-foreground">
             <Info size={48} className="mb-4" />
             <p>No content available to analyze.</p>
-            <p className="text-sm">Generate a campaign first, then click "Predict Performance".</p>
+            <p className="text-sm">Generate content for a campaign first to enable predictions.</p>
           </div>
         ) : (
-             <Button onClick={fetchPredictions} disabled={isLoading || !contentToAnalyze}>
+             <Button onClick={fetchPredictions} disabled={isLoading || !hasContentToAnalyze}>
                 {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <BarChart className="mr-2 h-4 w-4" />}
                 Predict Performance
             </Button>
         )}
 
         {isLoading && (
-          <div className="flex items-center justify-center h-64">
+          <div className="flex flex-col items-center justify-center h-64">
             <Loader2 className="h-12 w-12 animate-spin text-primary" />
-            <p className="ml-4 text-muted-foreground">Calculating predictions...</p>
+            <p className="mt-4 text-muted-foreground">Calculating predictions...</p>
           </div>
         )}
 
-        {error && (
+        {error && !isLoading && (
           <div className="flex flex-col items-center justify-center h-64 text-destructive">
             <AlertTriangle size={48} className="mb-4" />
             <p>Error: {error}</p>
@@ -125,18 +131,23 @@ export function PerformancePredictor({ campaignId, contentToAnalyze }: Performan
         )}
 
         {!isLoading && !error && predictions && predictions.length > 0 && (
-          <div className="space-y-4">
+          <div className="space-y-4 pt-4">
             <h3 className="font-semibold text-lg">Predicted Metrics (%):</h3>
              <ResponsiveContainer width="100%" height={300}>
-                <RechartsBarChart data={predictions} margin={{ top: 5, right: 0, left: 0, bottom: 5 }}>
+                <RechartsBarChart data={predictions} margin={{ top: 5, right: 0, left: 0, bottom: 50 }}>
                     <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="format" angle={-20} textAnchor="end" height={60} interval={0} />
+                    <XAxis dataKey="format" angle={-35} textAnchor="end" height={70} interval={0} />
                     <YAxis />
-                    <Tooltip formatter={(value) => `${(value as number).toFixed(2)}%`} />
-                    <Legend />
-                    <Bar dataKey="engagement" fill="hsl(var(--primary))" name="Engagement" />
-                    <Bar dataKey="ctr" fill="hsl(var(--accent))" name="CTR" />
-                    <Bar dataKey="conversion" fill="hsl(var(--secondary))" name="Conversion" />
+                    <Tooltip 
+                        formatter={(value) => `${(value as number).toFixed(2)}%`}
+                        contentStyle={{ backgroundColor: 'hsl(var(--background))', border: '1px solid hsl(var(--border))', borderRadius: 'var(--radius)'}}
+                        itemStyle={{ color: 'hsl(var(--foreground))' }}
+                        cursor={{fill: 'hsl(var(--muted))', fillOpacity: 0.3}}
+                    />
+                    <Legend wrapperStyle={{paddingTop: '20px'}} />
+                    <Bar dataKey="engagement" fill="hsl(var(--primary))" name="Engagement" radius={[4, 4, 0, 0]} />
+                    <Bar dataKey="ctr" fill="hsl(var(--accent))" name="CTR" radius={[4, 4, 0, 0]} />
+                    <Bar dataKey="conversion" fill="hsl(var(--secondary))" name="Conversion" radius={[4, 4, 0, 0]} />
                 </RechartsBarChart>
             </ResponsiveContainer>
             <p className="text-xs text-muted-foreground">
@@ -144,13 +155,23 @@ export function PerformancePredictor({ campaignId, contentToAnalyze }: Performan
             </p>
           </div>
         )}
-         {!isLoading && !error && predictions === null && contentToAnalyze && Object.keys(contentToAnalyze).length > 0 && (
+        
+        {!isLoading && !error && predictions && predictions.length === 0 && hasContentToAnalyze && (
+             <div className="flex flex-col items-center justify-center h-64 text-muted-foreground">
+                <FileText size={48} className="mb-4" />
+                <p>No metrics could be generated for the current content.</p>
+                <p className="text-sm">This might happen if the content is too short or lacks enough substance for prediction.</p>
+            </div>
+        )}
+
+         {!isLoading && !error && predictions === null && hasContentToAnalyze && (
             <div className="flex flex-col items-center justify-center h-64 text-muted-foreground">
                 <FileText size={48} className="mb-4" />
-                <p>Click "Predict Performance" to see estimated metrics.</p>
+                <p>Click "Predict Performance" to see estimated metrics for the current content.</p>
             </div>
         )}
       </CardContent>
     </Card>
   );
 }
+

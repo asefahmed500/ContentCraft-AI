@@ -88,10 +88,17 @@ export default function DashboardPage() {
   const handleNewCampaignCreatedOrUpdated = (campaign: Campaign) => {
     setRefreshCampaignListTrigger(prev => prev + 1); 
     setSelectedCampaignForProcessing(campaign); 
-    setSelectedCampaignForEditingInForm(null); 
+    setSelectedCampaignForEditingInForm(null); // Clear editing form
     setContentHistory(campaign.contentHistory || []);
-     setMultiFormatContent(campaign.contentHistory && campaign.contentHistory.length > 0 ? campaign.contentHistory[campaign.contentHistory.length -1].multiFormatContentSnapshot : null);
-
+    // Set multiFormatContent from the latest version in history if available
+    const latestVersion = campaign.contentHistory && campaign.contentHistory.length > 0 
+        ? campaign.contentHistory[campaign.contentHistory.length -1] 
+        : null;
+    setMultiFormatContent(latestVersion ? latestVersion.multiFormatContentSnapshot : null);
+    setCurrentCampaignOverallStatus(campaign.status);
+    // If campaign is new and user clicked "Save Draft", don't auto-navigate.
+    // If they clicked "Save & Generate", handleGenerateContentForCampaign will navigate.
+    // If updating, stay on generator tab or current tab.
   };
 
   const handleGenerateContentForCampaign = async (
@@ -103,12 +110,12 @@ export default function DashboardPage() {
         return;
     }
 
-    setIsGeneratingCampaign(true);
-    setIsDebating(true);
+    setIsGeneratingCampaign(true); // Overall campaign processing flag
+    setIsDebating(true); // Specific debate phase flag
     await updateCampaignStatusAndRefresh(campaign.id, 'debating');
     setDebateMessages([]);
     setMultiFormatContent(null);
-    // setContentHistory([]); // Don't reset history, append to it
+    // setContentHistory([]); // Retain existing history, new version will be added
     setSelectedCampaignForProcessing(campaign); 
     
     const displayBrief = campaign.brief.substring(0, 50);
@@ -151,7 +158,7 @@ export default function DashboardPage() {
       simulatedMessages.push({ agentId: 'orchestrator-summary', agentName: 'Orchestrator', agentRole: 'Orchestrator', message: `Debate Summary: ${debateResult.debateSummary}`, timestamp: new Date(), type: 'statement'});
       
       setDebateMessages(simulatedMessages);
-      setIsDebating(false);
+      setIsDebating(false); // Debate phase specifically is done
       await updateCampaignStatusAndRefresh(campaign.id, 'generating');
       toast({ title: "Debate Phase Complete", description: "Agents have concluded. Generating content." });
       setActiveTab('preview');
@@ -169,13 +176,16 @@ export default function DashboardPage() {
 
       setMultiFormatContent(contentResult);
       const newVersion: ContentVersion = {
-        id: `v${contentHistory.length + 1}`, // Simple version ID
+        id: `v${(selectedCampaignForProcessing?.contentHistory?.length || 0) + 1}`, 
         timestamp: new Date(),
         actorName: "AI Team (Generation)",
         changeSummary: "Initial content generated based on brief and debate.",
         multiFormatContentSnapshot: contentResult,
       };
-      const updatedHistory = [...contentHistory, newVersion];
+      // Fetch current campaign to get latest history before updating
+      const currentCampaignState = selectedCampaignForProcessing;
+      const updatedHistory = [...(currentCampaignState?.contentHistory || []), newVersion];
+      
       setContentHistory(updatedHistory);
       await updateCampaignStatusAndRefresh(campaign.id, 'review', updatedHistory);
       toast({ title: "Content Generation Complete", description: "Multi-format content is ready for preview." });
@@ -187,7 +197,7 @@ export default function DashboardPage() {
       await updateCampaignStatusAndRefresh(campaign.id, 'draft'); 
       setIsDebating(false);
     } finally {
-      setIsGeneratingCampaign(false);
+      setIsGeneratingCampaign(false); // Overall campaign processing is done
     }
   };
 
@@ -199,7 +209,14 @@ export default function DashboardPage() {
       setCurrentCampaignOverallStatus(status);
       setRefreshCampaignListTrigger(prev => prev + 1); 
       if (selectedCampaignForProcessing && selectedCampaignForProcessing.id === campaignId) {
-        setSelectedCampaignForProcessing(prev => prev ? {...prev, status: status, contentHistory: newContentHistory || prev.contentHistory } : null);
+        setSelectedCampaignForProcessing(prev => {
+            if (!prev) return null;
+            const updatedCampaign = {...prev, status: status };
+            if (newContentHistory) {
+                updatedCampaign.contentHistory = newContentHistory;
+            }
+            return updatedCampaign;
+        });
       }
     }
   };
@@ -207,7 +224,7 @@ export default function DashboardPage() {
   const handleViewVersion = (version: ContentVersion) => {
     setMultiFormatContent(version.multiFormatContentSnapshot);
     setActiveTab('preview');
-    toast({title: `Viewing Version: ${version.id}`, description: `Displaying content snapshot from ${version.timestamp.toLocaleString()}`});
+    toast({title: `Viewing Version: ${version.id}`, description: `Displaying content snapshot from ${new Date(version.timestamp).toLocaleString()}`});
   };
 
 
@@ -216,18 +233,19 @@ export default function DashboardPage() {
 
     if (!campaignId) {
       setSelectedCampaignForProcessing(null);
-      setDebateMessages([]);
-      setMultiFormatContent(null);
-      setContentHistory([]);
-      setCurrentDebateTopic(undefined);
-      setCurrentCampaignOverallStatus('draft');
+      // Reset relevant states when no campaign is selected
+      // setDebateMessages([]); // Already reset by selectedCampaignForProcessing useEffect
+      // setMultiFormatContent(null);
+      // setContentHistory([]);
+      // setCurrentDebateTopic(undefined);
+      // setCurrentCampaignOverallStatus('draft');
       setActiveTab('campaign-hub'); 
       return;
     }
 
     try {
-      // Fetch all campaigns to find the selected one. This is inefficient but simple for now.
-      // Ideally, fetch only the specific campaign by ID if API supports it.
+      // Fetch all campaigns to find the selected one. 
+      // TODO: Optimize by fetching only the specific campaign by ID if API supports it.
       const campaignsResponse = await fetch(`/api/campaigns`);
       if (!campaignsResponse.ok) throw new Error("Failed to fetch campaigns to find the selected one.");
       const campaigns: Campaign[] = await campaignsResponse.json();
@@ -240,25 +258,18 @@ export default function DashboardPage() {
       }
       
       setSelectedCampaignForProcessing(campaignToSelect);
-      setCurrentCampaignOverallStatus(campaignToSelect.status);
-      setContentHistory(campaignToSelect.contentHistory || []);
+      // Other states (currentCampaignOverallStatus, contentHistory, multiFormatContent, currentDebateTopic)
+      // will be updated by the useEffect hook watching selectedCampaignForProcessing.
       
-      setDebateMessages([]); // Reset debate messages for now; could load persisted ones later
-      
-      const latestVersion = campaignToSelect.contentHistory && campaignToSelect.contentHistory.length > 0 
-        ? campaignToSelect.contentHistory[campaignToSelect.contentHistory.length - 1] 
-        : null;
-      setMultiFormatContent(latestVersion ? latestVersion.multiFormatContentSnapshot : null);
-
-      const displayBrief = campaignToSelect.brief.substring(0, 50);
-      setCurrentDebateTopic(`Campaign: "${displayBrief}..."`);
-
-
       if (action === 'edit') {
         setSelectedCampaignForEditingInForm(campaignToSelect); 
         setActiveTab('generator'); 
         toast({ title: "Editing Campaign", description: `Loaded "${campaignToSelect.brief.substring(0,30)}..." for editing.`});
       } else if (action === 'view') {
+        const latestVersion = campaignToSelect.contentHistory && campaignToSelect.contentHistory.length > 0 
+            ? campaignToSelect.contentHistory[campaignToSelect.contentHistory.length - 1] 
+            : null;
+
         if (latestVersion) {
              toast({ title: "Viewing Campaign", description: `Displaying latest content for "${campaignToSelect.brief.substring(0,30)}...".`});
              setActiveTab('preview');
@@ -280,12 +291,14 @@ export default function DashboardPage() {
   useEffect(() => {
     if (selectedCampaignForProcessing) {
         setCurrentCampaignOverallStatus(selectedCampaignForProcessing.status);
-        setCurrentDebateTopic(selectedCampaignForProcessing.brief.substring(0,70) + "...");
+        const displayBrief = selectedCampaignForProcessing.brief.substring(0, 70) + (selectedCampaignForProcessing.brief.length > 70 ? "..." : "");
+        setCurrentDebateTopic(`Campaign: "${displayBrief}"`);
         setContentHistory(selectedCampaignForProcessing.contentHistory || []);
         const latestVersion = selectedCampaignForProcessing.contentHistory && selectedCampaignForProcessing.contentHistory.length > 0 
             ? selectedCampaignForProcessing.contentHistory[selectedCampaignForProcessing.contentHistory.length - 1] 
             : null;
         setMultiFormatContent(latestVersion ? latestVersion.multiFormatContentSnapshot : null);
+        setDebateMessages([]); // Reset debate messages when campaign changes, they are specific to a generation run
 
     } else {
         setCurrentCampaignOverallStatus('draft');
@@ -318,6 +331,9 @@ export default function DashboardPage() {
     archived: "Archived"
   };
 
+  const hasContentForPreview = multiFormatContent && Object.values(multiFormatContent).some(v => v && v.length > 0);
+  const hasContentForPerformance = multiFormatContent && Object.values(multiFormatContent).some(v => v && v.length > 0);
+
 
   return (
     <div className="space-y-8">
@@ -336,14 +352,14 @@ export default function DashboardPage() {
       <Separator />
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-1">
+        <TabsList className="grid w-full grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-1 h-auto flex-wrap">
           <TabsTrigger value="campaign-hub"><ListChecks className="mr-1 sm:mr-2 h-4 w-4" />Campaigns</TabsTrigger>
           <TabsTrigger value="generator"><Lightbulb className="mr-1 sm:mr-2 h-4 w-4" />{selectedCampaignForEditingInForm ? "Edit" : "New"} Campaign</TabsTrigger>
           <TabsTrigger value="debate" disabled={!selectedCampaignForProcessing && debateMessages.length === 0}><Users className="mr-1 sm:mr-2 h-4 w-4" />Debate</TabsTrigger>
-          <TabsTrigger value="preview" disabled={!selectedCampaignForProcessing && !multiFormatContent}><FileText className="mr-1 sm:mr-2 h-4 w-4" />Preview</TabsTrigger>
+          <TabsTrigger value="preview" disabled={!selectedCampaignForProcessing || !hasContentForPreview}><FileText className="mr-1 sm:mr-2 h-4 w-4" />Preview</TabsTrigger>
           <TabsTrigger value="brand"><Sparkles className="mr-1 sm:mr-2 h-4 w-4" />Brand DNA</TabsTrigger>
           <TabsTrigger value="evolution" disabled={!selectedCampaignForProcessing || contentHistory.length === 0}><Activity className="mr-1 sm:mr-2 h-4 w-4" />Evolution</TabsTrigger>
-          <TabsTrigger value="performance" disabled={!selectedCampaignForProcessing || !multiFormatContent}><TrendingUp className="mr-1 sm:mr-2 h-4 w-4" />Performance</TabsTrigger>
+          <TabsTrigger value="performance" disabled={!selectedCampaignForProcessing || !hasContentForPerformance}><TrendingUp className="mr-1 sm:mr-2 h-4 w-4" />Performance</TabsTrigger>
         </TabsList>
 
         <TabsContent value="campaign-hub" className="mt-6">
@@ -374,14 +390,14 @@ export default function DashboardPage() {
              <AgentDebatePanel 
                 debateMessages={debateMessages} 
                 isDebating={isDebating && currentCampaignOverallStatus === 'debating'} 
-                debateTopic={currentDebateTopic || selectedCampaignForProcessing?.brief.substring(0,70)} 
+                debateTopic={currentDebateTopic} 
              />
         </TabsContent>
         
         <TabsContent value="preview" className="mt-6">
             <MultiFormatPreview 
                 content={multiFormatContent} 
-                isLoading={isGeneratingCampaign && currentCampaignOverallStatus === 'generating' && !multiFormatContent} 
+                isLoading={isGeneratingCampaign && (currentCampaignOverallStatus === 'generating' || currentCampaignOverallStatus === 'debating') && !multiFormatContent} 
             />
         </TabsContent>
 
@@ -398,8 +414,8 @@ export default function DashboardPage() {
 
         <TabsContent value="performance" className="mt-6">
             <PerformancePredictor 
-                campaignId={selectedCampaignForProcessing?.id || "current"} 
-                contentToAnalyze={selectedCampaignForProcessing ? multiFormatContent : null} 
+                campaignId={selectedCampaignForProcessing?.id} 
+                contentToAnalyze={multiFormatContent} 
             />
         </TabsContent>
         
@@ -407,3 +423,4 @@ export default function DashboardPage() {
     </div>
   );
 }
+
