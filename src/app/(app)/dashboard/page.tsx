@@ -188,7 +188,7 @@ export default function DashboardPage() {
       
       setContentHistory(updatedHistory);
       await updateCampaignStatusAndRefresh(campaign.id, 'review', updatedHistory);
-      toast({ title: "Content Generation Complete", description: "Multi-format content is ready for preview." });
+      toast({ title: "Content Generation Complete", description: "Your final draft of multi-format content is ready for preview." });
 
     } catch (error) {
       console.error("Campaign Generation Error:", error);
@@ -424,3 +424,5 @@ export default function DashboardPage() {
   );
 }
 
+
+    
