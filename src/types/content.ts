@@ -1,5 +1,6 @@
 
 
+
 export interface ContentPiece {
   id: string;
   format: ContentFormat;
@@ -49,7 +50,6 @@ export interface ContentVersion {
   actorName: string; // e.g., "AI Team", "User Edit", specific agent name like "Creative Director" (maps to modifiedBy)
   changeSummary: string; // Brief description of what changed or what was generated in this version (maps to changes)
   multiFormatContentSnapshot: MultiFormatContent; // A snapshot of all generated formats at this version
-  // Optional: performanceMetrics?: Record<ContentFormat, { ctr?: number; engagement?: number; conversion?: number; openRate?: number; ctaClick?: number; audienceMatchScore?: number }>;
 }
 
 export interface ScheduledPost {
@@ -62,11 +62,35 @@ export interface ScheduledPost {
   status: 'scheduled' | 'posted' | 'failed' | 'draft';
 }
 
+export interface PerformancePrediction {
+  ctr?: number;
+  engagement?: number;
+  conversion?: number;
+  audienceMatch?: number;
+  openRate?: number; // For email specific
+  [key: string]: number | undefined; 
+}
+
+export interface ABTestInstance {
+  id: string;
+  campaignId: string;
+  title: string; 
+  createdAt: Date;
+  aVersionContent: MultiFormatContent;
+  bVersionContent: MultiFormatContent;
+  aVersionMetrics?: Partial<Record<keyof MultiFormatContent, PerformancePrediction>>;
+  bVersionMetrics?: Partial<Record<keyof MultiFormatContent, PerformancePrediction>>;
+  formatRecommendations?: Partial<Record<keyof MultiFormatContent, { winner: 'A' | 'B' | 'Tie', reasoning?: string }>>;
+  overallWinnerRecommendation?: 'A' | 'B' | 'Inconclusive';
+  status: 'draft' | 'predicting' | 'completed' | 'archived';
+}
+
+
 export interface Campaign {
   _id?: any; // MongoDB ObjectId
   id: string; // String representation of _id
   userId: string; // To associate with a user
-  title: string; // Campaign name/title
+  title: string; 
   brief: string; // Product or service description
   targetAudience?: string;
   tone?: string;
@@ -77,6 +101,7 @@ export interface Campaign {
   agentDebates: AgentInteraction[]; // Stores the history of agent interactions during the debate phase
   contentVersions: ContentVersion[]; // For content evolution timeline and storing different output versions
   scheduledPosts?: ScheduledPost[]; // Array of scheduled posts for this campaign
+  abTests?: ABTestInstance[]; // For A/B Testing feature
   
   status: CampaignStatus;
   createdAt: Date;
@@ -118,4 +143,5 @@ export interface UserFeedback {
   comment?: string;
   timestamp: Date;
 }
+
 

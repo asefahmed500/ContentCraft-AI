@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import { useState, useCallback, useEffect } from 'react';
@@ -11,6 +12,7 @@ import { PerformancePredictor } from './components/PerformancePredictor';
 import { CampaignList } from './components/CampaignList'; 
 import { TemplateLibrary } from './components/TemplateLibrary';
 import { ContentCalendarView } from './components/ContentCalendarView';
+import { ABTestingPanel } from './components/ABTestingPanel';
 import type { AgentDebateInput, AgentDebateOutput } from '@/ai/flows/agent-debate';
 import { agentDebate } from '@/ai/flows/agent-debate';
 import type { GenerateContentInput, GenerateContentOutput } from '@/ai/flows/content-generation';
@@ -21,7 +23,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Separator } from '@/components/ui/separator';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Fingerprint, Users, Bot, Library, FileText, Activity, TrendingUp, BadgeCheck, ListChecks, Lightbulb, Edit, MessageSquareWarning, ShieldCheck, SearchCheck, Brain, BarChartBig, CalendarDays } from 'lucide-react';
+import { Fingerprint, Users, Bot, Library, FileText, Activity, TrendingUp, BadgeCheck, ListChecks, Lightbulb, Edit, MessageSquareWarning, ShieldCheck, SearchCheck, Brain, BarChartBig, CalendarDays, TestTubeDual } from 'lucide-react';
 
 async function agentDebateAction(input: AgentDebateInput): Promise<AgentDebateOutput | { error: string }> {
   try {
@@ -103,7 +105,8 @@ export default function DashboardPage() {
     const sanitizedCampaign = {
         ...campaign,
         agentDebates: (campaign.agentDebates || []).map(ad => ({...ad, timestamp: new Date(ad.timestamp)})),
-        contentVersions: (campaign.contentVersions || []).map(cv => ({...cv, timestamp: new Date(cv.timestamp)}))
+        contentVersions: (campaign.contentVersions || []).map(cv => ({...cv, timestamp: new Date(cv.timestamp)})),
+        abTests: (campaign.abTests || []).map(ab => ({...ab, createdAt: new Date(ab.createdAt)})),
     };
     
     const result = await updateCampaignAPI(campaign.id, sanitizedCampaign);
@@ -244,8 +247,6 @@ export default function DashboardPage() {
     }
 
     try {
-      // Fetch the specific campaign directly might be better if API supports it,
-      // but fetching all and filtering is okay for now with few campaigns.
       const campaignsResponse = await fetch(`/api/campaigns`);
       if (!campaignsResponse.ok) throw new Error("Failed to fetch campaigns to find the selected one.");
       const campaigns: Campaign[] = await campaignsResponse.json();
@@ -318,7 +319,7 @@ export default function DashboardPage() {
   const campaignStatus = selectedCampaignForProcessing?.status || 'draft';
   const debateMessages = selectedCampaignForProcessing?.agentDebates || [];
   const contentVersions = selectedCampaignForProcessing?.contentVersions || [];
-  const latestContentVersionId = contentVersions.length > 0 ? contentVersions[contentVersions.length - 1].id : undefined;
+  const latestContentVersionId = contentVersions.length > 0 ? contentVersions.sort((a,b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())[0].id : undefined;
 
 
   const getStatusBadgeIcon = (status: CampaignStatus) => {
@@ -365,7 +366,7 @@ export default function DashboardPage() {
       <Separator />
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-3 md:grid-cols-5 lg:grid-cols-9 gap-1 h-auto flex-wrap p-1">
+        <TabsList className="grid w-full grid-cols-3 md:grid-cols-5 lg:grid-cols-10 gap-1 h-auto flex-wrap p-1">
           <TabsTrigger value="campaign-hub" className="text-xs sm:text-sm"><ListChecks className="mr-1 sm:mr-2 h-3 w-3 sm:h-4 sm:w-4" />Campaigns</TabsTrigger>
           <TabsTrigger value="generator" className="text-xs sm:text-sm"><Lightbulb className="mr-1 sm:mr-2 h-3 w-3 sm:h-4 sm:w-4" />{selectedCampaignForEditingInForm ? "Edit" : "New"} Brief</TabsTrigger>
           <TabsTrigger value="templates" className="text-xs sm:text-sm"><Library className="mr-1 sm:mr-2 h-3 w-3 sm:h-4 sm:w-4" />Templates</TabsTrigger>
@@ -374,6 +375,7 @@ export default function DashboardPage() {
           <TabsTrigger value="preview" className="text-xs sm:text-sm" disabled={!selectedCampaignForProcessing || !hasContentForPreview}><FileText className="mr-1 sm:mr-2 h-3 w-3 sm:h-4 sm:w-4" />Preview</TabsTrigger>
           <TabsTrigger value="evolution" className="text-xs sm:text-sm" disabled={!selectedCampaignForProcessing || contentVersions.length === 0}><Activity className="mr-1 sm:mr-2 h-3 w-3 sm:h-4 sm:w-4" />Evolution</TabsTrigger>
           <TabsTrigger value="performance" className="text-xs sm:text-sm" disabled={!selectedCampaignForProcessing || !hasContentForPerformance}><BarChartBig className="mr-1 sm:mr-2 h-3 w-3 sm:h-4 sm:w-4" />Performance</TabsTrigger>
+          <TabsTrigger value="ab-testing" className="text-xs sm:text-sm" disabled={!selectedCampaignForProcessing}><TestTubeDual className="mr-1 sm:mr-2 h-3 w-3 sm:h-4 sm:w-4" />A/B Tests</TabsTrigger>
           <TabsTrigger value="calendar" className="text-xs sm:text-sm"><CalendarDays className="mr-1 sm:mr-2 h-3 w-3 sm:h-4 sm:w-4" />Calendar</TabsTrigger>
         </TabsList>
 
@@ -447,6 +449,13 @@ export default function DashboardPage() {
             />
         </TabsContent>
 
+         <TabsContent value="ab-testing" className="mt-6">
+            <ABTestingPanel 
+                campaignId={selectedCampaignForProcessing?.id}
+                abTests={selectedCampaignForProcessing?.abTests || []}
+            />
+        </TabsContent>
+
         <TabsContent value="calendar" className="mt-6">
             <ContentCalendarView />
         </TabsContent>
@@ -455,4 +464,5 @@ export default function DashboardPage() {
     </div>
   );
 }
+
 

@@ -1,10 +1,11 @@
 
+
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import clientPromise from '@/lib/mongodb';
 import { getToken } from 'next-auth/jwt';
 import { ObjectId } from 'mongodb';
-import type { Campaign, ContentVersion, AgentInteraction } from '@/types/content';
+import type { Campaign, ContentVersion, AgentInteraction, ABTestInstance } from '@/types/content';
 
 // GET /api/campaigns - List all campaigns for the authenticated user
 export async function GET(request: NextRequest) {
@@ -26,6 +27,8 @@ export async function GET(request: NextRequest) {
       id: campaign._id!.toString(), 
       contentVersions: campaign.contentVersions || [],
       agentDebates: campaign.agentDebates || [],
+      scheduledPosts: campaign.scheduledPosts || [],
+      abTests: campaign.abTests || [],
     }));
 
     return NextResponse.json(formattedCampaigns, { status: 200 });
@@ -66,6 +69,8 @@ export async function POST(request: NextRequest) {
       referenceMaterials: referenceMaterials || [],
       agentDebates: [],
       contentVersions: [],
+      scheduledPosts: [],
+      abTests: [],
       status: 'draft', 
       createdAt: new Date(),
       updatedAt: new Date(),
@@ -111,7 +116,7 @@ export async function PUT(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { title, brief, targetAudience, tone, contentGoals, status, contentVersions, agentDebates, referenceMaterials, brandId } = body;
+    const { title, brief, targetAudience, tone, contentGoals, status, contentVersions, agentDebates, referenceMaterials, brandId, scheduledPosts, abTests } = body;
 
     const updateData: Partial<Omit<Campaign, 'id' | '_id' | 'userId' | 'createdAt'>> = { updatedAt: new Date() };
     
@@ -137,6 +142,19 @@ export async function PUT(request: NextRequest) {
         timestamp: ad.timestamp ? new Date(ad.timestamp) : new Date(),
       }));
     }
+    if (scheduledPosts !== undefined && Array.isArray(scheduledPosts)) {
+      updateData.scheduledPosts = scheduledPosts.map((sp: any) => ({ // Type any for sp if ScheduledPost is not fully defined yet
+        ...sp,
+        scheduledAt: sp.scheduledAt ? new Date(sp.scheduledAt) : new Date(),
+        // Ensure other date fields are handled if they exist
+      }));
+    }
+     if (abTests !== undefined && Array.isArray(abTests)) {
+      updateData.abTests = abTests.map((ab: ABTestInstance) => ({
+        ...ab,
+        createdAt: ab.createdAt ? new Date(ab.createdAt) : new Date(),
+      }));
+    }
     
     const updateKeys = Object.keys(updateData).filter(key => key !== 'updatedAt');
     
@@ -144,7 +162,7 @@ export async function PUT(request: NextRequest) {
     const db = client.db();
     const campaignsCollection = db.collection<Campaign>('campaigns');
 
-    if (updateKeys.length === 0) { // No actual data change, just fetching existing
+    if (updateKeys.length === 0) { 
         const existingCampaign = await campaignsCollection.findOne({ _id: new ObjectId(campaignId), userId: userId });
         if (!existingCampaign) {
             return NextResponse.json({ error: 'Campaign not found or user not authorized' }, { status: 404 });
@@ -153,7 +171,9 @@ export async function PUT(request: NextRequest) {
             ...existingCampaign, 
             id: existingCampaign._id!.toString(), 
             contentVersions: existingCampaign.contentVersions || [], 
-            agentDebates: existingCampaign.agentDebates || [] 
+            agentDebates: existingCampaign.agentDebates || [],
+            scheduledPosts: existingCampaign.scheduledPosts || [],
+            abTests: existingCampaign.abTests || [],
         }, { status: 200 });
     }
 
@@ -173,6 +193,8 @@ export async function PUT(request: NextRequest) {
         id: result.value._id!.toString(),
         contentVersions: result.value.contentVersions || [],
         agentDebates: result.value.agentDebates || [],
+        scheduledPosts: result.value.scheduledPosts || [],
+        abTests: result.value.abTests || [],
     };
 
     return NextResponse.json(updatedCampaign, { status: 200 });
@@ -225,4 +247,5 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json({ error: 'Failed to delete campaign' }, { status: 500 });
   }
 }
+
 
