@@ -8,14 +8,15 @@ import { Separator } from '@/components/ui/separator';
 import { Button } from '@/components/ui/button';
 import { UserTable } from './components/UserTable';
 import { AdminCampaignList } from './components/AdminCampaignList';
-import { FlaggedContentTable } from './components/FlaggedContentTable'; // New Import
-import { MultiFormatPreview } from '@/app/(app)/dashboard/components/MultiFormatPreview';
-import { AgentDebatePanel } from '@/app/(app)/dashboard/components/AgentDebatePanel';
-import { ContentEvolutionTimeline } from '@/app/(app)/dashboard/components/ContentEvolutionTimeline';
+import { FlaggedContentTable } from './components/FlaggedContentTable'; 
+// Removed imports for components from (app) directory
+// import { MultiFormatPreview } from '@/app/(app)/dashboard/components/MultiFormatPreview';
+// import { AgentDebatePanel } from '@/app/(app)/dashboard/components/AgentDebatePanel';
+// import { ContentEvolutionTimeline } from '@/app/(app)/dashboard/components/ContentEvolutionTimeline';
 import type { Campaign, CampaignStatus, ContentVersion, AgentInteraction, MultiFormatContent } from '@/types/content';
 import type { User as NextAuthUser } from 'next-auth';
 import type { AgentRole } from '@/types/agent';
-import { BarChart, LineChart as LucideLineChart, Users, FileText, Activity, Zap, Brain, Download, Info, PieChart, ListTree, Eye, Edit, XCircle, MessageSquare, Trophy, Star, ShieldAlert as ShieldAlertIcon } from 'lucide-react'; // Added ShieldAlertIcon
+import { BarChart, LineChart as LucideLineChart, Users, FileText, Activity, Zap, Brain, Download, Info, PieChart, ListTree, Eye, Edit, XCircle, MessageSquare, Trophy, Star, ShieldAlert as ShieldAlertIcon } from 'lucide-react';
 import { ResponsiveContainer, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, BarChart as RechartsBarChart, Line, LineChart as RechartsLineChart, Pie, Cell, PieChart as RechartsPieChart } from 'recharts';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2 } from 'lucide-react';
@@ -182,7 +183,6 @@ export default function AdminDashboardPage() {
 
   const handleRefreshFlaggedContent = useCallback(() => {
     setFlaggedContentRefreshTrigger(prev => prev + 1);
-    // Also refresh the main campaign list if a version flag impacts campaign-level display
     fetchAllCampaigns(false); 
      if (selectedCampaignForAdminView) {
       fetchSingleCampaign(selectedCampaignForAdminView.id).then(updatedCampaign => {
@@ -234,8 +234,6 @@ export default function AdminDashboardPage() {
     setIsFetchingCampaignDetail(true);
     try {
         const response = await fetch(`/api/admin/campaigns?id=${campaignId}&single=true`); 
-        // Using admin endpoint for consistency if specific permissions were different
-        // Or use /api/campaigns if it has a way to fetch any campaign by ID for admin
         if (!response.ok) throw new Error("Failed to fetch updated campaign details");
         const campaign: Campaign = await response.json();
         return campaign 
@@ -246,7 +244,7 @@ export default function AdminDashboardPage() {
                 agentDebates: (campaign.agentDebates || []).map(ad => ({...ad, timestamp: new Date(ad.timestamp)})), 
                 contentVersions: (campaign.contentVersions || []).map(cv => ({
                     ...cv, 
-                    timestamp: new Date(cv.timestamp), 
+                    timestamp: new Date(cv.timestamp),
                     isFlagged: cv.isFlagged ?? false, 
                     adminModerationNotes: cv.adminModerationNotes ?? ''
                 })),
@@ -284,9 +282,9 @@ export default function AdminDashboardPage() {
     if (selectedCampaignForAdminView && selectedCampaignForAdminView.id === processedCampaign.id) {
         setSelectedCampaignForAdminView(processedCampaign);
     }
-    setFlaggedContentRefreshTrigger(prev => prev +1); // Refresh flagged content list
+    setFlaggedContentRefreshTrigger(prev => prev +1); 
     toast({title: "Version Moderation Updated", description: "Content version status has been reflected."});
-  }, [selectedCampaignForAdminView]);
+  }, [selectedCampaignForAdminView, toast]);
 
 
   const handleDownloadPlaceholder = (dataType: string) => {
@@ -297,12 +295,6 @@ export default function AdminDashboardPage() {
     });
   };
   
-  const debateMessagesForPreview: AgentInteraction[] = selectedCampaignForAdminView?.agentDebates || [];
-  const contentVersionsForPreview: ContentVersion[] = (selectedCampaignForAdminView?.contentVersions || []).sort((a,b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
-  const latestContentVersionForPreview: ContentVersion | null = contentVersionsForPreview[0] || null;
-  const multiFormatContentForPreview: MultiFormatContent | null = latestContentVersionForPreview ? latestContentVersionForPreview.multiFormatContentSnapshot : null;
-
-
   return (
     <div className="space-y-8">
       <div>
@@ -519,7 +511,7 @@ export default function AdminDashboardPage() {
             </CardHeader>
             <CardContent>
               <FlaggedContentTable 
-                key={flaggedContentRefreshTrigger} // Force re-render on refresh
+                key={flaggedContentRefreshTrigger} 
                 onViewCampaign={(campaignId) => handleAdminCampaignAction(campaignId, 'view')}
                 onRefreshNeeded={handleRefreshFlaggedContent}
               />
@@ -564,44 +556,33 @@ export default function AdminDashboardPage() {
                             {selectedCampaignForAdminView.targetAudience && <p><span className="font-semibold">Audience:</span> {selectedCampaignForAdminView.targetAudience}</p>}
                             {selectedCampaignForAdminView.tone && <p><span className="font-semibold">Tone:</span> {selectedCampaignForAdminView.tone}</p>}
                             {selectedCampaignForAdminView.contentGoals && selectedCampaignForAdminView.contentGoals.length > 0 && <p><span className="font-semibold">Goals:</span> {selectedCampaignForAdminView.contentGoals.join(', ')}</p>}
+                             <h4 className="font-semibold mt-4 mb-2">Agent Debates:</h4>
+                            {selectedCampaignForAdminView.agentDebates && selectedCampaignForAdminView.agentDebates.length > 0 ? (
+                                <pre className="whitespace-pre-wrap text-xs p-2 border rounded bg-muted/50 max-h-60 overflow-y-auto">
+                                    {JSON.stringify(selectedCampaignForAdminView.agentDebates, null, 2)}
+                                </pre>
+                            ): <p className="text-sm text-muted-foreground">No agent debates recorded for this campaign.</p>}
+
+                            <h4 className="font-semibold mt-4 mb-2">Content Versions:</h4>
+                             {selectedCampaignForAdminView.contentVersions && selectedCampaignForAdminView.contentVersions.length > 0 ? (
+                                <pre className="whitespace-pre-wrap text-xs p-2 border rounded bg-muted/50 max-h-96 overflow-y-auto">
+                                    {JSON.stringify(selectedCampaignForAdminView.contentVersions, null, 2)}
+                                </pre>
+                            ): <p className="text-sm text-muted-foreground">No content versions recorded for this campaign.</p>}
                         </CardContent>
                     </Card>
 
-                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                        <AgentDebatePanel
-                             debateMessages={debateMessagesForPreview.map(interaction => ({
-                                agentId: interaction.agentId || `agent-${interaction.agent.replace(/\s+/g, '-').toLowerCase()}`,
-                                agentName: interaction.agentName || interaction.agent,
-                                agentRole: (interaction.role || 'Orchestrator') as AgentRole,
-                                message: interaction.message,
-                                timestamp: new Date(interaction.timestamp),
-                                type: interaction.type || 'statement'
-                            }))}
-                            isDebating={false} 
-                            debateTopic={`Debate for: "${selectedCampaignForAdminView.title}"`}
-                        />
-                        <ContentEvolutionTimeline
-                            versions={contentVersionsForPreview}
-                            onViewVersion={(version) => {
-                                const campaignWithVersionAsLatest = {
-                                    ...selectedCampaignForAdminView,
-                                    contentVersions: [version, ...selectedCampaignForAdminView.contentVersions.filter(v => v.id !== version.id)].sort((a,b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
-                                };
-                                setSelectedCampaignForAdminView(campaignWithVersionAsLatest);
-                                toast({title: `Admin viewing version ${version.versionNumber}`});
-                            }}
-                            campaignId={selectedCampaignForAdminView.id}
-                            onVersionFlagged={handleContentVersionFlaggedInDetailView}
-                        />
-                    </div>
-                    <MultiFormatPreview
-                        content={multiFormatContentForPreview}
-                        isLoading={false} 
-                        campaignId={selectedCampaignForAdminView.id}
-                        currentCampaign={selectedCampaignForAdminView}
-                        currentContentVersion={latestContentVersionForPreview}
-                        onFeedbackSubmittedSuccessfully={() => toast({title: "Admin Note", description: "Feedback panel is for user interaction. Admins moderate directly."})}
-                    />
+                    {/* Removed AgentDebatePanel, ContentEvolutionTimeline, and MultiFormatPreview components */}
+                    {/* These components relied on files from the deleted (app) directory */}
+                    <Alert variant="default">
+                        <Info className="h-5 w-5"/>
+                        <AlertTitle>Simplified Detail View</AlertTitle>
+                        <AlertDescription>
+                            Detailed agent debate, content evolution timeline, and multi-format preview components are unavailable in this view
+                            as their source files (from the `src/app/(app)/dashboard/components/` directory) are not present.
+                            Raw campaign data for debates and versions is shown above.
+                        </AlertDescription>
+                    </Alert>
                 </>
             )}
         </TabsContent>
@@ -638,3 +619,5 @@ export default function AdminDashboardPage() {
     </div>
   );
 }
+
+    

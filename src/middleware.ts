@@ -11,17 +11,10 @@ export async function middleware(request: NextRequest) {
 
   // Handle authenticated but banned users first
   if (isAuthenticated && token.isBanned) {
-    // If a banned user tries to access any protected route, redirect them to login.
-    // The signIn callback in NextAuth should then prevent actual login and show an error.
     if (pathname.startsWith('/dashboard') || pathname.startsWith('/admin')) {
       const loginUrl = new URL('/login', request.url);
-      // Optional: you could add a query param to show a specific "account suspended" message on the login page
-      // loginUrl.searchParams.set('error', 'AccountSuspended');
       return NextResponse.redirect(loginUrl);
     }
-    // If a banned user is somehow trying to access login/signup again with a valid (but banned) token,
-    // let them proceed to login, where the ban will be enforced by the signIn callback.
-    // This scenario is less likely if they are already "authenticated" per the token.
   }
 
   // Admin route protection
@@ -31,25 +24,35 @@ export async function middleware(request: NextRequest) {
       loginUrl.searchParams.set('callbackUrl', pathname);
       return NextResponse.redirect(loginUrl);
     }
-    // If user is authenticated but not admin (and not banned, as handled above)
     if (token.role !== 'admin') {
-      const dashboardUrl = new URL('/dashboard', request.url);
-      return NextResponse.redirect(dashboardUrl);
+      // Non-admin trying to access /admin, redirect to home page
+      const homeUrl = new URL('/', request.url);
+      return NextResponse.redirect(homeUrl);
     }
   }
 
-  // If trying to access general dashboard and not authenticated, redirect to login
-  // (Banned users are handled above, so this is for genuinely unauthenticated users)
-  if (pathname.startsWith('/dashboard') && !isAuthenticated && !pathname.startsWith('/admin')) {
-    const loginUrl = new URL('/login', request.url);
-    loginUrl.searchParams.set('callbackUrl', pathname);
-    return NextResponse.redirect(loginUrl);
+  // If trying to access /dashboard (which is now deleted for non-admins)
+  if (pathname.startsWith('/dashboard')) {
+    if (!isAuthenticated) {
+      const loginUrl = new URL('/login', request.url);
+      loginUrl.searchParams.set('callbackUrl', pathname); // Keep original attempt if they login
+      return NextResponse.redirect(loginUrl);
+    }
+    // If authenticated but not an admin, /dashboard is gone, so redirect to home
+    if (token && token.role !== 'admin') {
+      const homeUrl = new URL('/', request.url);
+      return NextResponse.redirect(homeUrl);
+    }
+    // If an admin somehow tries to access /dashboard/*, it will likely 404 as content is gone.
+    // This case is less critical than non-admin access.
   }
 
-  // If trying to access login/signup and already authenticated (and not banned), redirect to appropriate dashboard
+  // If trying to access login/signup and already authenticated (and not banned)
   if ((pathname === '/login' || pathname === '/signup') && isAuthenticated && !token.isBanned) {
-    const dashboardUrl = token.role === 'admin' ? new URL('/admin/dashboard', request.url) : new URL('/dashboard', request.url);
-    return NextResponse.redirect(dashboardUrl);
+    const destinationUrl = token.role === 'admin' 
+      ? new URL('/admin/dashboard', request.url) 
+      : new URL('/', request.url); // Non-admins to home page
+    return NextResponse.redirect(destinationUrl);
   }
 
   return NextResponse.next();
@@ -58,3 +61,5 @@ export async function middleware(request: NextRequest) {
 export const config = {
   matcher: ['/dashboard/:path*', '/admin/:path*', '/login', '/signup'],
 };
+
+    

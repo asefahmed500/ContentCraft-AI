@@ -24,7 +24,10 @@ function LoginPageContent() {
   const { data: session, status } = useSession();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const callbackUrl = searchParams.get('callbackUrl') || '/dashboard';
+  // Default to '/' and let middleware handle admin redirect or if callbackUrl was specific
+  const callbackUrlFromParams = searchParams.get('callbackUrl');
+  const initialError = searchParams.get('error');
+
 
   const isAuthenticated = status === 'authenticated';
   const authLoading = status === 'loading';
@@ -35,10 +38,20 @@ function LoginPageContent() {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
-    if (!authLoading && isAuthenticated) {
-      router.replace(callbackUrl);
+    if (initialError === "CredentialsSignin" || initialError === "OAuthSignin" || initialError === "OAuthCallback") {
+      setError("Invalid email or password, or social login failed.");
+    } else if (initialError) {
+      setError(initialError); // Display other errors passed from NextAuth
     }
-  }, [authLoading, isAuthenticated, router, callbackUrl]);
+  }, [initialError]);
+
+  useEffect(() => {
+    if (!authLoading && isAuthenticated) {
+      // Redirect based on callbackUrl from params if it exists and is valid,
+      // otherwise, middleware will handle default redirection (e.g., to /admin/dashboard or /)
+      router.replace(callbackUrlFromParams || '/');
+    }
+  }, [authLoading, isAuthenticated, router, callbackUrlFromParams, session]);
 
 
   const handleCredentialsSubmit = async (event: FormEvent) => {
@@ -55,13 +68,13 @@ function LoginPageContent() {
         redirect: false, 
         email, 
         password, 
-        callbackUrl 
+        callbackUrl: callbackUrlFromParams || '/' // Send to / and let middleware sort it out
       });
 
       if (result?.error) {
         setError(result.error === "CredentialsSignin" ? "Invalid email or password." : result.error);
-      } else if (result?.ok) {
-        // router.replace(callbackUrl); // Let useEffect handle redirection
+      } else if (result?.ok && !result.error) {
+        // router.replace will be handled by useEffect based on session status change
       }
     } catch (e: any) {
       setError(e.message || 'Login failed. Please check your credentials.');
@@ -71,16 +84,15 @@ function LoginPageContent() {
   };
 
   const handleGoogleSignIn = async () => {
-    setIsSubmitting(true); // Consider a different state for Google Sign-In if needed
+    setIsSubmitting(true); 
     setError('');
     try {
-      await signIn('google', { redirect: false, callbackUrl });
-      // Successful Google sign-in will trigger session update and useEffect for redirection
-    } catch (e: any) { // This catch might not be reached if signIn itself handles errors/redirects
+      // Send to / and let middleware sort it out
+      await signIn('google', { redirect: false, callbackUrl: callbackUrlFromParams || '/' });
+    } catch (e: any) { 
       setError(e.message || 'Google Sign-In failed. Please try again.');
       setIsSubmitting(false);
     }
-    // setIsSubmitting(false) might be set too early if signIn is still processing
   };
   
   if (authLoading || (!authLoading && isAuthenticated)) {
@@ -162,8 +174,9 @@ function LoginPageContent() {
 }
 
 export default function LoginPage() {
-  // SessionProvider is at the root
   return (
       <LoginPageContent />
   );
 }
+
+    

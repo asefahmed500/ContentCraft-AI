@@ -37,9 +37,10 @@ function SignUpPageContent() {
 
   useEffect(() => {
     if (!authLoading && isAuthenticated) {
-      router.replace('/dashboard');
+      // Middleware will handle redirection based on role
+      // router.replace(session?.user?.role === 'admin' ? '/admin/dashboard' : '/');
     }
-  }, [authLoading, isAuthenticated, router]);
+  }, [authLoading, isAuthenticated, router, session]);
 
   const handleCredentialsSubmit = async (event: FormEvent) => {
     event.preventDefault();
@@ -81,7 +82,7 @@ function SignUpPageContent() {
         setPassword('');
         setConfirmPassword('');
         setTimeout(() => {
-          router.push('/login?signup=success'); // Optionally add a query param
+          router.push('/login?signup=success'); 
         }, 2000);
       }
     } catch (err) {
@@ -96,18 +97,12 @@ function SignUpPageContent() {
     setIsGoogleSubmitting(true);
     setError('');
     try {
-      // For signup, NextAuth handles user creation with Google provider if the user doesn't exist.
-      // The callbackUrl directs them after Google sign-in/sign-up.
-      await signIn('google', { callbackUrl: '/dashboard', redirect: false });
-      // If redirect: false, next-auth signIn won't automatically redirect.
-      // Successful Google sign-in will update session, and useEffect will handle redirection.
-      // If there's an error (e.g. popup closed), it might throw or return an error object.
-      // However, often for OAuth, errors are handled by redirection.
-      // For a smoother UX, we might not see an error here directly if the user cancels on Google's page.
+      // Redirect to '/' and let middleware handle final destination
+      await signIn('google', { callbackUrl: '/', redirect: false });
     } catch (e: any) {
       setError(e.message || 'Google Sign-Up failed. Please try again.');
     } finally {
-        //setIsGoogleSubmitting(false); // Might be set too early if OAuth flow is ongoing
+       // setIsGoogleSubmitting(false); // Let session status changes handle UI
     }
   };
   
@@ -185,7 +180,7 @@ function SignUpPageContent() {
             {successMessage && <p className="text-sm text-green-600 text-center">{successMessage}</p>}
           </CardContent>
           <CardFooter className="flex flex-col gap-4">
-            <Button type="submit" className="w-full" disabled={isSubmitting || isGoogleSubmitting}>
+            <Button type="submit" className="w-full" disabled={isSubmitting || isGoogleSubmitting || successMessage !== ''}>
               {isSubmitting ? <Loader2 className="animate-spin" /> : <UserPlus />} Sign Up with Email
             </Button>
             <div className="relative w-full">
@@ -198,7 +193,7 @@ function SignUpPageContent() {
                 </span>
               </div>
             </div>
-            <Button variant="outline" className="w-full" onClick={handleGoogleSignUp} disabled={isSubmitting || isGoogleSubmitting}>
+            <Button variant="outline" className="w-full" onClick={handleGoogleSignUp} disabled={isSubmitting || isGoogleSubmitting || successMessage !== ''}>
               {isGoogleSubmitting ? <Loader2 className="animate-spin" /> : <GoogleIcon />} Google
             </Button>
             <p className="text-center text-sm text-muted-foreground">
@@ -215,8 +210,9 @@ function SignUpPageContent() {
 }
 
 export default function SignUpPage() {
-  // SessionProvider is at the root
   return (
       <SignUpPageContent />
   );
 }
+
+    
