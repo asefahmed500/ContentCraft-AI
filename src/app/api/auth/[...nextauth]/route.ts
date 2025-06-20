@@ -17,6 +17,7 @@ interface MyAppUser extends NextAuthUser {
   totalXP?: number;
   level?: number;
   badges?: string[];
+  emailVerified?: Date | null;
 }
 
 const defaultGamification = {
@@ -78,15 +79,16 @@ export const authOptions: NextAuthOptions = {
           throw new Error("Incorrect password.");
         }
         
+        // Ensure all fields for MyAppUser are present
         return {
           id: dbUser._id!.toString(), 
           email: dbUser.email,
           name: dbUser.name,
           image: dbUser.image,
-          role: (dbUser as MyAppUser).role ?? defaultGamification.role,
-          totalXP: (dbUser as MyAppUser).totalXP ?? defaultGamification.totalXP,
-          level: (dbUser as MyAppUser).level ?? defaultGamification.level,
-          badges: (dbUser as MyAppUser).badges ?? defaultGamification.badges,
+          role: (dbUser as unknown as MyAppUser).role ?? defaultGamification.role,
+          totalXP: (dbUser as unknown as MyAppUser).totalXP ?? defaultGamification.totalXP,
+          level: (dbUser as unknown as MyAppUser).level ?? defaultGamification.level,
+          badges: (dbUser as unknown as MyAppUser).badges ?? defaultGamification.badges,
           emailVerified: dbUser.emailVerified ? new Date(dbUser.emailVerified) : null,
         } as MyAppUser; 
       }
@@ -100,17 +102,25 @@ export const authOptions: NextAuthOptions = {
       const client: MongoClient = await clientPromise;
       const db: Db = client.db(getDbName());
       const usersCollection = db.collection<AdapterUser>("users");
-      let dbUser = await usersCollection.findOne({ email: user.email as string });
+      
+      // The 'user' object passed to signIn is what the adapter returns (for OAuth)
+      // or what authorize returns (for credentials).
+      // For OAuth, if it's a new user, 'user' might be the raw profile from provider,
+      // and adapter.createUser will be called after this callback if it returns true.
+      // We need to ensure the user object that eventually goes into JWT is complete.
 
-      if (dbUser) { // Existing user
-        const updates: Partial<AdapterUser & MyAppUser> = {};
-        let needsDbUpdate = false;
+      if (account?.provider === "google") {
+        let dbUser = await usersCollection.findOne({ email: user.email as string });
+        const googleProfile = profile as (Profile & { picture?: string; email_verified?: boolean });
 
-        // Ensure the user object for JWT uses the DB user's ID
-        user.id = dbUser._id.toString(); 
+        if (dbUser) { // Existing user signed in with Google
+          const updates: Partial<AdapterUser & MyAppUser> = {};
+          let needsDbUpdate = false;
 
-        if (account?.provider === "google") {
-          const googleProfile = profile as (Profile & { picture?: string; email_verified?: boolean });
+          // Update user.id to be the string version of DB _id for JWT consistency
+          // This 'user' object will be passed to JWT callback.
+          user.id = dbUser._id.toString(); 
+
           if (googleProfile?.name && dbUser.name !== googleProfile.name) {
             updates.name = googleProfile.name;
             user.name = googleProfile.name; 
@@ -119,95 +129,105 @@ export const authOptions: NextAuthOptions = {
           const googleImage = googleProfile?.picture || googleProfile?.image;
           if (googleImage && dbUser.image !== googleImage) {
             updates.image = googleImage;
-            user.image = googleImage; 
+            user.image = googleImage;
             needsDbUpdate = true;
           }
           if (!dbUser.emailVerified && googleProfile?.email_verified === true) {
             updates.emailVerified = new Date();
-            user.emailVerified = updates.emailVerified; 
+            (user as MyAppUser).emailVerified = updates.emailVerified;
             needsDbUpdate = true;
+          } else {
+            (user as MyAppUser).emailVerified = dbUser.emailVerified ? new Date(dbUser.emailVerified) : null;
           }
-        }
 
-        // Ensure gamification fields are present in DB and on user object for JWT
-        if (typeof (dbUser as MyAppUser).role === 'undefined') { 
-          updates.role = defaultGamification.role; needsDbUpdate = true; 
-        }
-        (user as MyAppUser).role = (dbUser as MyAppUser).role ?? updates.role ?? defaultGamification.role;
+          // Ensure custom fields are present in user object for JWT and update DB if needed
+          if (typeof (dbUser as unknown as MyAppUser).role === 'undefined') { 
+            updates.role = defaultGamification.role; 
+            (user as MyAppUser).role = defaultGamification.role;
+            needsDbUpdate = true; 
+          } else {
+            (user as MyAppUser).role = (dbUser as unknown as MyAppUser).role;
+          }
 
-        if (typeof (dbUser as MyAppUser).totalXP === 'undefined') { 
-          updates.totalXP = defaultGamification.totalXP; needsDbUpdate = true; 
-        }
-        (user as MyAppUser).totalXP = (dbUser as MyAppUser).totalXP ?? updates.totalXP ?? defaultGamification.totalXP;
-        
-        if (typeof (dbUser as MyAppUser).level === 'undefined') { 
-          updates.level = defaultGamification.level; needsDbUpdate = true; 
-        }
-        (user as MyAppUser).level = (dbUser as MyAppUser).level ?? updates.level ?? defaultGamification.level;
+          if (typeof (dbUser as unknown as MyAppUser).totalXP === 'undefined') { 
+            updates.totalXP = defaultGamification.totalXP; 
+            (user as MyAppUser).totalXP = defaultGamification.totalXP;
+            needsDbUpdate = true; 
+          } else {
+            (user as MyAppUser).totalXP = (dbUser as unknown as MyAppUser).totalXP;
+          }
+          
+          if (typeof (dbUser as unknown as MyAppUser).level === 'undefined') { 
+            updates.level = defaultGamification.level; 
+            (user as MyAppUser).level = defaultGamification.level;
+            needsDbUpdate = true; 
+          } else {
+            (user as MyAppUser).level = (dbUser as unknown as MyAppUser).level;
+          }
 
-        if (typeof (dbUser as MyAppUser).badges === 'undefined') { 
-          updates.badges = defaultGamification.badges; needsDbUpdate = true; 
+          if (typeof (dbUser as unknown as MyAppUser).badges === 'undefined') { 
+            updates.badges = defaultGamification.badges; 
+            (user as MyAppUser).badges = defaultGamification.badges;
+            needsDbUpdate = true; 
+          } else {
+            (user as MyAppUser).badges = (dbUser as unknown as MyAppUser).badges;
+          }
+          
+          if (needsDbUpdate) {
+            await usersCollection.updateOne({ _id: dbUser._id }, { $set: updates });
+          }
+        } else { 
+          // New user via Google. Adapter will call createUser.
+          // Augment the 'user' object (from Google profile) with defaults.
+          // These will be passed to adapter.createUser.
+          (user as MyAppUser).role = defaultGamification.role;
+          (user as MyAppUser).totalXP = defaultGamification.totalXP;
+          (user as MyAppUser).level = defaultGamification.level;
+          (user as MyAppUser).badges = defaultGamification.badges;
+          if (googleProfile?.email_verified === true && !(user as MyAppUser).emailVerified) {
+             (user as MyAppUser).emailVerified = new Date();
+          }
+          // The 'id' will be set by the adapter after createUser. The user object
+          // passed to JWT will be the result of adapter.createUser.
         }
-        (user as MyAppUser).badges = (dbUser as MyAppUser).badges ?? updates.badges ?? defaultGamification.badges;
-        
-        if (needsDbUpdate) {
-          await usersCollection.updateOne({ _id: dbUser._id }, { $set: updates });
-          // Re-fetch dbUser to ensure the user object passed to JWT is fresh
-          dbUser = await usersCollection.findOne({ _id: dbUser._id });
-        }
-        
-        // Populate the user object for JWT with the latest data from DB
-        if(dbUser) {
-            user.id = dbUser._id.toString();
-            user.name = dbUser.name;
-            user.email = dbUser.email; // email should already be there
-            user.image = dbUser.image;
-            user.emailVerified = dbUser.emailVerified ? new Date(dbUser.emailVerified) : null;
-            (user as MyAppUser).role = (dbUser as MyAppUser).role;
-            (user as MyAppUser).totalXP = (dbUser as MyAppUser).totalXP;
-            (user as MyAppUser).level = (dbUser as MyAppUser).level;
-            (user as MyAppUser).badges = (dbUser as MyAppUser).badges;
-        }
-
-      } else { // New user via OAuth (adapter's createUser will handle DB insertion)
-        (user as MyAppUser).role = defaultGamification.role;
-        (user as MyAppUser).totalXP = defaultGamification.totalXP;
-        (user as MyAppUser).level = defaultGamification.level;
-        (user as MyAppUser).badges = defaultGamification.badges;
-        
-        const googleProfile = profile as (Profile & { email_verified?: boolean });
-        if (account?.provider === "google" && googleProfile?.email_verified === true) {
-            user.emailVerified = new Date(); 
-        }
-        // The adapter's createUser will be called AFTER this signIn callback completes (if user is new)
-        // The `user` object passed to JWT will be the one returned by adapter's createUser
+      } else if (user && !account) { // Credentials sign-in
+        // 'user' is already from 'authorize' and should be MyAppUser type.
+        // We just need to ensure it's correctly typed for JWT.
+        const typedUser = user as MyAppUser;
+        user.id = typedUser.id; // ensure it's there
+        (user as MyAppUser).role = typedUser.role ?? defaultGamification.role;
+        (user as MyAppUser).totalXP = typedUser.totalXP ?? defaultGamification.totalXP;
+        (user as MyAppUser).level = typedUser.level ?? defaultGamification.level;
+        (user as MyAppUser).badges = typedUser.badges ?? defaultGamification.badges;
+        (user as MyAppUser).emailVerified = typedUser.emailVerified ? new Date(typedUser.emailVerified) : null;
       }
       return true; 
     },
-    async jwt({ token, user, trigger, session: sessionUpdate, account }) {
-      if (user) { // This 'user' is from signIn callback or adapter's createUser
-        const typedUser = user as MyAppUser;
-        token.id = typedUser.id; // This ID should be the string version of MongoDB _id
+    async jwt({ token, user, trigger, session: sessionUpdate }) {
+      // The 'user' object is available on initial sign-in.
+      // For new OAuth users, 'user' is the result of adapter.createUser.
+      // For existing OAuth/Credentials, 'user' is what signIn callback prepared.
+      if (user) { 
+        const typedUser = user as MyAppUser; // Cast to ensure all fields are accessible
+        token.id = typedUser.id; // This ID MUST be the string version of MongoDB _id
         token.role = typedUser.role ?? defaultGamification.role;
         token.totalXP = typedUser.totalXP ?? defaultGamification.totalXP;
         token.level = typedUser.level ?? defaultGamification.level;
         token.badges = typedUser.badges ?? defaultGamification.badges;
         token.name = typedUser.name;
-        token.picture = typedUser.image; 
+        token.picture = typedUser.image; // NextAuth uses 'picture' in token for image
         token.email = typedUser.email; 
-        if (account?.provider === "google" && account.access_token) { 
-            token.accessToken = account.access_token; 
-        }
       }
 
+      // Handle session updates if you use `update()` from `useSession`
       if (trigger === "update" && sessionUpdate?.user) {
-        const sessionUserUpdate = sessionUpdate.user as Partial<MyAppUser>;
-        if (sessionUserUpdate.name) token.name = sessionUserUpdate.name;
-        if (sessionUserUpdate.image) token.picture = sessionUserUpdate.image;
-        if (sessionUserUpdate.role) token.role = sessionUserUpdate.role;
-        if (sessionUserUpdate.totalXP !== undefined) token.totalXP = sessionUserUpdate.totalXP;
-        if (sessionUserUpdate.level !== undefined) token.level = sessionUserUpdate.level;
-        if (sessionUserUpdate.badges) token.badges = sessionUserUpdate.badges;
+        const updateData = sessionUpdate.user as Partial<MyAppUser>;
+        if (updateData.name) token.name = updateData.name;
+        if (updateData.image) token.picture = updateData.image;
+        if (updateData.role) token.role = updateData.role;
+        if (updateData.totalXP !== undefined) token.totalXP = updateData.totalXP;
+        if (updateData.level !== undefined) token.level = updateData.level;
+        if (updateData.badges) token.badges = updateData.badges;
       }
       return token;
     },
@@ -223,10 +243,6 @@ export const authOptions: NextAuthOptions = {
         typedSessionUser.name = token.name;
         typedSessionUser.email = token.email;
         typedSessionUser.image = token.picture as string | null | undefined;
-
-        if (token.accessToken) {
-          (session as any).accessToken = token.accessToken; 
-        }
       }
       return session;
     },
@@ -241,4 +257,6 @@ export const authOptions: NextAuthOptions = {
 const handler = NextAuth(authOptions);
 
 export { handler as GET, handler as POST };
+    
+
     
