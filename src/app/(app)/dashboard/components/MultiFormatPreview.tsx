@@ -17,7 +17,7 @@ interface MultiFormatPreviewProps {
   isLoading: boolean;
   campaignId?: string;
   contentVersionId?: string;
-  // Add functions to handle AI Revise and Translate when enabled
+  onFeedbackSubmittedSuccessfully?: (xpAmount: number, reason: string) => void; // Callback for XP
   // onReviseRequest?: (formatKey: keyof MultiFormatContent, currentText: string) => void;
   // onTranslateRequest?: (formatKey: keyof MultiFormatContent, currentText: string) => void;
 }
@@ -47,6 +47,7 @@ export function MultiFormatPreview({
     isLoading, 
     campaignId, 
     contentVersionId,
+    onFeedbackSubmittedSuccessfully,
     // onReviseRequest, 
     // onTranslateRequest 
 }: MultiFormatPreviewProps) {
@@ -147,7 +148,11 @@ export function MultiFormatPreview({
         throw new Error(errorData.error || "Failed to submit feedback.");
       }
       
-      toast({ title: "Feedback Submitted!", description: `Thanks for your feedback on the ${formatLabels[formatKey]}. (+10 XP)` });
+      toast({ title: "Feedback Submitted!", description: `Thanks for your feedback on the ${formatLabels[formatKey]}.` });
+      if (onFeedbackSubmittedSuccessfully) {
+        onFeedbackSubmittedSuccessfully(10, `Feedback on ${formatLabels[formatKey]}`);
+      }
+      
       setFeedbackState(prev => ({
         ...prev,
         [formatKey]: {

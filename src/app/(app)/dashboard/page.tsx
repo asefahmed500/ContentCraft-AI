@@ -2,6 +2,7 @@
 "use client";
 
 import { useState, useCallback, useEffect } from 'react';
+import { useSession } from 'next-auth/react'; // Import useSession
 import { BrandDNAAnalyzer } from './components/BrandDNAAnalyzer';
 import { AgentDebatePanel } from './components/AgentDebatePanel';
 import { MultiFormatPreview } from './components/MultiFormatPreview';
@@ -47,13 +48,18 @@ async function generateContentAction(input: GenerateContentInput): Promise<Gener
 async function updateCampaignAPI(campaignId: string, updates: Partial<Campaign>): Promise<Campaign | { error: string }> {
   try {
     // Ensure complex objects like dates are in ISO string format for the API
-    const serializedUpdates = {
-        ...updates,
-        agentDebates: updates.agentDebates?.map(ad => ({...ad, timestamp: new Date(ad.timestamp).toISOString()})),
-        contentVersions: updates.contentVersions?.map(cv => ({...cv, timestamp: new Date(cv.timestamp).toISOString()})),
-        createdAt: updates.createdAt ? new Date(updates.createdAt).toISOString() : undefined,
-        updatedAt: new Date().toISOString(), // Always update 'updatedAt'
-    };
+    const serializedUpdates: any = { ...updates };
+    if (updates.agentDebates) {
+        serializedUpdates.agentDebates = updates.agentDebates.map(ad => ({...ad, timestamp: new Date(ad.timestamp).toISOString()}));
+    }
+    if (updates.contentVersions) {
+        serializedUpdates.contentVersions = updates.contentVersions.map(cv => ({...cv, timestamp: new Date(cv.timestamp).toISOString()}));
+    }
+    if (updates.createdAt) {
+        serializedUpdates.createdAt = new Date(updates.createdAt).toISOString();
+    }
+    serializedUpdates.updatedAt = new Date().toISOString(); // Always update 'updatedAt'
+
 
     const response = await fetch(`/api/campaigns?id=${campaignId}`, {
       method: 'PUT',
@@ -84,6 +90,7 @@ async function updateCampaignAPI(campaignId: string, updates: Partial<Campaign>)
 
 
 export default function DashboardPage() {
+  const { data: session, update: updateSession } = useSession(); // Get update function
   const [selectedCampaignForProcessing, setSelectedCampaignForProcessing] = useState<Campaign | null>(null);
   const [selectedCampaignForEditingInForm, setSelectedCampaignForEditingInForm] = useState<Campaign | null>(null);
 
@@ -109,9 +116,7 @@ export default function DashboardPage() {
   useEffect(() => {
     if (selectedCampaignForProcessing) {
       setCurrentDebateTopic(`Debate for: "${selectedCampaignForProcessing.title.substring(0, 70)}${selectedCampaignForProcessing.title.length > 70 ? "..." : ""}"`);
-      
-      const currentLatestVersionToSet = (selectedCampaignForProcessing.contentVersions || []).sort((a,b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())[0];
-      setMultiFormatContent(currentLatestVersionToSet ? currentLatestVersionToSet.multiFormatContentSnapshot : null);
+      setMultiFormatContent(latestContentVersion ? latestContentVersion.multiFormatContentSnapshot : null);
 
       const currentStatus = selectedCampaignForProcessing.status;
       setIsDebating(currentStatus === 'debating');
@@ -123,7 +128,51 @@ export default function DashboardPage() {
       setIsGeneratingCampaign(false);
       setSelectedCampaignForEditingInForm(null);
     }
-  }, [selectedCampaignForProcessing]);
+  }, [selectedCampaignForProcessing, latestContentVersion]);
+
+
+  const awardXP = useCallback(async (xpAmount: number, reason: string) => {
+    if (!session?.user?.id) {
+        console.warn("Cannot award XP: user not logged in or user ID missing.");
+        return;
+    }
+    try {
+        const response = await fetch('/api/user/update-xp', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ xpGained: xpAmount }),
+        });
+        const data = await response.json();
+
+        if (!response.ok) {
+            throw new Error(data.error || "Failed to update XP on server.");
+        }
+        
+        // Update client-side session to reflect new XP/Level
+        await updateSession({ 
+            user: { 
+                totalXP: data.totalXP, 
+                level: data.level,
+                badges: data.badges 
+            } 
+        });
+
+        toast({ title: "XP Gained!", description: `+${xpAmount} XP for ${reason}.` });
+
+        if (data.leveledUp) {
+            let levelUpMessage = `Congratulations! You've reached Level ${data.level}.`;
+            if (data.gainedBadges && data.gainedBadges.length > 0) {
+                levelUpMessage += ` You earned new badge(s): ${data.gainedBadges.join(', ')}!`;
+            }
+            toast({ title: "Level Up!", description: levelUpMessage, duration: 5000 });
+        }
+
+    } catch (error) {
+        console.error("Failed to award XP:", error);
+        const errorMessage = error instanceof Error ? error.message : "An unknown error occurred.";
+        toast({ title: "XP Update Failed", description: errorMessage, variant: "destructive" });
+    }
+  }, [session, updateSession, toast]);
 
 
   const handleNewCampaignCreatedOrUpdated = useCallback((campaign: Campaign) => {
@@ -140,17 +189,16 @@ export default function DashboardPage() {
         isPrivate: campaign.isPrivate ?? false,
     };
     setSelectedCampaignForProcessing(campaignWithClientDefaults);
-
+    
     const currentLatestVersion = (campaignWithClientDefaults.contentVersions || []).sort((a,b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())[0];
     setMultiFormatContent(currentLatestVersion ? currentLatestVersion.multiFormatContentSnapshot : null);
 
     setSelectedCampaignForEditingInForm(null); // Clear edit form after save/create
-    if(campaign.status === 'draft' && !selectedCampaignForEditingInForm) { // If it's a new draft, switch to generator
+    if(campaign.status === 'draft' && !selectedCampaignForEditingInForm) { 
       setActiveTab('generator');
     } else if (campaign.status === 'review' || (currentLatestVersion && campaign.status !== 'generating' && campaign.status !== 'debating')) {
       setActiveTab('preview');
     }
-
 
   }, [selectedCampaignForEditingInForm]);
 
@@ -321,7 +369,9 @@ export default function DashboardPage() {
       else { currentCampaignState = updatedCampaign; }
 
       setSelectedCampaignForProcessing(currentCampaignState);
-      toast({ title: "Content Generation Complete!", description: "Your final draft of multi-format content is ready for preview. (+50 XP)" });
+      toast({ title: "Content Generation Complete!", description: "Your final draft of multi-format content is ready for preview." });
+      await awardXP(50, "Content Generation"); // Award XP
+
 
     } catch (error) {
       console.error("Campaign Generation Error:", error);
@@ -341,7 +391,7 @@ export default function DashboardPage() {
     } finally {
       setIsGeneratingCampaign(false);
     }
-  }, [selectedCampaignForProcessing, persistCurrentCampaignUpdates, toast, agentRolesForDebate, orchestratorAgentName]);
+  }, [selectedCampaignForProcessing, persistCurrentCampaignUpdates, toast, agentRolesForDebate, orchestratorAgentName, awardXP]);
 
 
   const handleViewVersion = useCallback((version: ContentVersion) => {
@@ -396,9 +446,9 @@ export default function DashboardPage() {
              setActiveTab('preview');
         } else if (['draft', 'debating', 'generating'].includes(campaignToSelect.status) ) {
             toast({ title: `Campaign Status: ${campaignToSelect.status}`, description: `Generate content for "${campaignToSelect.title}" or edit the brief.`});
-            setSelectedCampaignForEditingInForm(campaignToSelect); // Allow editing for drafts or if stuck mid-gen
+            setSelectedCampaignForEditingInForm(campaignToSelect); 
             setActiveTab('generator');
-        } else { // 'review' but no versions, or other states with no content
+        } else { 
             toast({ title: "Viewing Campaign", description: `No content versions found for "${campaignToSelect.title}". Consider re-generating or editing.`});
             setSelectedCampaignForEditingInForm(campaignToSelect);
             setActiveTab('generator');
@@ -532,6 +582,7 @@ export default function DashboardPage() {
                 isLoading={isGeneratingCampaign && (campaignStatus === 'generating' || campaignStatus === 'debating') && !multiFormatContent}
                 campaignId={selectedCampaignForProcessing?.id}
                 contentVersionId={latestContentVersionId}
+                onFeedbackSubmittedSuccessfully={awardXP} // Pass awardXP callback
             />
         </TabsContent>
 
