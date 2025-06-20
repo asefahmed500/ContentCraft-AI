@@ -16,7 +16,7 @@ import type { AgentDebateInput, AgentDebateOutput } from '@/ai/flows/agent-debat
 import { agentDebate } from '@/ai/flows/agent-debate';
 import type { GenerateContentInput, GenerateContentOutput } from '@/ai/flows/content-generation';
 import { generateContent } from '@/ai/flows/content-generation';
-import type { AgentRole } from '@/types/agent';
+import type { AgentRole, AgentMessage as UIAgentMessage } from '@/types/agent'; // Renamed AgentMessage to UIAgentMessage
 import type { MultiFormatContent, CampaignStatus, Campaign, ContentVersion, AgentInteraction } from '@/types/content';
 import { useToast } from '@/hooks/use-toast';
 import { Separator } from '@/components/ui/separator';
@@ -64,16 +64,15 @@ async function updateCampaignAPI(campaignId: string, updates: Partial<Campaign>)
 
 
 export default function DashboardPage() {
-  const [multiFormatContent, setMultiFormatContent] = useState<MultiFormatContent | null>(null);
-  const [isGeneratingCampaign, setIsGeneratingCampaign] = useState(false);
-  const [isDebating, setIsDebating] = useState(false);
-  const [currentDebateTopic, setCurrentDebateTopic] = useState<string | undefined>(undefined);
-  const [refreshCampaignListTrigger, setRefreshCampaignListTrigger] = useState(0);
-  
   const [selectedCampaignForProcessing, setSelectedCampaignForProcessing] = useState<Campaign | null>(null); 
   const [selectedCampaignForEditingInForm, setSelectedCampaignForEditingInForm] = useState<Campaign | null>(null);
+  
+  const [multiFormatContent, setMultiFormatContent] = useState<MultiFormatContent | null>(null);
+  const [isGeneratingCampaign, setIsGeneratingCampaign] = useState(false); // Overall campaign generation (debate + content)
+  const [isDebating, setIsDebating] = useState(false); // Specifically debate phase
+  const [currentDebateTopic, setCurrentDebateTopic] = useState<string | undefined>(undefined);
+  const [refreshCampaignListTrigger, setRefreshCampaignListTrigger] = useState(0);
   const [activeTab, setActiveTab] = useState("campaign-hub");
-
 
   const { toast } = useToast();
 
@@ -81,10 +80,35 @@ export default function DashboardPage() {
   const orchestratorAgentName: AgentInteraction['agent'] = "Orchestrator";
 
 
+  // Derived states from selectedCampaignForProcessing
+  const campaignStatus: CampaignStatus = selectedCampaignForProcessing?.status || 'draft';
+  const debateMessages: AgentInteraction[] = selectedCampaignForProcessing?.agentDebates || [];
+  const contentVersions: ContentVersion[] = selectedCampaignForProcessing?.contentVersions?.sort((a,b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()) || [];
+  const latestContentVersion: ContentVersion | null = contentVersions.length > 0 ? contentVersions[0] : null;
+  const latestContentVersionId: string | undefined = latestContentVersion?.id;
+
+  useEffect(() => {
+    if (selectedCampaignForProcessing) {
+      setCurrentDebateTopic(`Debate for: "${selectedCampaignForProcessing.title.substring(0, 70)}${selectedCampaignForProcessing.title.length > 70 ? "..." : ""}"`);
+      setMultiFormatContent(latestContentVersion ? latestContentVersion.multiFormatContentSnapshot : null);
+
+      const currentStatus = selectedCampaignForProcessing.status;
+      setIsDebating(currentStatus === 'debating');
+      setIsGeneratingCampaign(currentStatus === 'generating' || currentStatus === 'debating');
+    } else {
+      setCurrentDebateTopic(undefined);
+      setMultiFormatContent(null);
+      setIsDebating(false);
+      setIsGeneratingCampaign(false);
+      setSelectedCampaignForEditingInForm(null); 
+    }
+  }, [selectedCampaignForProcessing, latestContentVersion]);
+
+
   const handleNewCampaignCreatedOrUpdated = useCallback((campaign: Campaign) => {
     setRefreshCampaignListTrigger(prev => prev + 1); 
     
-    const campaignWithDefaults = {
+    const campaignWithDefaults = { // Ensure defaults for arrays
         ...campaign,
         agentDebates: campaign.agentDebates || [],
         contentVersions: campaign.contentVersions || [],
@@ -92,14 +116,13 @@ export default function DashboardPage() {
         abTests: campaign.abTests || [],
     };
     setSelectedCampaignForProcessing(campaignWithDefaults); 
-    setSelectedCampaignForEditingInForm(null); 
+    setSelectedCampaignForEditingInForm(null); // Clear edit form after save
     
+    // If it's a new campaign or not the one being edited, reset content preview
     if (!selectedCampaignForEditingInForm || selectedCampaignForEditingInForm.id !== campaign.id) {
         setMultiFormatContent(null);
-    } else { 
-        const latestVersion = campaignWithDefaults.contentVersions.length > 0 
-            ? campaignWithDefaults.contentVersions.sort((a,b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())[0]
-            : null;
+    } else { // If it's the currently edited campaign, update its preview
+        const latestVersion = campaignWithDefaults.contentVersions.sort((a,b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())[0];
         setMultiFormatContent(latestVersion ? latestVersion.multiFormatContentSnapshot : null);
     }
   }, [selectedCampaignForEditingInForm]);
@@ -108,33 +131,38 @@ export default function DashboardPage() {
     const campaign = campaignToPersist || selectedCampaignForProcessing;
     if (!campaign || !campaign.id) return campaign; 
 
-    const sanitizedCampaign: Partial<Campaign> = {
-        ...campaign,
-        createdAt: campaign.createdAt ? new Date(campaign.createdAt) : new Date(),
-        updatedAt: new Date(), 
-        agentDebates: (campaign.agentDebates || []).map(ad => ({...ad, timestamp: ad.timestamp ? new Date(ad.timestamp) : new Date()})),
-        contentVersions: (campaign.contentVersions || []).map(cv => ({...cv, timestamp: cv.timestamp ? new Date(cv.timestamp) : new Date()})),
-        scheduledPosts: (campaign.scheduledPosts || []).map(sp => ({...sp, scheduledAt: sp.scheduledAt ? new Date(sp.scheduledAt) : new Date()})),
-        abTests: (campaign.abTests || []).map(ab => ({...ab, createdAt: ab.createdAt ? new Date(ab.createdAt) : new Date()})),
+    const sanitizedCampaignData: Partial<Campaign> = { // Prepare only fields that API expects for update
+        title: campaign.title,
+        brief: campaign.brief,
+        targetAudience: campaign.targetAudience,
+        tone: campaign.tone,
+        contentGoals: campaign.contentGoals,
+        brandId: campaign.brandId,
+        referenceMaterials: campaign.referenceMaterials,
+        status: campaign.status,
+        isPrivate: campaign.isPrivate,
+        agentDebates: (campaign.agentDebates || []).map(ad => ({...ad, timestamp: new Date(ad.timestamp)})), // Ensure dates are Date objects
+        contentVersions: (campaign.contentVersions || []).map(cv => ({...cv, timestamp: new Date(cv.timestamp)})),
+        scheduledPosts: (campaign.scheduledPosts || []).map(sp => ({...sp, scheduledAt: new Date(sp.scheduledAt)})),
+        abTests: (campaign.abTests || []).map(ab => ({...ab, createdAt: new Date(ab.createdAt)})),
+        updatedAt: new Date(),
     };
-    // Remove _id if present, as it's not part of the update payload typically (id is used in query param)
-    delete (sanitizedCampaign as any)._id;
     
-    const result = await updateCampaignAPI(campaign.id, sanitizedCampaign);
+    const result = await updateCampaignAPI(campaign.id, sanitizedCampaignData);
     if ('error' in result) {
         toast({ title: "Failed to Save Campaign Updates", description: result.error, variant: "destructive"});
         return campaign; 
     } else {
-        const campaignWithDefaults = {
+        const updatedCampaignWithDefaults = {
             ...result,
             agentDebates: result.agentDebates || [],
             contentVersions: result.contentVersions || [],
             scheduledPosts: result.scheduledPosts || [],
             abTests: result.abTests || [],
         };
-        setSelectedCampaignForProcessing(campaignWithDefaults); 
+        setSelectedCampaignForProcessing(updatedCampaignWithDefaults); 
         setRefreshCampaignListTrigger(prev => prev + 1); 
-        return campaignWithDefaults; 
+        return updatedCampaignWithDefaults; 
     }
   }, [selectedCampaignForProcessing, toast]);
 
@@ -148,8 +176,8 @@ export default function DashboardPage() {
         return;
     }
 
-    setIsGeneratingCampaign(true);
-    setIsDebating(true);
+    setIsGeneratingCampaign(true); // True for the whole process
+    setIsDebating(true); // True for debate phase
     
     let currentCampaignState: Campaign = {
         ...campaign, 
@@ -157,15 +185,16 @@ export default function DashboardPage() {
         agentDebates: campaign.agentDebates || [], 
         contentVersions: campaign.contentVersions || [] 
     };
-    setMultiFormatContent(null); 
+    setMultiFormatContent(null); // Clear previous content
     
+    // Persist initial 'debating' status
     const updatedInitialCampaign = await persistCurrentCampaignUpdates(currentCampaignState);
-    currentCampaignState = updatedInitialCampaign || currentCampaignState;
-    setSelectedCampaignForProcessing(currentCampaignState);
+    currentCampaignState = updatedInitialCampaign || currentCampaignState; // Use returned campaign if successful
+    setSelectedCampaignForProcessing(currentCampaignState); // Update main state
     
     const displayTitle = campaign.title.substring(0, 50);
     const campaignTitleForDebate = `Debate for: "${displayTitle}..."`;
-    setCurrentDebateTopic(campaignTitleForDebate);
+    setCurrentDebateTopic(campaignTitleForDebate); // For UI
     setActiveTab('debate');
 
     toast({ title: "Campaign Processing Started", description: `Agents are now debating strategy for "${campaign.title}".` });
@@ -187,6 +216,7 @@ export default function DashboardPage() {
         throw new Error(`Debate failed: ${debateResult.error}`);
       }
       
+      // Simulate diverse agent interactions based on debateResult
       const debateInteractions: AgentInteraction[] = [];
       debateInteractions.push({ agent: orchestratorAgentName, agentName: orchestratorAgentName, agentId: 'orchestrator-01', type: 'statement', role: 'Orchestrator', message: `Debate initiated for campaign: "${campaign.title}". Agents: ${debateInput.agentRoles.join(', ')}. Focus: Strategy & Key Messaging.`, timestamp: new Date()});
       debateInteractions.push({ agent: 'Creative Director', agentName: 'Creative Director', agentId: 'cd-01', type: 'statement', role: 'Creative Director', message: `Initial direction: ${debateResult.contentSuggestions[0] || 'Focus on a strong narrative around the product benefits.'}`, timestamp: new Date() });
@@ -202,14 +232,14 @@ export default function DashboardPage() {
       currentCampaignState = updatedCampaignAfterDebate || currentCampaignState;
       setSelectedCampaignForProcessing(currentCampaignState);
       
-      setIsDebating(false); 
+      setIsDebating(false); // Debate phase finished
       toast({ title: "Debate Phase Complete", description: "Agents have concluded the strategy session. Now generating multi-format content." });
       setActiveTab('preview');
 
 
       const contentInput: GenerateContentInput = {
         inputContent: `${augmentedBrief}\n\nKey insights from debate: ${debateResult.debateSummary}\nKey Suggestions and Agreements: ${debateResult.contentSuggestions.join('; ')}`,
-        brandVoice: brandVoiceOverride, 
+        brandVoice: brandVoiceOverride, // Use override if provided
       };
       const contentResult = await generateContentAction(contentInput);
 
@@ -217,7 +247,7 @@ export default function DashboardPage() {
         throw new Error(`Content generation failed: ${contentResult.error}`);
       }
 
-      setMultiFormatContent(contentResult);
+      setMultiFormatContent(contentResult); // Display generated content
       const newVersionNumber = (currentCampaignState.contentVersions?.length || 0) + 1;
       const newVersion: ContentVersion = {
         id: `v${newVersionNumber}-${new Date().getTime()}`, 
@@ -234,8 +264,8 @@ export default function DashboardPage() {
         status: 'review' as CampaignStatus
       };
       const finalUpdatedCampaign = await persistCurrentCampaignUpdates(currentCampaignState);
-      currentCampaignState = finalUpdatedCampaign || currentCampaignState;
-      setSelectedCampaignForProcessing(currentCampaignState);
+      // currentCampaignState = finalUpdatedCampaign || currentCampaignState; // No need to reassign if just for toast
+      setSelectedCampaignForProcessing(finalUpdatedCampaign || currentCampaignState);
       toast({ title: "Content Generation Complete!", description: "Your final draft of multi-format content is ready for preview. (+50 XP)" });
       
     } catch (error) {
@@ -243,18 +273,17 @@ export default function DashboardPage() {
       const errorMessage = error instanceof Error ? error.message : "An unknown error occurred.";
       toast({ title: "Campaign Generation Failed", description: errorMessage, variant: "destructive" });
        if (selectedCampaignForProcessing && selectedCampaignForProcessing.id) { 
+            // Revert status to draft if generation fails mid-way
             const tempCamp = {
                 ...selectedCampaignForProcessing, 
                 status: 'draft' as CampaignStatus, 
-                agentDebates: selectedCampaignForProcessing.agentDebates || [], 
-                contentVersions: selectedCampaignForProcessing.contentVersions || []
             }; 
-            setSelectedCampaignForProcessing(tempCamp);
-            await persistCurrentCampaignUpdates(tempCamp);
+            setSelectedCampaignForProcessing(tempCamp); // Update UI optimistically
+            await persistCurrentCampaignUpdates(tempCamp); // Persist status change
        }
       setIsDebating(false);
     } finally {
-      setIsGeneratingCampaign(false); 
+      setIsGeneratingCampaign(false); // Entire process finished or failed
     }
   }, [selectedCampaignForProcessing, persistCurrentCampaignUpdates, toast, agentRolesForDebate, orchestratorAgentName]);
 
@@ -267,15 +296,15 @@ export default function DashboardPage() {
 
 
   const handleCampaignSelectionFromList = useCallback(async (campaignId: string | null, action: 'view' | 'edit') => {
-    setSelectedCampaignForEditingInForm(null); 
+    setSelectedCampaignForEditingInForm(null); // Reset edit form
 
     if (!campaignId) {
-      setSelectedCampaignForProcessing(null);
+      setSelectedCampaignForProcessing(null); // Clear main selection
+      setMultiFormatContent(null);
       return;
     }
 
     try {
-      // Fetch the specific campaign directly instead of all campaigns
       const campaignResponse = await fetch(`/api/campaigns?id=${campaignId}&single=true`); 
       if (!campaignResponse.ok) {
           const errorData = await campaignResponse.json();
@@ -302,68 +331,38 @@ export default function DashboardPage() {
         setActiveTab('generator'); 
         toast({ title: "Editing Campaign", description: `Loaded "${campaignWithDefaults.title}" for editing.`});
       } else if (action === 'view') {
-        const latestVersion = campaignWithDefaults.contentVersions.length > 0 
-            ? campaignWithDefaults.contentVersions.sort((a,b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())[0]
-            : null;
+        const latestV = campaignWithDefaults.contentVersions.sort((a,b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())[0];
+        setMultiFormatContent(latestV ? latestV.multiFormatContentSnapshot : null);
 
-        if (latestVersion) {
+        if (latestV) {
              toast({ title: "Viewing Campaign", description: `Displaying latest content for "${campaignWithDefaults.title}".`});
-             setMultiFormatContent(latestVersion.multiFormatContentSnapshot); 
              setActiveTab('preview');
         } else if (['draft', 'debating', 'generating'].includes(campaignWithDefaults.status) ) {
             toast({ title: `Campaign Status: ${campaignWithDefaults.status}`, description: `Generate content for "${campaignWithDefaults.title}" or edit the brief.`});
-            setSelectedCampaignForEditingInForm(campaignWithDefaults); 
-            setMultiFormatContent(null); 
+            setSelectedCampaignForEditingInForm(campaignWithDefaults); // Allow edit if no content yet
             setActiveTab('generator');
         } else { 
             toast({ title: "Viewing Campaign", description: `No content versions found for "${campaignWithDefaults.title}". Consider re-generating or editing.`});
-            setSelectedCampaignForEditingInForm(campaignWithDefaults);
-            setMultiFormatContent(null); 
+            setSelectedCampaignForEditingInForm(campaignWithDefaults); // Allow edit
             setActiveTab('generator');
         }
       }
     } catch (error) {
         const errorMessage = error instanceof Error ? error.message : "Failed to load campaign details.";
         toast({ title: "Error Loading Campaign", description: errorMessage, variant: "destructive" });
+        setSelectedCampaignForProcessing(null); // Clear selection on error
+        setMultiFormatContent(null);
     }
   }, [toast]);
-
-  useEffect(() => {
-    if (selectedCampaignForProcessing) {
-        setCurrentDebateTopic(`Debate for: "${selectedCampaignForProcessing.title.substring(0, 70)}${selectedCampaignForProcessing.title.length > 70 ? "..." : ""}"`);
-        
-        const contentVersions = selectedCampaignForProcessing.contentVersions || [];
-        const latestVersion = contentVersions.length > 0 
-            ? contentVersions.sort((a,b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())[0]
-            : null;
-        setMultiFormatContent(latestVersion ? latestVersion.multiFormatContentSnapshot : null);
-
-        if (selectedCampaignForProcessing.status === 'debating') {
-            setIsDebating(true);
-        } else {
-            setIsDebating(false);
-        }
-        if (selectedCampaignForProcessing.status === 'generating' || selectedCampaignForProcessing.status === 'debating') {
-            setIsGeneratingCampaign(true);
-        } else {
-            setIsGeneratingCampaign(false);
-        }
-
-    } else {
-        setCurrentDebateTopic(undefined);
-        setMultiFormatContent(null);
-        setIsDebating(false);
-        setIsGeneratingCampaign(false);
-        setSelectedCampaignForEditingInForm(null); 
-    }
-  }, [selectedCampaignForProcessing]);
-
-
-  const campaignStatus = selectedCampaignForProcessing?.status || 'draft';
-  const debateMessages = selectedCampaignForProcessing?.agentDebates || [];
-  const contentVersions = selectedCampaignForProcessing?.contentVersions || [];
-  const latestContentVersionId = contentVersions.length > 0 ? contentVersions.sort((a,b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())[0].id : undefined;
-
+  
+  const campaignStatusTextMap: Record<CampaignStatus, string> = {
+    draft: "Draft",
+    debating: "Agents Debating Strategy...",
+    generating: "AI Generating Content...",
+    review: "Ready for Review", 
+    published: "Published",
+    archived: "Archived"
+  };
 
   const getStatusBadgeIcon = (status: CampaignStatus) => {
     switch(status) {
@@ -377,15 +376,6 @@ export default function DashboardPage() {
     }
   };
   
-  const campaignStatusTextMap: Record<CampaignStatus, string> = {
-    draft: "Draft",
-    debating: "Agents Debating Strategy...",
-    generating: "AI Generating Content...",
-    review: "Ready for Review", 
-    published: "Published",
-    archived: "Archived"
-  };
-
   const hasContentForPreview = multiFormatContent && Object.values(multiFormatContent).some(v => v && typeof v === 'string' && v.length > 0);
 
   const handleRequestContentGenerationForPerformance = () => {
@@ -449,7 +439,7 @@ export default function DashboardPage() {
             <CampaignGenerator 
                 onCampaignCreated={handleNewCampaignCreatedOrUpdated} 
                 onGenerateContentForCampaign={handleGenerateContentForCampaign}
-                isGenerating={isGeneratingCampaign}
+                isGenerating={isGeneratingCampaign} // Pass the overall generation flag
                 selectedCampaignForEdit={selectedCampaignForEditingInForm} 
             />
         </TabsContent>
@@ -469,7 +459,7 @@ export default function DashboardPage() {
                     agentName: interaction.agentName || interaction.agent,
                     agentRole: interaction.role || agentRolesForDebate.find(r => interaction.agent.toLowerCase().includes(r.split(' ')[0].toLowerCase())) || 'Orchestrator', 
                     message: interaction.message,
-                    timestamp: new Date(interaction.timestamp),
+                    timestamp: new Date(interaction.timestamp), // Ensure it's a Date object
                     type: interaction.type || 'statement' 
                 }))} 
                 isDebating={isDebating && campaignStatus === 'debating'} 
@@ -488,7 +478,7 @@ export default function DashboardPage() {
 
         <TabsContent value="evolution" className="mt-6">
             <ContentEvolutionTimeline 
-                versions={contentVersions.sort((a,b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())} 
+                versions={contentVersions} // Already sorted
                 onViewVersion={handleViewVersion}
             />
         </TabsContent>
@@ -517,3 +507,4 @@ export default function DashboardPage() {
     </div>
   );
 }
+

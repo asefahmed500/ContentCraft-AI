@@ -20,45 +20,51 @@ export async function GET(request: NextRequest) {
     const fetchSingle = searchParams.get('single') === 'true';
 
     const client = await clientPromise;
-    const db = client.db();
-    const campaignsCollection = db.collection<Campaign>('campaigns');
+    const db = client.db(process.env.MONGODB_DB_NAME);
+    const campaignsCollection = db.collection<Omit<Campaign, 'id'>>('campaigns'); // Use DB model type
     
     if (fetchSingle && campaignId) {
         if (!ObjectId.isValid(campaignId)) {
             return NextResponse.json({ error: 'Invalid Campaign ID format for single fetch' }, { status: 400 });
         }
-        const campaign = await campaignsCollection.findOne({ _id: new ObjectId(campaignId), userId });
-        if (!campaign) {
+        const campaignDoc = await campaignsCollection.findOne({ _id: new ObjectId(campaignId), userId });
+        if (!campaignDoc) {
             return NextResponse.json({ error: 'Campaign not found or user not authorized' }, { status: 404 });
         }
-        return NextResponse.json({
-            ...campaign,
-            id: campaign._id!.toString(), 
-            contentVersions: campaign.contentVersions || [],
-            agentDebates: campaign.agentDebates || [],
-            scheduledPosts: campaign.scheduledPosts || [],
-            abTests: campaign.abTests || [],
-            isPrivate: campaign.isPrivate || false,
-        }, { status: 200 });
+        const campaign: Campaign = { // Map to client-side type with string id
+            ...campaignDoc,
+            id: campaignDoc._id!.toString(), 
+            contentVersions: (campaignDoc.contentVersions || []).map(cv => ({...cv, timestamp: new Date(cv.timestamp)})),
+            agentDebates: (campaignDoc.agentDebates || []).map(ad => ({...ad, timestamp: new Date(ad.timestamp)})),
+            scheduledPosts: (campaignDoc.scheduledPosts || []).map(sp => ({...sp, scheduledAt: new Date(sp.scheduledAt)})),
+            abTests: (campaignDoc.abTests || []).map(ab => ({...ab, createdAt: new Date(ab.createdAt)})),
+            isPrivate: campaignDoc.isPrivate || false,
+            createdAt: new Date(campaignDoc.createdAt),
+            updatedAt: new Date(campaignDoc.updatedAt),
+        };
+        return NextResponse.json(campaign, { status: 200 });
     }
 
 
-    const userCampaigns = await campaignsCollection.find({ userId }).sort({ createdAt: -1 }).toArray();
+    const userCampaignDocs = await campaignsCollection.find({ userId }).sort({ createdAt: -1 }).toArray();
     
-    const formattedCampaigns = userCampaigns.map(campaign => ({
-      ...campaign,
-      id: campaign._id!.toString(), 
-      contentVersions: campaign.contentVersions || [],
-      agentDebates: campaign.agentDebates || [],
-      scheduledPosts: campaign.scheduledPosts || [],
-      abTests: campaign.abTests || [],
-      isPrivate: campaign.isPrivate || false,
+    const formattedCampaigns: Campaign[] = userCampaignDocs.map(campaignDoc => ({
+      ...campaignDoc,
+      id: campaignDoc._id!.toString(), 
+      contentVersions: (campaignDoc.contentVersions || []).map(cv => ({...cv, timestamp: new Date(cv.timestamp)})),
+      agentDebates: (campaignDoc.agentDebates || []).map(ad => ({...ad, timestamp: new Date(ad.timestamp)})),
+      scheduledPosts: (campaignDoc.scheduledPosts || []).map(sp => ({...sp, scheduledAt: new Date(sp.scheduledAt)})),
+      abTests: (campaignDoc.abTests || []).map(ab => ({...ab, createdAt: new Date(ab.createdAt)})),
+      isPrivate: campaignDoc.isPrivate || false,
+      createdAt: new Date(campaignDoc.createdAt),
+      updatedAt: new Date(campaignDoc.updatedAt),
     }));
 
     return NextResponse.json(formattedCampaigns, { status: 200 });
   } catch (error) {
     console.error("Failed to fetch campaigns:", error);
-    return NextResponse.json({ error: 'Failed to fetch campaigns' }, { status: 500 });
+    const errorMessage = error instanceof Error ? error.message : "An unknown error occurred";
+    return NextResponse.json({ error: 'Failed to fetch campaigns', details: errorMessage }, { status: 500 });
   }
 }
 
@@ -72,14 +78,14 @@ export async function POST(request: NextRequest) {
     const userId = token.id as string;
 
     const body = await request.json();
-    const { title, brief, targetAudience, tone, contentGoals, brandId, referenceMaterials, isPrivate } = body;
+    const { title, brief, targetAudience, tone, contentGoals, brandId, referenceMaterials, isPrivate, status } = body;
 
     if (!title || !brief) {
       return NextResponse.json({ error: 'Campaign title and brief (product/service description) are required' }, { status: 400 });
     }
 
     const client = await clientPromise;
-    const db = client.db();
+    const db = client.db(process.env.MONGODB_DB_NAME);
     const campaignsCollection = db.collection('campaigns');
 
     const newCampaignData: Omit<Campaign, 'id' | '_id'> = { 
@@ -95,7 +101,7 @@ export async function POST(request: NextRequest) {
       contentVersions: [],
       scheduledPosts: [],
       abTests: [],
-      status: 'draft', 
+      status: status || 'draft', 
       isPrivate: isPrivate || false, 
       createdAt: new Date(),
       updatedAt: new Date(),
@@ -107,10 +113,10 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: 'Failed to create campaign' }, { status: 500 });
     }
 
-    const createdCampaign: Campaign = {
+    const createdCampaign: Campaign = { // Map to client-side type
       id: result.insertedId.toString(),
       ...newCampaignData,
-       _id: result.insertedId, 
+       _id: result.insertedId, // Keep _id for internal MongoDB use if needed, but id is primary for client
     }; 
 
     return NextResponse.json(createdCampaign, { status: 201 });
@@ -145,56 +151,49 @@ export async function PUT(request: NextRequest) {
 
     const updateData: Partial<Omit<Campaign, 'id' | '_id' | 'userId' | 'createdAt'>> = { updatedAt: new Date() };
     
+    // Explicitly handle each field to avoid unintended overwrites with undefined
     if (title !== undefined) updateData.title = title;
     if (brief !== undefined) updateData.brief = brief;
-    if (targetAudience !== undefined) updateData.targetAudience = targetAudience; else if (body.hasOwnProperty('targetAudience') && targetAudience === null) updateData.targetAudience = undefined;
-    if (tone !== undefined) updateData.tone = tone; else if (body.hasOwnProperty('tone') && tone === null) updateData.tone = undefined;
-    if (contentGoals !== undefined) updateData.contentGoals = contentGoals || []; else if (body.hasOwnProperty('contentGoals') && contentGoals === null) updateData.contentGoals = [];
+    if (targetAudience !== undefined) updateData.targetAudience = targetAudience === null ? undefined : targetAudience;
+    if (tone !== undefined) updateData.tone = tone === null ? undefined : tone;
+    if (contentGoals !== undefined) updateData.contentGoals = contentGoals === null ? [] : contentGoals;
     if (status !== undefined) updateData.status = status;
-    if (referenceMaterials !== undefined) updateData.referenceMaterials = referenceMaterials || [];
-    if (brandId !== undefined) updateData.brandId = brandId; else if (body.hasOwnProperty('brandId') && brandId === null) updateData.brandId = undefined;
-    if (isPrivate !== undefined) updateData.isPrivate = isPrivate;
+    if (referenceMaterials !== undefined) updateData.referenceMaterials = referenceMaterials === null ? [] : referenceMaterials;
+    if (brandId !== undefined) updateData.brandId = brandId === null ? undefined : brandId;
+    if (isPrivate !== undefined) updateData.isPrivate = isPrivate === null ? false : isPrivate;
 
 
-    if (contentVersions !== undefined && Array.isArray(contentVersions)) {
-      updateData.contentVersions = contentVersions.map((v: ContentVersion) => ({
+    if (contentVersions !== undefined) {
+      updateData.contentVersions = (contentVersions === null ? [] : contentVersions).map((v: ContentVersion) => ({
         ...v,
         timestamp: v.timestamp ? new Date(v.timestamp) : new Date(),
       }));
-    } else if (body.hasOwnProperty('contentVersions') && contentVersions === null) {
-        updateData.contentVersions = [];
     }
 
-    if (agentDebates !== undefined && Array.isArray(agentDebates)) {
-      updateData.agentDebates = agentDebates.map((ad: AgentInteraction) => ({
+    if (agentDebates !== undefined) {
+      updateData.agentDebates = (agentDebates === null ? [] : agentDebates).map((ad: AgentInteraction) => ({
         ...ad,
         timestamp: ad.timestamp ? new Date(ad.timestamp) : new Date(),
       }));
-    } else if (body.hasOwnProperty('agentDebates') && agentDebates === null) {
-        updateData.agentDebates = [];
     }
 
-    if (scheduledPosts !== undefined && Array.isArray(scheduledPosts)) {
-      updateData.scheduledPosts = scheduledPosts.map((sp: ScheduledPost) => ({ 
+    if (scheduledPosts !== undefined) {
+      updateData.scheduledPosts = (scheduledPosts === null ? [] : scheduledPosts).map((sp: ScheduledPost) => ({ 
         ...sp,
         scheduledAt: sp.scheduledAt ? new Date(sp.scheduledAt) : new Date(),
       }));
-    } else if (body.hasOwnProperty('scheduledPosts') && scheduledPosts === null) {
-        updateData.scheduledPosts = [];
     }
 
-    if (abTests !== undefined && Array.isArray(abTests)) {
-      updateData.abTests = abTests.map((ab: ABTestInstance) => ({
+    if (abTests !== undefined) {
+      updateData.abTests = (abTests === null ? [] : abTests).map((ab: ABTestInstance) => ({
         ...ab,
         createdAt: ab.createdAt ? new Date(ab.createdAt) : new Date(),
       }));
-    } else if (body.hasOwnProperty('abTests') && abTests === null) {
-        updateData.abTests = [];
     }
     
     const client = await clientPromise;
-    const db = client.db();
-    const campaignsCollection = db.collection<Campaign>('campaigns');
+    const db = client.db(process.env.MONGODB_DB_NAME);
+    const campaignsCollection = db.collection<Omit<Campaign, 'id'>>('campaigns');
 
     const result = await campaignsCollection.findOneAndUpdate(
       { _id: new ObjectId(campaignId), userId: userId },
@@ -206,14 +205,17 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: 'Campaign not found or user not authorized for update' }, { status: 404 });
     }
     
-    const updatedCampaign = {
-        ...result.value,
-        id: result.value._id!.toString(),
-        contentVersions: result.value.contentVersions || [],
-        agentDebates: result.value.agentDebates || [],
-        scheduledPosts: result.value.scheduledPosts || [],
-        abTests: result.value.abTests || [],
-        isPrivate: result.value.isPrivate || false,
+    const updatedCampaignDoc = result.value;
+    const updatedCampaign: Campaign = { // Map to client-side type
+        ...updatedCampaignDoc,
+        id: updatedCampaignDoc._id!.toString(),
+        contentVersions: (updatedCampaignDoc.contentVersions || []).map(cv => ({...cv, timestamp: new Date(cv.timestamp)})),
+        agentDebates: (updatedCampaignDoc.agentDebates || []).map(ad => ({...ad, timestamp: new Date(ad.timestamp)})),
+        scheduledPosts: (updatedCampaignDoc.scheduledPosts || []).map(sp => ({...sp, scheduledAt: new Date(sp.scheduledAt)})),
+        abTests: (updatedCampaignDoc.abTests || []).map(ab => ({...ab, createdAt: new Date(ab.createdAt)})),
+        isPrivate: updatedCampaignDoc.isPrivate || false,
+        createdAt: new Date(updatedCampaignDoc.createdAt),
+        updatedAt: new Date(updatedCampaignDoc.updatedAt),
     };
 
     return NextResponse.json(updatedCampaign, { status: 200 });
@@ -247,7 +249,7 @@ export async function DELETE(request: NextRequest) {
     }
 
     const client = await clientPromise;
-    const db = client.db();
+    const db = client.db(process.env.MONGODB_DB_NAME);
     const campaignsCollection = db.collection('campaigns');
 
     const result = await campaignsCollection.deleteOne({ 
@@ -263,6 +265,7 @@ export async function DELETE(request: NextRequest) {
 
   } catch (error) {
     console.error("Failed to delete campaign:", error);
-    return NextResponse.json({ error: 'Failed to delete campaign' }, { status: 500 });
+    const errorMessage = error instanceof Error ? error.message : "An unknown error occurred";
+    return NextResponse.json({ error: 'Failed to delete campaign', details: errorMessage }, { status: 500 });
   }
 }

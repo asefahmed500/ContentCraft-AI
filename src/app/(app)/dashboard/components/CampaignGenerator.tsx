@@ -42,7 +42,7 @@ export function CampaignGenerator({
   const [contentGoals, setContentGoals] = useState<string[]>([]);
   const [isPrivate, setIsPrivate] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  const [andStartGeneration, setAndStartGeneration] = useState(false);
+  const [isInitiatingGeneration, setIsInitiatingGeneration] = useState(false); // For "Save & Generate" button specifically
   const [referenceFiles, setReferenceFiles] = useState<FileList | null>(null);
   
   const [importUrl, setImportUrl] = useState('');
@@ -55,21 +55,7 @@ export function CampaignGenerator({
 
   const { toast } = useToast();
 
-  useEffect(() => {
-    if (selectedCampaignForEdit) {
-      setCampaignTitle(selectedCampaignForEdit.title || '');
-      setBrief(selectedCampaignForEdit.brief || '');
-      setTargetAudience(selectedCampaignForEdit.targetAudience || '');
-      setTone(selectedCampaignForEdit.tone || '');
-      setContentGoals(selectedCampaignForEdit.contentGoals || []);
-      setIsPrivate(selectedCampaignForEdit.isPrivate || false);
-      setBrandVoice(''); 
-      setReferenceFiles(null);
-      setImportUrl('');
-      setVideoUrl('');
-      setVideoFile(null);
-    } else {
-      // Reset form for new campaign
+  const resetFormFields = () => {
       setCampaignTitle('');
       setBrief('');
       setTargetAudience('');
@@ -81,6 +67,27 @@ export function CampaignGenerator({
       setImportUrl('');
       setVideoUrl('');
       setVideoFile(null);
+      const videoFileInput = document.getElementById('video-file-input') as HTMLInputElement;
+      if (videoFileInput) videoFileInput.value = '';
+      const refFileInput = document.getElementById('reference-materials') as HTMLInputElement;
+      if (refFileInput) refFileInput.value = '';
+  };
+
+  useEffect(() => {
+    if (selectedCampaignForEdit) {
+      setCampaignTitle(selectedCampaignForEdit.title || '');
+      setBrief(selectedCampaignForEdit.brief || '');
+      setTargetAudience(selectedCampaignForEdit.targetAudience || '');
+      setTone(selectedCampaignForEdit.tone || '');
+      setContentGoals(selectedCampaignForEdit.contentGoals || []);
+      setIsPrivate(selectedCampaignForEdit.isPrivate || false);
+      setBrandVoice(''); // Typically, brand voice override is not persisted with campaign, it's an input for generation
+      setReferenceFiles(null); // Don't repopulate files
+      setImportUrl('');
+      setVideoUrl('');
+      setVideoFile(null);
+    } else {
+      resetFormFields();
     }
   }, [selectedCampaignForEdit]);
 
@@ -95,18 +102,29 @@ export function CampaignGenerator({
       return;
     }
     setIsSaving(true);
-    setAndStartGeneration(shouldStartGeneration);
+    if (shouldStartGeneration) {
+        setIsInitiatingGeneration(true);
+    }
 
 
-    const campaignData: Partial<Campaign> = {
+    const campaignDataPayload: Partial<Omit<Campaign, 'id' | '_id' | 'userId' | 'createdAt'| 'updatedAt' | 'agentDebates' | 'contentVersions' | 'scheduledPosts' | 'abTests'>> & { status?: CampaignStatus } = {
       title: campaignTitle.trim(),
       brief: brief.trim(), 
       targetAudience: targetAudience.trim() || undefined,
       tone: tone || undefined,
       contentGoals: contentGoals.length > 0 ? contentGoals : undefined,
       isPrivate: isPrivate,
-      // referenceMaterials will be handled if a proper upload mechanism is implemented
+      // referenceMaterials will be handled if a proper upload mechanism is implemented and passed here
+      // For now, we don't pass referenceFiles directly to backend in this manner
     };
+    
+    if (selectedCampaignForEdit && !shouldStartGeneration) { // If editing and just saving, keep current status
+        campaignDataPayload.status = selectedCampaignForEdit.status;
+    } else if (!selectedCampaignForEdit) { // New campaign
+        campaignDataPayload.status = 'draft';
+    }
+    // If shouldStartGeneration is true, status will be handled by the generation flow ('debating', 'generating')
+
 
     try {
       const method = selectedCampaignForEdit ? 'PUT' : 'POST';
@@ -115,7 +133,7 @@ export function CampaignGenerator({
       const response = await fetch(url, {
         method: method,
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(campaignData),
+        body: JSON.stringify(campaignDataPayload),
       });
 
       if (!response.ok) {
@@ -125,20 +143,25 @@ export function CampaignGenerator({
       const savedCampaign: Campaign = await response.json();
       
       toast({ title: `Campaign ${selectedCampaignForEdit ? "Updated" : "Created"}!`, description: `"${savedCampaign.title}" has been ${selectedCampaignForEdit ? "updated" : "created"}.` });
-      onCampaignCreated(savedCampaign); 
+      onCampaignCreated(savedCampaign); // Update parent state
 
       if (shouldStartGeneration) {
+        // onGenerateContentForCampaign expects the full campaign object
+        // which should now have an ID if it was newly created.
+        // The status will be updated by the generation flow itself.
         await onGenerateContentForCampaign(savedCampaign, brandVoice.trim() || undefined);
       } else if (!selectedCampaignForEdit) { 
-        setCampaignTitle(''); setBrief(''); setTargetAudience(''); setTone(''); setContentGoals([]); setIsPrivate(false); setBrandVoice(''); setReferenceFiles(null); setImportUrl(''); setVideoUrl(''); setVideoFile(null);
+        // If it was a new campaign and we are NOT starting generation, clear the form.
+        resetFormFields();
       }
+      // If editing and not starting generation, fields remain as they are for further editing.
 
     } catch (error) {
         const errorMessage = error instanceof Error ? error.message : "An unknown error occurred.";
         toast({ title: "Failed to Save Campaign", description: errorMessage, variant: "destructive" });
     } finally {
         setIsSaving(false);
-        setAndStartGeneration(false);
+        setIsInitiatingGeneration(false);
     }
   };
 
@@ -166,6 +189,7 @@ export function CampaignGenerator({
     setIsImportingUrl(true);
     toast({ title: "Importing Content...", description: `Attempting to fetch and analyze content from ${importUrl}. This is a simulation.`});
 
+    // Simulate API call
     await new Promise(resolve => setTimeout(resolve, 2000));
 
     const simulatedExtractedText = `Content successfully "imported" from: ${importUrl}.\n\n[Simulated extracted content appears here... This text is a placeholder. In a real system, the actual content from the URL would be fetched, parsed (e.g., using readability.js), and then displayed here or used for analysis.]\n\nPlease review and refine this text to serve as the core brief for your campaign. You can edit it directly below.`;
@@ -214,6 +238,8 @@ Please review and refine this extracted information and the suggestions above to
     if (videoFileInput) videoFileInput.value = '';
   };
 
+  // Determine if primary action buttons should be disabled
+  const primaryActionsDisabled = isSaving || isGenerating || isImportingUrl || isProcessingVideo;
 
   return (
     <Card className="shadow-lg">
@@ -239,6 +265,7 @@ Please review and refine this extracted information and the suggestions above to
             onChange={(e) => setCampaignTitle(e.target.value)}
             className="text-base"
             required
+            disabled={primaryActionsDisabled}
           />
         </div>
         
@@ -257,8 +284,8 @@ Please review and refine this extracted information and the suggestions above to
                     id="video-url"
                     placeholder="https://example.com/video"
                     value={videoUrl}
-                    onChange={(e) => { setVideoUrl(e.target.value); if(e.target.value) setVideoFile(null); }}
-                    disabled={isProcessingVideo}
+                    onChange={(e) => { setVideoUrl(e.target.value); if(e.target.value && videoFile) setVideoFile(null); }}
+                    disabled={isProcessingVideo || primaryActionsDisabled}
                 />
             </div>
              <div className="relative flex items-center text-xs uppercase my-2">
@@ -273,12 +300,12 @@ Please review and refine this extracted information and the suggestions above to
                     type="file"
                     accept="video/mp4,video/quicktime,video/x-msvideo,video/webm" 
                     onChange={handleVideoFileChange}
-                    disabled={isProcessingVideo || !!videoUrl.trim()} 
+                    disabled={isProcessingVideo || !!videoUrl.trim() || primaryActionsDisabled} 
                 />
             </div>
             <Button 
                 onClick={handleGenerateFromVideo} 
-                disabled={isProcessingVideo || (!videoUrl.trim() && !videoFile)} 
+                disabled={isProcessingVideo || (!videoUrl.trim() && !videoFile) || primaryActionsDisabled} 
                 variant="outline" 
                 className="w-full sm:w-auto border-primary/50 text-primary/90 hover:bg-primary/10 hover:text-primary"
             >
@@ -300,9 +327,9 @@ Please review and refine this extracted information and the suggestions above to
                         value={importUrl}
                         onChange={(e) => setImportUrl(e.target.value)}
                         className="text-base"
-                        disabled={isImportingUrl || isProcessingVideo}
+                        disabled={isImportingUrl || isProcessingVideo || primaryActionsDisabled}
                     />
-                    <Button onClick={handleImportFromUrl} disabled={isImportingUrl || !importUrl.trim() || isProcessingVideo} variant="outline">
+                    <Button onClick={handleImportFromUrl} disabled={isImportingUrl || !importUrl.trim() || isProcessingVideo || primaryActionsDisabled} variant="outline">
                         {isImportingUrl ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Combine className="mr-2 h-4 w-4"/>}
                         Import Text
                     </Button>
@@ -324,7 +351,7 @@ Please review and refine this extracted information and the suggestions above to
                 rows={8}
                 className="text-base"
                 required
-                disabled={isProcessingVideo || isImportingUrl}
+                disabled={isProcessingVideo || isImportingUrl || primaryActionsDisabled}
               />
             </div>
         </div>
@@ -339,11 +366,12 @@ Please review and refine this extracted information and the suggestions above to
               value={targetAudience}
               onChange={(e) => setTargetAudience(e.target.value)}
               className="text-base"
+              disabled={primaryActionsDisabled}
             />
           </div>
           <div className="space-y-2">
             <Label htmlFor="tone" className="text-base flex items-center gap-1"><Palette className="mr-1 h-4 w-4"/>Desired Tone</Label>
-            <Select value={tone} onValueChange={setTone}>
+            <Select value={tone} onValueChange={setTone} disabled={primaryActionsDisabled}>
               <SelectTrigger id="tone" className="text-base">
                 <SelectValue placeholder="Select tone (e.g., Playful, Bold)" />
               </SelectTrigger>
@@ -356,7 +384,7 @@ Please review and refine this extracted information and the suggestions above to
 
         <div className="space-y-2">
           <Label htmlFor="content-goals" className="text-base flex items-center gap-1"><Target className="mr-1 h-4 w-4"/>Content Goals (Select up to 3)</Label>
-           <Select onValueChange={(value) => { /* This select is used for display only, logic is in items */ }}>
+           <Select onValueChange={(value) => { /* This select is used for display only, logic is in items */ }} disabled={primaryActionsDisabled}>
             <SelectTrigger id="content-goals" className="text-base h-auto min-h-10 py-2">
                 <SelectValue placeholder="Select up to 3 goals">
                   {contentGoals.length > 0 ? contentGoals.join(', ') : "Select up to 3 goals"}
@@ -398,9 +426,10 @@ Please review and refine this extracted information and the suggestions above to
             value={brandVoice}
             onChange={(e) => setBrandVoice(e.target.value)}
             className="text-base"
+            disabled={primaryActionsDisabled}
           />
           <p className="text-xs text-muted-foreground">
-            Provide specific voice instructions here to guide the AI for this campaign. This will be used by default. If a Brand DNA profile exists (from the Brand DNA Analyzer tab), these instructions can augment or override it for this specific campaign's content generation.
+            Provide specific voice instructions here to guide the AI for this campaign. If a Brand DNA profile has been analyzed (in the Brand DNA tab), these instructions can augment or override that profile for this specific campaign's content generation. If no profile exists or no override is given, AI will use a general approach.
           </p>
         </div>
 
@@ -409,6 +438,7 @@ Please review and refine this extracted information and the suggestions above to
                 id="private-campaign"
                 checked={isPrivate}
                 onCheckedChange={setIsPrivate}
+                disabled={primaryActionsDisabled}
             />
             <Label htmlFor="private-campaign" className="text-base flex items-center gap-1">
                 {isPrivate ? <Lock className="h-4 w-4" /> : <Unlock className="h-4 w-4" />}
@@ -439,6 +469,7 @@ Please review and refine this extracted information and the suggestions above to
                 onChange={handleFileChange}
                 className="text-base"
                 accept=".pdf,.txt,.md,.doc,.docx"
+                disabled={primaryActionsDisabled}
             />
              {referenceFiles && referenceFiles.length > 0 && (
                 <div className="pt-2 text-sm text-muted-foreground">
@@ -454,21 +485,21 @@ Please review and refine this extracted information and the suggestions above to
       <CardFooter className="flex flex-col sm:flex-row justify-end gap-3 pt-6">
         <Button 
             onClick={() => handleSaveCampaign(false)} 
-            disabled={isSaving || isGenerating || isImportingUrl || isProcessingVideo} 
+            disabled={primaryActionsDisabled} 
             variant="outline"
             className="w-full sm:w-auto"
         >
-          {isSaving && !andStartGeneration ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />} 
+          {isSaving && !isInitiatingGeneration ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />} 
           {selectedCampaignForEdit ? "Save Changes" : "Save Draft"}
         </Button>
         <Button 
             onClick={() => handleSaveCampaign(true)} 
-            disabled={isSaving || isGenerating || !campaignTitle.trim() || !brief.trim() || isImportingUrl || isProcessingVideo} 
+            disabled={primaryActionsDisabled || !campaignTitle.trim() || !brief.trim()} 
             size="lg" 
             className="w-full sm:w-auto"
         >
-          {(isSaving || isGenerating) && andStartGeneration ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Wand2 className="mr-2 h-4 w-4" />} 
-          {selectedCampaignForEdit ? "Update & Regenerate" : "Save & Generate Campaign"}
+          {isInitiatingGeneration ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Wand2 className="mr-2 h-4 w-4" />} 
+          {selectedCampaignForEdit ? "Update & Regenerate Content" : "Save & Generate Campaign"}
         </Button>
       </CardFooter>
     </Card>

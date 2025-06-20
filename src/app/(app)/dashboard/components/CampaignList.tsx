@@ -18,15 +18,15 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Button } from '@/components/ui/button';
 
 
 interface CampaignListProps {
   refreshTrigger: number; // Increment to trigger a re-fetch
   onCampaignSelect: (campaignId: string | null, action: 'view' | 'edit') => void;
+  currentlySelectedCampaignId?: string | null;
 }
 
-export function CampaignList({ refreshTrigger, onCampaignSelect }: CampaignListProps) {
+export function CampaignList({ refreshTrigger, onCampaignSelect, currentlySelectedCampaignId }: CampaignListProps) {
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -69,36 +69,34 @@ export function CampaignList({ refreshTrigger, onCampaignSelect }: CampaignListP
   const handleDeleteCampaign = async () => {
     if (!campaignToDelete) return;
     
-    // Use a temporary variable for the toast message before setting campaignToDelete to null
     const campaignTitleForToast = campaignToDelete.title;
+    const campaignIdToDelete = campaignToDelete.id;
 
-    // Optimistically update UI or show loading state
     const originalCampaigns = [...campaigns];
-    setCampaigns(campaigns.filter(c => c.id !== campaignToDelete.id));
-    setIsDeleteDialogOpen(false); // Close dialog immediately
+    setCampaigns(campaigns.filter(c => c.id !== campaignIdToDelete));
+    setIsDeleteDialogOpen(false);
 
     try {
-      const response = await fetch(`/api/campaigns?id=${campaignToDelete.id}`, {
+      const response = await fetch(`/api/campaigns?id=${campaignIdToDelete}`, {
         method: 'DELETE',
       });
       if (!response.ok) {
         const errorData = await response.json();
-        // Revert optimistic update if delete failed
-        setCampaigns(originalCampaigns);
+        setCampaigns(originalCampaigns); // Revert optimistic update
         throw new Error(errorData.error || 'Failed to delete campaign');
       }
       toast({ title: "Campaign Deleted", description: `"${campaignTitleForToast}" has been successfully deleted.` });
-      // No need to call onCampaignSelect here unless you want to clear a selected campaign view
-      if (typeof onCampaignSelect === 'function') {
-        onCampaignSelect(null, 'view'); // Clear selection if deleted campaign was selected
+      
+      // If the deleted campaign was the one currently selected in the dashboard, clear the selection.
+      if (currentlySelectedCampaignId === campaignIdToDelete) {
+        onCampaignSelect(null, 'view'); 
       }
     } catch (err) {
-      // Revert optimistic update
-      setCampaigns(originalCampaigns);
+      setCampaigns(originalCampaigns); // Revert optimistic update
       const errorMessage = err instanceof Error ? err.message : "An unknown error occurred during deletion.";
       toast({ title: "Error Deleting Campaign", description: errorMessage, variant: "destructive" });
     } finally {
-      setCampaignToDelete(null); // Clear the campaign to delete state
+      setCampaignToDelete(null);
     }
   };
 
