@@ -7,7 +7,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
-import { FileText, Tv2, Copy, Download, Loader2, FileType, Share2, WandSparkles, ThumbsUp, ThumbsDown, MessageSquarePlus } from 'lucide-react';
+import { FileText, Tv2, Copy, Download, Loader2, FileType, Share2, WandSparkles, ThumbsUp, ThumbsDown, MessageSquarePlus, Languages } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { useState } from 'react';
@@ -237,6 +237,14 @@ export function MultiFormatPreview({ content, isLoading, campaignId, contentVers
                           <p>Get AI-powered revision suggestions (Coming Soon)</p>
                         </TooltipContent>
                       </Tooltip>
+                       <Tooltip>
+                        <TooltipTrigger asChild>
+                            <Button variant="outline" size="sm" disabled onClick={() => handleComingSoon('Translate')}>
+                                <Languages className="mr-1 h-3 w-3" /> Translate
+                            </Button>
+                        </TooltipTrigger>
+                        <TooltipContent><p>Translate content (Coming Soon)</p></TooltipContent>
+                       </Tooltip>
                       <Tooltip>
                         <TooltipTrigger asChild>
                           <Button variant="outline" size="sm" disabled onClick={() => handleComingSoon('PDF Export')}>
