@@ -23,14 +23,24 @@ export async function POST(request: NextRequest) {
     if (body.rating !== 1 && body.rating !== -1) {
         return NextResponse.json({ error: 'Invalid rating value. Must be 1 or -1.' }, { status: 400 });
     }
+    
+    if(!ObjectId.isValid(body.campaignId)) {
+        return NextResponse.json({ error: 'Invalid campaignId format.' }, { status: 400 });
+    }
+    // contentVersionId is optional, so no specific format check unless present
+    // if (body.contentVersionId && !ObjectId.isValid(body.contentVersionId)) {
+    //   return NextResponse.json({ error: 'Invalid contentVersionId format.' }, { status: 400 });
+    // }
 
-    const feedbackEntry: UserFeedback & { userId: string } = {
+
+    const feedbackEntry: UserFeedback & { userId: ObjectId } = {
       ...body,
-      userId: userId, // Add the authenticated user's ID
+      userId: new ObjectId(userId), 
+      campaignId: new ObjectId(body.campaignId) as any, // Cast to any because type expects string, but we store ObjectId
+      contentVersionId: body.contentVersionId ? new ObjectId(body.contentVersionId) as any : undefined,
       timestamp: new Date(),
     };
 
-    // Store in 'feedback_logs' collection in MongoDB
     const client: MongoClient = await clientPromise;
     const db: Db = client.db(process.env.MONGODB_DB_NAME || undefined);
     const feedbackCollection = db.collection('feedback_logs');
@@ -42,10 +52,10 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: 'Failed to save feedback entry.' }, { status: 500 });
     }
 
-    // The toast for XP is handled client-side.
-    // If actual XP update is needed here, that would be an additional step to update user document.
-
-    return NextResponse.json({ message: 'Feedback submitted successfully.', data: { ...feedbackEntry, _id: result.insertedId } }, { status: 200 });
+    return NextResponse.json({ 
+        message: 'Feedback submitted successfully.', 
+        data: { ...feedbackEntry, _id: result.insertedId, userId: userId, campaignId: body.campaignId, contentVersionId: body.contentVersionId } 
+    }, { status: 200 });
 
   } catch (error) {
     console.error("Feedback API Error:", error);

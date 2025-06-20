@@ -143,39 +143,40 @@ export async function PUT(request: NextRequest) {
     
     const updateData: Partial<Omit<Campaign, 'id' | '_id' | 'userId' | 'createdAt'>> = { updatedAt: new Date() };
     
-    if (body.title !== undefined) updateData.title = body.title;
-    if (body.brief !== undefined) updateData.brief = body.brief;
-    if (body.targetAudience !== undefined) updateData.targetAudience = body.targetAudience === null ? undefined : body.targetAudience;
-    if (body.tone !== undefined) updateData.tone = body.tone === null ? undefined : body.tone;
-    if (body.contentGoals !== undefined) updateData.contentGoals = body.contentGoals === null ? [] : body.contentGoals;
-    if (body.status !== undefined) updateData.status = body.status;
-    if (body.referenceMaterials !== undefined) updateData.referenceMaterials = body.referenceMaterials === null ? [] : body.referenceMaterials;
-    if (body.brandId !== undefined) updateData.brandId = body.brandId === null ? undefined : body.brandId;
-    if (body.isPrivate !== undefined) updateData.isPrivate = body.isPrivate ?? false;
+    // Only include fields in updateData if they are present in the body
+    if (Object.prototype.hasOwnProperty.call(body, 'title')) updateData.title = body.title;
+    if (Object.prototype.hasOwnProperty.call(body, 'brief')) updateData.brief = body.brief;
+    if (Object.prototype.hasOwnProperty.call(body, 'targetAudience')) updateData.targetAudience = body.targetAudience === null ? undefined : body.targetAudience;
+    if (Object.prototype.hasOwnProperty.call(body, 'tone')) updateData.tone = body.tone === null ? undefined : body.tone;
+    if (Object.prototype.hasOwnProperty.call(body, 'contentGoals')) updateData.contentGoals = body.contentGoals === null ? [] : body.contentGoals;
+    if (Object.prototype.hasOwnProperty.call(body, 'status')) updateData.status = body.status;
+    if (Object.prototype.hasOwnProperty.call(body, 'referenceMaterials')) updateData.referenceMaterials = body.referenceMaterials === null ? [] : body.referenceMaterials;
+    if (Object.prototype.hasOwnProperty.call(body, 'brandId')) updateData.brandId = body.brandId === null ? undefined : body.brandId;
+    if (Object.prototype.hasOwnProperty.call(body, 'isPrivate')) updateData.isPrivate = body.isPrivate ?? false;
 
 
-    if (body.contentVersions !== undefined) {
+    if (Object.prototype.hasOwnProperty.call(body, 'contentVersions')) {
       updateData.contentVersions = (body.contentVersions === null ? [] : body.contentVersions).map((v: ContentVersion) => ({
         ...v,
         timestamp: ensureDate(v.timestamp) || new Date(),
       }));
     }
 
-    if (body.agentDebates !== undefined) {
+    if (Object.prototype.hasOwnProperty.call(body, 'agentDebates')) {
       updateData.agentDebates = (body.agentDebates === null ? [] : body.agentDebates).map((ad: AgentInteraction) => ({
         ...ad,
         timestamp: ensureDate(ad.timestamp) || new Date(),
       }));
     }
 
-    if (body.scheduledPosts !== undefined) {
+    if (Object.prototype.hasOwnProperty.call(body, 'scheduledPosts')) {
       updateData.scheduledPosts = (body.scheduledPosts === null ? [] : body.scheduledPosts).map((sp: ScheduledPost) => ({ 
         ...sp,
         scheduledAt: ensureDate(sp.scheduledAt) || new Date(),
       }));
     }
 
-    if (body.abTests !== undefined) {
+    if (Object.prototype.hasOwnProperty.call(body, 'abTests')) {
       updateData.abTests = (body.abTests === null ? [] : body.abTests).map((ab: ABTestInstance) => ({
         ...ab,
         createdAt: ensureDate(ab.createdAt) || new Date(),

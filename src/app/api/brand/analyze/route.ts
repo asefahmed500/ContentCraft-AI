@@ -2,9 +2,15 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { analyzeBrandDNA, type AnalyzeBrandDNAInput } from '@/ai/flows/brand-learning';
+import { getToken } from 'next-auth/jwt';
 
 export async function POST(request: NextRequest) {
   try {
+    const token = await getToken({ req: request, secret: process.env.NEXTAUTH_SECRET });
+    if (!token) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     const body = await request.json() as AnalyzeBrandDNAInput;
 
     if (!body.contentDataUri) {

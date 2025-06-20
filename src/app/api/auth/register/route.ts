@@ -38,10 +38,11 @@ export async function POST(request: Request) {
       role: 'viewer', 
       createdAt: new Date(),
       updatedAt: new Date(),
-      image: `https://placehold.co/100x100.png?text=${name.charAt(0).toUpperCase()}`, // data-ai-hint added client-side
+      image: `https://placehold.co/100x100.png?text=${name.charAt(0).toUpperCase()}`, 
       totalXP: 0,
       level: 1,
       badges: [],
+      emailVerified: null, // Standard for credentials signup
     });
 
     if (!result.insertedId) {

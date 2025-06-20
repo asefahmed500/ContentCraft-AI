@@ -1,11 +1,17 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { generateContent, type GenerateContentInput } from '@/ai/flows/content-generation';
+import { getToken } from 'next-auth/jwt';
 
 
 // This route will use the generateContent flow as a proxy for orchestration for now
 export async function POST(request: NextRequest) {
   try {
+    const token = await getToken({ req: request, secret: process.env.NEXTAUTH_SECRET });
+    if (!token) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     const body = await request.json() as GenerateContentInput;
 
     if (!body.inputContent) {

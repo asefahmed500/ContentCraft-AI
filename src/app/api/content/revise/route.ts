@@ -16,6 +16,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Missing required fields: originalContent and revisionInstructions' }, { status: 400 });
     }
 
+    // Potentially, add campaignId to ReviseContentInput and check user ownership
+    // For now, any authenticated user can use the flow.
+
     const result = await reviseContent(body);
     return NextResponse.json(result, { status: 200 });
 
