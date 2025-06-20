@@ -1,210 +1,320 @@
 
 "use client";
 
+import { useState, useEffect } from 'react';
+import { useSession, signOut } from 'next-auth/react';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
-import { useSession, signOut } from 'next-auth/react';
-import { UserCircle, Users, ShieldCheck, Save, LogOut, Loader2, ShieldAlert } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import type { FormEvent} from 'react';
-import { useState, useEffect } from "react";
+import { Loader2, User, KeyRound, Building, LogOut, Save, ShieldAlert, ShieldCheck } from 'lucide-react';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import type { User as NextAuthUser } from 'next-auth';
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
 interface SessionUser extends NextAuthUser {
   id?: string;
-  role?: 'viewer' | 'editor' | 'admin';
-  totalXP?: number;
-  level?: number;
-  badges?: string[];
+  role?: string;
 }
 
 
 export default function SettingsPage() {
   const { data: session, status, update: updateSession } = useSession();
   const { toast } = useToast();
-  
-  const user = session?.user as SessionUser | undefined;
-  const authIsLoading = status === 'loading';
-  const isAdmin = user?.role === 'admin';
 
-  const [userName, setUserName] = useState("");
-  const [userEmail, setUserEmail] = useState("");
-  const [isSavingProfile, setIsSavingProfile] = useState(false);
-  const [isSendingInvite, setIsSendingInvite] = useState(false);
+  const [name, setName] = useState('');
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmNewPassword, setConfirmNewPassword] = useState('');
 
+  const [isUpdatingProfile, setIsUpdatingProfile] = useState(false);
+  const [isChangingPassword, setIsChangingPassword] = useState(false);
+  const [isDeletingAccount, setIsDeletingAccount] = useState(false);
 
   useEffect(() => {
-    if (user) {
-      setUserName(user.name || "");
-      setUserEmail(user.email || "");
+    if (session?.user?.name) {
+      setName(session.user.name);
     }
-  }, [user]);
+  }, [session]);
 
-  const handleProfileSave = async (e: FormEvent) => {
+  const handleProfileUpdate = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    setIsSavingProfile(true);
-    
-    // In a real app, you would call an API to update the user's name and password.
-    // For now, we just simulate the update and toast.
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    
-    // If you were actually updating the name and wanted it reflected in the session:
-    // await updateSession({ user: { name: userName }}); 
+    setIsUpdatingProfile(true);
+    if (!name.trim()) {
+      toast({ title: "Validation Error", description: "Name cannot be empty.", variant: "destructive" });
+      setIsUpdatingProfile(false);
+      return;
+    }
 
-    toast({ 
-      title: "Profile Update (Simulated)", 
-      description: `Name update to "${userName}" is simulated. Password changes would require a secure backend process. No actual data has been changed on the server.` 
-    });
-    setIsSavingProfile(false);
+    try {
+      const response = await fetch('/api/user/profile', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name }),
+      });
+      const result = await response.json();
+      if (!response.ok) {
+        throw new Error(result.error || "Failed to update profile.");
+      }
+      toast({ title: "Profile Updated", description: "Your name has been successfully updated." });
+      // Update the session to reflect the new name immediately
+      await updateSession({ user: { ...session?.user, name } });
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "An unknown error occurred.";
+      toast({ title: "Profile Update Failed", description: errorMessage, variant: "destructive" });
+    } finally {
+      setIsUpdatingProfile(false);
+    }
   };
 
-  const handleInviteUser = async (e: FormEvent) => {
+  const handleChangePassword = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    if (!isAdmin) {
-        toast({ title: "Permission Denied", description: "Only admins can invite users.", variant: "destructive" });
-        return;
+    setIsChangingPassword(true);
+    if (!currentPassword || !newPassword || !confirmNewPassword) {
+      toast({ title: "Validation Error", description: "All password fields are required.", variant: "destructive" });
+      setIsChangingPassword(false);
+      return;
     }
-    setIsSendingInvite(true);
-    const target = e.target as typeof e.target & { email: { value: string }; role: { value: string } };
-    const invitedEmail = target.email.value;
-    const invitedRole = target.role.value;
+    if (newPassword !== confirmNewPassword) {
+      toast({ title: "Validation Error", description: "New passwords do not match.", variant: "destructive" });
+      setIsChangingPassword(false);
+      return;
+    }
+    if (newPassword.length < 6) {
+      toast({ title: "Validation Error", description: "New password must be at least 6 characters long.", variant: "destructive" });
+      setIsChangingPassword(false);
+      return;
+    }
 
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 1000)); 
-    
-    toast({ 
-        title: "Invitation Sent (Simulated)", 
-        description: `User ${invitedEmail} invited as ${invitedRole}. In a real system, an email would be sent, and the user would be added to a 'teams' or 'invitations' collection. This is a UI simulation.`
+    try {
+      const response = await fetch('/api/user/change-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ currentPassword, newPassword }),
+      });
+      const result = await response.json();
+      if (!response.ok) {
+        throw new Error(result.error || "Failed to change password.");
+      }
+      toast({ title: "Password Changed", description: "Your password has been successfully updated. You may need to log in again." });
+      setCurrentPassword('');
+      setNewPassword('');
+      setConfirmNewPassword('');
+      // Optionally sign out the user for security
+      // await signOut({ callbackUrl: '/login' }); 
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "An unknown error occurred.";
+      toast({ title: "Password Change Failed", description: errorMessage, variant: "destructive" });
+    } finally {
+      setIsChangingPassword(false);
+    }
+  };
+
+
+  const handleDeleteAccount = async () => {
+    setIsDeletingAccount(true);
+    // This is a placeholder. Actual account deletion is a destructive operation
+    // and requires careful implementation (e.g., /api/user/delete-account).
+    toast({
+      title: "Account Deletion (Conceptual)",
+      description: "This feature is conceptual. In a real app, this would permanently delete your account and data.",
+      variant: "default",
+      duration: 5000,
     });
-    if (user?.role === 'admin') {
-        (e.target as HTMLFormElement).reset();
-    }
-    setIsSendingInvite(false);
+    // Simulating sign out after conceptual deletion
+    // await signOut({ callbackUrl: '/' }); 
+    setIsDeletingAccount(false);
   };
 
-  const handleLogout = async () => {
-    await signOut({ callbackUrl: '/login' });
-  };
-
-  if (authIsLoading) {
-    return (
-      <div className="flex h-[calc(100vh-10rem)] items-center justify-center">
-        <Loader2 className="h-12 w-12 animate-spin text-primary" />
-      </div>
-    );
+  if (status === 'loading') {
+    return <div className="flex justify-center items-center h-screen"><Loader2 className="h-12 w-12 animate-spin text-primary" /></div>;
   }
 
-  if (!user) {
-    return <p>Please log in to view settings.</p>;
+  if (status === 'unauthenticated' || !session) {
+    // Should be handled by middleware, but as a fallback
+    return <div className="text-center py-10">Please log in to view settings.</div>;
   }
+
+  const isOAuthAccount = session.user?.email && !session.user?.image?.includes('placehold.co'); // Simple check; more robust might be needed (e.g. check account provider)
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-8 max-w-3xl mx-auto">
       <div>
-        <h1 className="font-headline text-3xl md:text-4xl font-bold tracking-tight">Settings</h1>
+        <h1 className="font-headline text-3xl md:text-4xl font-bold tracking-tight">Account Settings</h1>
         <p className="text-lg text-muted-foreground">
-          Manage your account, profile, and team settings. Your current role is: <span className="font-semibold capitalize">{user.role || 'Viewer'}</span>.
+          Manage your profile, password, and other account settings.
         </p>
       </div>
       <Separator />
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-        <Card className="shadow-lg">
+      <Card>
+        <CardHeader>
+          <CardTitle className="font-headline flex items-center gap-2"><User className="h-5 w-5 text-primary"/> Profile Information</CardTitle>
+          <CardDescription>Update your display name.</CardDescription>
+        </CardHeader>
+        <form onSubmit={handleProfileUpdate}>
+          <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="email">Email</Label>
+              <Input id="email" type="email" value={session.user?.email || ''} disabled className="bg-muted/50" />
+              <p className="text-xs text-muted-foreground">Your email address cannot be changed.</p>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="name">Full Name</Label>
+              <Input
+                id="name"
+                type="text"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="Your full name"
+                required
+                disabled={isUpdatingProfile}
+              />
+            </div>
+          </CardContent>
+          <CardFooter>
+            <Button type="submit" disabled={isUpdatingProfile || name === session.user?.name}>
+              {isUpdatingProfile ? <Loader2 className="animate-spin" /> : <Save />} Update Profile
+            </Button>
+          </CardFooter>
+        </form>
+      </Card>
+
+      {!isOAuthAccount && (
+        <Card>
           <CardHeader>
-            <CardTitle className="font-headline text-xl flex items-center gap-2">
-              <UserCircle className="h-6 w-6 text-primary" />
-              User Profile
-            </CardTitle>
-            <CardDescription>View and update your personal information.</CardDescription>
+            <CardTitle className="font-headline flex items-center gap-2"><KeyRound className="h-5 w-5 text-primary"/>Change Password</CardTitle>
+            <CardDescription>Update your account password. Ensure it&apos;s strong and unique.</CardDescription>
           </CardHeader>
-          <form onSubmit={handleProfileSave}>
+          <form onSubmit={handleChangePassword}>
             <CardContent className="space-y-4">
-              <div className="space-y-1">
-                <Label htmlFor="userName">Name</Label>
-                <Input id="userName" value={userName} onChange={(e) => setUserName(e.target.value)} placeholder="Your Name" disabled={isSavingProfile} />
-              </div>
-              <div className="space-y-1">
-                <Label htmlFor="userEmail">Email</Label>
-                <Input id="userEmail" type="email" value={userEmail} disabled placeholder="your@email.com" />
-                 <p className="text-xs text-muted-foreground">Email cannot be changed here.</p>
-              </div>
-               <div className="space-y-1">
+              <div className="space-y-2">
                 <Label htmlFor="currentPassword">Current Password</Label>
-                <Input id="currentPassword" name="currentPassword" type="password" placeholder="Enter current password to change" disabled={isSavingProfile} />
+                <Input
+                  id="currentPassword"
+                  type="password"
+                  value={currentPassword}
+                  onChange={(e) => setCurrentPassword(e.target.value)}
+                  placeholder="Enter your current password"
+                  required
+                  disabled={isChangingPassword}
+                />
               </div>
-              <div className="space-y-1">
+              <div className="space-y-2">
                 <Label htmlFor="newPassword">New Password</Label>
-                <Input id="newPassword" name="newPassword" type="password" placeholder="Enter new password (min. 6 chars)" disabled={isSavingProfile} />
-                 <p className="text-xs text-muted-foreground">Leave blank to keep current password.</p>
+                <Input
+                  id="newPassword"
+                  type="password"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  placeholder="Enter new password (min. 6 characters)"
+                  required
+                  disabled={isChangingPassword}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="confirmNewPassword">Confirm New Password</Label>
+                <Input
+                  id="confirmNewPassword"
+                  type="password"
+                  value={confirmNewPassword}
+                  onChange={(e) => setConfirmNewPassword(e.target.value)}
+                  placeholder="Confirm new password"
+                  required
+                  disabled={isChangingPassword}
+                />
               </div>
             </CardContent>
-            <CardFooter className="flex justify-between items-center">
-              <Button type="submit" disabled={isSavingProfile}>
-                {isSavingProfile ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />} Save Changes
+            <CardFooter>
+              <Button type="submit" disabled={isChangingPassword}>
+                {isChangingPassword ? <Loader2 className="animate-spin" /> : <ShieldCheck />} Change Password
               </Button>
             </CardFooter>
           </form>
         </Card>
-
-        <Card className="shadow-lg">
-          <CardHeader>
-            <CardTitle className="font-headline text-xl flex items-center gap-2">
-              <Users className="h-6 w-6 text-primary" />
-              Team Management
-            </CardTitle>
-            <CardDescription>Invite and manage team members. (Admins only)</CardDescription>
-             {!isAdmin && (
-                <Alert variant="destructive" className="mt-2">
-                    <ShieldAlert className="h-5 w-5" />
-                    <AlertTitle>Admin Access Required</AlertTitle>
-                    <AlertDescription>Only administrators can manage team members.</AlertDescription>
-                </Alert>
-            )}
-          </CardHeader>
-           <form onSubmit={handleInviteUser}>
-            <CardContent className="space-y-4">
-                <div className="space-y-1">
-                    <Label htmlFor="inviteEmail">Invite User by Email</Label>
-                    <Input id="inviteEmail" name="email" type="email" placeholder="teammate@example.com" disabled={!isAdmin || isSendingInvite} required/>
-                </div>
-                <div className="space-y-1">
-                    <Label htmlFor="inviteRole">Assign Role</Label>
-                    <select 
-                        id="inviteRole" 
-                        name="role" 
-                        defaultValue="viewer"
-                        className="w-full p-2 border rounded-md bg-background text-foreground disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 h-10 text-sm" 
-                        disabled={!isAdmin || isSendingInvite}
-                    >
-                        <option value="viewer">Viewer</option>
-                        <option value="editor">Editor</option>
-                        <option value="admin">Admin</option>
-                    </select>
-                </div>
-                 <p className="text-xs text-muted-foreground">
-                    Team management features are available for 'admin' roles. This is a UI simulation.
+      )}
+      {isOAuthAccount && (
+          <Card>
+            <CardHeader>
+                <CardTitle className="font-headline flex items-center gap-2"><KeyRound className="h-5 w-5 text-primary"/>Password Management</CardTitle>
+            </CardHeader>
+            <CardContent>
+                <p className="text-sm text-muted-foreground">
+                    You signed in using a social provider (e.g., Google). Password management is handled by your social provider.
                 </p>
             </CardContent>
-            <CardFooter>
-                 <Button type="submit" variant="outline" disabled={!isAdmin || isSendingInvite}>
-                    {isSendingInvite ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Users className="mr-2 h-4 w-4" /> }
-                    Invite User
-                </Button>
-            </CardFooter>
-           </form>
-        </Card>
-      </div>
-      
-      <Separator />
-      <div className="flex justify-start">
-          <Button variant="destructive" onClick={handleLogout} disabled={isSavingProfile || isSendingInvite}>
-            <LogOut className="mr-2 h-4 w-4" /> Log Out
+          </Card>
+      )}
+
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="font-headline flex items-center gap-2"><Building className="h-5 w-5 text-primary"/> Team Management (Placeholder)</CardTitle>
+          <CardDescription>Manage your team members, roles, and permissions. (This feature is conceptual)</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <p className="text-sm text-muted-foreground">
+            Create and manage teams to collaborate on content campaigns. Invite members, assign roles (e.g., editor, viewer within a team context), and control access to specific projects.
+          </p>
+          <Button variant="outline" className="mt-4" disabled>
+            Manage Teams (Coming Soon)
           </Button>
-      </div>
+        </CardContent>
+      </Card>
+
+      <Separator />
+
+      <Card className="border-destructive">
+        <CardHeader>
+          <CardTitle className="font-headline text-destructive flex items-center gap-2"><ShieldAlert className="h-5 w-5"/> Danger Zone</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-1">
+            <h3 className="font-medium">Delete Account</h3>
+            <p className="text-sm text-muted-foreground">
+              Permanently delete your account and all associated data. This action is irreversible.
+            </p>
+          </div>
+           <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button variant="destructive" disabled={isDeletingAccount}>
+                {isDeletingAccount ? <Loader2 className="animate-spin" /> : null} Delete My Account
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  This action cannot be undone. This will permanently delete your
+                  account and remove all your data from our servers.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogAction onClick={handleDeleteAccount} className="bg-destructive hover:bg-destructive/90 text-destructive-foreground">
+                  Yes, Delete Account
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        </CardContent>
+        <CardFooter>
+             <Button variant="outline" onClick={() => signOut({ callbackUrl: '/login' })}>
+                <LogOut className="mr-2 h-4 w-4" /> Log Out
+             </Button>
+        </CardFooter>
+      </Card>
     </div>
   );
 }

@@ -1,40 +1,42 @@
 
 # ContentCraft AI 🚀
 
-ContentCraft AI is a revolutionary multi-agent content creation system designed to streamline and enhance your content strategy. Leveraging the power of AI, multiple specialized agents collaborate, debate, and generate compelling multi-format content campaigns tailored to your brand and objectives. The platform now includes comprehensive admin functionalities for user management, campaign oversight, and platform monitoring.
+ContentCraft AI is a revolutionary multi-agent content creation system designed to streamline and enhance your content strategy. Leveraging the power of AI, multiple specialized agents collaborate, debate, and generate compelling multi-format content campaigns tailored to your brand and objectives. The platform includes comprehensive user features and robust admin functionalities for user management, campaign oversight, content moderation, and platform monitoring.
 
 ## ✨ Key Features
 
 ### User-Facing Features
 *   **User Authentication & Role Management**: Secure login via Google or email/password using NextAuth.js. Supports 'viewer', 'editor', and 'admin' roles with distinct permissions.
-*   **Campaign Management**: Create, view, edit (editors/admins), and manage content campaigns. Track status from 'draft' through 'agent debate', 'content generation', and 'review'.
-*   **Creative Brief Input**: Define campaign goals, target audience, tone, and provide product/service descriptions to guide AI agents.
-*   **Brand DNA Analysis**: Upload brand content (text, PDFs) to extract core voice, style, values, and visual cues using AI (Gemini via Genkit).
-*   **Simulated Creative War Room**: Observe (simulated) AI agents with distinct roles (Creative Director, Content Writer, Brand Persona, Analytics, SEO, QA) debate strategy and refine content ideas.
-*   **Multi-Format Content Generation**: AI generates various content pieces from a single brief (e.g., blog posts, tweets, LinkedIn articles, Instagram captions, TikTok scripts, emails, ad copy) using Genkit.
-*   **Content Evolution Timeline**: Track versions of generated content, see (simulated) changes by agents, and view previous snapshots.
-*   **Performance Predictor**: Get AI-driven estimations for potential CTR, engagement, conversion, and audience match for generated content formats (uses mock API and Recharts).
-*   **User Feedback Loop**: Provide 👍/👎 ratings and comments on generated content, stored in `feedback_logs` collection.
+*   **Personalized Dashboard**: Central hub for users to view and manage *their own* content campaigns, track progress, and access key features.
+*   **Campaign Management**: Create, view, edit (editors/admins), and delete content campaigns. Track status from 'draft' through 'agent debate', 'content generation', and 'review'.
+*   **Creative Brief Input**: Define campaign goals, target audience, tone, and provide product/service descriptions to guide AI agents effectively.
+*   **Brand DNA Analysis**: Upload brand content (text files/PDFs) to have AI (Gemini via Genkit) extract core voice, style, values, and visual cues, creating a reusable brand profile.
+*   **Simulated Creative War Room**: Observe simulated AI agents with distinct roles (Creative Director, Content Writer, etc.) debate strategy and refine content ideas for your campaigns.
+*   **Multi-Format Content Generation**: AI generates diverse content pieces from a single, refined brief (e.g., blog posts, tweets, LinkedIn articles, Instagram captions, TikTok scripts, emails, ad copy) using Genkit.
+*   **Content Evolution Timeline**: Track versions of generated content, see changes, and revert to previous snapshots if needed.
+*   **Performance Predictor (Simulated)**: Get AI-driven estimations for potential CTR, engagement, conversion, and audience match for generated content formats (uses mock API and Recharts).
+*   **User Feedback Loop**: Provide 👍/👎 ratings and comments on generated content, which is stored and can (conceptually) refine future AI outputs. Awards XP for engagement.
 *   **Content Translation**: Translate generated content into multiple languages using AI, preserving tone, and save as new versions.
-*   **Private Mode**: Mark campaigns as private to (conceptually) exclude their data from future AI agent learning.
-*   **Gamification System**: Earn XP for actions like content generation and feedback, level up (tracked in user DB), and (conceptually) unlock badges. XP and level are displayed in the user profile.
-*   **Content Import (Simulated)**: Placeholder UI to import content from URLs or video to bootstrap campaign briefs.
-*   **Compliance Check (Simulated)**: Quality Assurance agent provides simulated compliance feedback during debates.
-*   **Placeholders for Future Features**:
-    *   Content Calendar & Scheduling
-    *   A/B Testing Simulation (Level-locked feature)
-    *   Content Template Library (with mock templates)
-    *   Campaign Intelligence / Memory Mode
+*   **Private Mode**: Mark campaigns as private, conceptually excluding their data from broader AI agent learning.
+*   **Gamification System**: Earn Creative XP for actions like content generation and providing feedback. Level up, track progress, and (conceptually) unlock badges and advanced features. XP and level are displayed in the user profile.
+*   **User Profile Settings**: Update account name and change password. (Team Management is a placeholder).
+*   **A/B Testing Panel (Conceptual)**: A level-locked placeholder for a future feature allowing users to test content variations.
 
 ### Admin Features
-*   **Admin Dashboard**: Centralized view for platform oversight, including user lists, all campaigns, and (mocked) platform activity statistics.
-*   **User Management**: Admins can view all users, manage their roles (viewer, editor, admin), and ban/unban users. User `isBanned` status is stored and enforced.
-*   **Campaign Oversight**: Admins can view all campaigns created by any user, filter them by status or flag status, and inspect campaign details including debates and content versions.
-*   **Content Moderation (Campaign Level)**: Admins can flag/unflag entire campaigns and add moderation notes. Flagged status is visible in admin views.
-*   **Platform Analytics (Admin View)**: The admin dashboard displays (mocked) charts for weekly platform activity, top content formats, and key metrics like total users, campaigns, and AI flow executions.
-*   **Admin Search**: Admins can search for users (by name, email, ID) and campaigns (by title, brief, user ID, campaign ID) within the admin dashboard.
-*   **Data Export (Conceptual)**: Placeholder buttons for admins to download campaign, feedback, or user data as CSV.
-*   **Secure Admin Routes**: Admin-specific routes (e.g., `/admin/dashboard`) are protected by middleware, ensuring only users with the 'admin' role can access them.
+*   **Comprehensive Admin Dashboard**: Centralized control panel for platform oversight, including summary statistics (total users, campaigns, mocked activity), charts for platform activity, and navigation to detailed management sections.
+*   **User Management**: Admins can view a sortable and searchable table of all users, manage their roles (viewer, editor, admin), and ban/unban users. User `isBanned` status is stored and enforced by middleware and login checks.
+*   **Campaign Oversight**: Admins can view, search, and filter all campaigns created by any user. They can inspect full campaign details including brief, agent debates, and all content versions.
+*   **Campaign Moderation**: Admins can flag/unflag entire campaigns and add moderation notes. Flagged status is visible in admin views. Admins can also delete any campaign.
+*   **Content Version Moderation**:
+    *   Admins can flag/unflag individual content versions within any campaign and add specific moderation notes.
+    *   A dedicated "Flagged Content" tab in the admin dashboard lists all flagged content versions across the platform for centralized review and action.
+*   **Platform Analytics (Admin View)**: The admin dashboard displays key metrics and charts:
+    *   Total users, total campaigns.
+    *   (Mocked) Weekly platform activity (users, campaigns, AI flows).
+    *   (Mocked) Top content formats generated.
+    *   XP Leaderboard showing top users.
+*   **Secure Admin Routes & APIs**: Admin-specific routes (e.g., `/admin/dashboard`) and APIs are protected by middleware and token checks, ensuring only users with the 'admin' role can access them.
+*   **Data Export (Conceptual)**: Placeholder buttons for admins to simulate downloading campaign, feedback, or user data as CSV.
 
 ## 🛠 Tech Stack
 
@@ -123,24 +125,24 @@ An initial admin user may need to be created or promoted directly in the databas
 /
 ├── src/
 │   ├── ai/                     # Genkit AI flows and configuration
-│   │   ├── flows/              # Specific AI agent flows
+│   │   ├── flows/              # Specific AI agent flows (brand-learning, agent-debate, etc.)
 │   │   ├── dev.ts              # Genkit development server entry point
 │   │   └── genkit.ts           # Genkit global instance configuration
 │   ├── app/                    # Next.js App Router
 │   │   ├── (admin)/            # Admin-only routes group (e.g., /admin/dashboard)
-│   │   │   └── dashboard/      # Admin dashboard page and sub-components
+│   │   │   └── dashboard/      # Admin dashboard page and sub-components (UserTable, AdminCampaignList, FlaggedContentTable)
 │   │   ├── (app)/              # Authenticated user routes group (e.g., /dashboard)
-│   │   │   ├── dashboard/      # Main user dashboard page and sub-components
-│   │   │   └── settings/       # User settings page
+│   │   │   ├── dashboard/      # Main user dashboard page and sub-components (CampaignGenerator, AgentDebatePanel, etc.)
+│   │   │   └── settings/       # User settings page (profile, password)
 │   │   ├── api/                # API route handlers
-│   │   │   ├── admin/          # Admin-specific API endpoints (users, campaigns)
+│   │   │   ├── admin/          # Admin-specific API endpoints (users, campaigns, content moderation)
 │   │   │   ├── agents/         # Agent-related API endpoints
 │   │   │   ├── auth/           # NextAuth.js API routes (login, register, session)
 │   │   │   ├── brand/          # Brand DNA analysis API
 │   │   │   ├── campaigns/      # User-specific campaign CRUD API
 │   │   │   ├── content/        # Content revision & translation APIs
 │   │   │   ├── feedback/       # User feedback API
-│   │   │   └── user/           # User-specific APIs (e.g., update-xp)
+│   │   │   └── user/           # User-specific APIs (update-xp, profile, change-password)
 │   │   ├── login/              # Login page
 │   │   ├── signup/             # Signup page
 │   │   ├── globals.css         # Global styles & ShadCN theme variables
@@ -149,14 +151,13 @@ An initial admin user may need to be created or promoted directly in the databas
 │   ├── components/             # Shared React components
 │   │   ├── ui/                 # ShadCN UI primitives (button, card, etc.)
 │   │   ├── AgentAvatar.tsx
-│   │   ├── ContentCard.tsx
 │   │   ├── Logo.tsx
 │   │   ├── SessionProviderWrapper.tsx
 │   │   ├── SiteHeader.tsx
 │   │   └── UserXPDisplay.tsx
 │   ├── hooks/                  # Custom React hooks (useMobile, useToast)
 │   ├── lib/                    # Utility functions and libraries (mongodb, utils)
-│   └── types/                  # TypeScript type definitions
+│   └── types/                  # TypeScript type definitions (agent, brand, content)
 ├── public/                     # Static assets
 ├── .env.local.example          # Example environment variables
 ├── components.json             # ShadCN UI configuration
@@ -164,7 +165,7 @@ An initial admin user may need to be created or promoted directly in the databas
 ├── package.json
 ├── tailwind.config.ts
 ├── tsconfig.json
-├── middleware.ts               # Next.js middleware (for route protection)
+├── middleware.ts               # Next.js middleware (for route protection and banned user handling)
 └── README.md
 ```
 
@@ -186,6 +187,3 @@ Contributions are welcome! Please follow standard fork/PR process. (Further cont
 
 (Specify license, e.g., MIT, Apache 2.0, or proprietary). This project is currently under (default/unspecified license).
 ```
-# ContentCraft-AI
-# ContentCraft-AI
-

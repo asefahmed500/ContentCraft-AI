@@ -1,6 +1,6 @@
 
 ContentCraft AI - Project Documentation
-Version: 1.2 (Reflecting Admin Features and Enhancements)
+Version: 1.3 (Reflecting Enhanced Admin and User Profile Features)
 
 Table of Contents
 -----------------
@@ -18,7 +18,7 @@ Table of Contents
 -----------------
 1. Project Overview
 -----------------
-ContentCraft AI is a Next.js web application designed as a multi-agent AI content creation system. It aims to assist users in generating comprehensive content campaigns by leveraging specialized AI agents that collaborate, analyze brand identity, debate strategies, and produce content in multiple formats. The platform includes features for user authentication (with roles: viewer, editor, admin), campaign management, brand analysis, simulated agent interactions, content generation, performance prediction, user feedback mechanisms, content translation, and a gamification system. It also incorporates a dedicated admin dashboard for platform oversight, user management, campaign moderation, and basic analytics.
+ContentCraft AI is a Next.js web application designed as a multi-agent AI content creation system. It aims to assist users in generating comprehensive content campaigns by leveraging specialized AI agents that collaborate, analyze brand identity, debate strategies, and produce content in multiple formats. The platform includes features for user authentication (with roles: viewer, editor, admin), campaign management, brand analysis, simulated agent interactions, content generation, performance prediction, user feedback mechanisms, content translation, and a gamification system. It also incorporates a dedicated admin dashboard for platform oversight, user management, campaign and content version moderation, and platform analytics. Users can manage their profile settings, including name and password changes.
 
 -----------------
 2. Core Architecture
@@ -35,7 +35,7 @@ The application is built using a modern JavaScript stack:
     *   Recharts (for data visualization in admin dashboard and performance predictor)
 
 *   **Backend**:
-    *   Next.js API Routes (for RESTful services, including admin-specific endpoints)
+    *   Next.js API Routes (for RESTful services, including admin-specific and user profile endpoints)
     *   Genkit (for orchestrating AI model interactions, specifically Google Gemini)
     *   Node.js runtime environment
 
@@ -49,7 +49,7 @@ The application is built using a modern JavaScript stack:
     *   User roles ('viewer', 'editor', 'admin') stored in DB and included in session token.
 
 *   **Middleware**:
-    *   Next.js middleware (`src/middleware.ts`) protects authenticated routes (e.g., `/dashboard/*`) and admin routes (`/admin/*`), redirecting unauthorized users. It also handles banned user access.
+    *   Next.js middleware (`src/middleware.ts`) protects authenticated routes (e.g., `/dashboard/*`) and admin routes (`/admin/*`), redirecting unauthorized users. It also handles banned user access by redirecting them from protected routes.
 
 *   **AI Models**:
     *   Google Gemini (via Genkit and `@genkit-ai/googleai` plugin) for text generation, analysis, translation, and (conceptually) vision/audio tasks.
@@ -62,7 +62,7 @@ The application is built using a modern JavaScript stack:
     ------------------------
     *   **User Authentication & Role Awareness**:
         *   Purpose: Secure user access and tailor experience based on roles.
-        *   How: NextAuth.js with MongoDB adapter. Users can register/login via email/password or Google. Session JWTs manage authentication and include user roles. UI elements and API access are restricted based on role (e.g., viewers cannot edit/create campaigns).
+        *   How: NextAuth.js with MongoDB adapter. Users can register/login via email/password or Google. Session JWTs manage authentication and include user roles. UI elements and API access are restricted based on role.
         *   Key Files: `src/app/api/auth/`, `src/app/(app)/dashboard/layout.tsx`, `src/middleware.ts`.
 
     *   **Dashboard & Campaign Overview (User View)**:
@@ -72,84 +72,84 @@ The application is built using a modern JavaScript stack:
 
     *   **Creative Brief Input & Campaign Generation**:
         *   Purpose: Allow users (editors/admins) to define parameters for a new content campaign or update existing ones.
-        *   How: A form captures campaign title, product/service description (brief), target audience, desired tone, and content goals. This data is POSTed/PUT to `/api/campaigns`. Triggers a multi-step AI process: agent debate, then multi-format content generation.
+        *   How: A form captures campaign title, product/service description (brief), target audience, desired tone, and content goals. This data is POSTed/PUT to `/api/campaigns`. Triggers a multi-step AI process.
         *   Key Files: `src/app/(app)/dashboard/components/CampaignGenerator.tsx`.
 
     *   **Brand DNA Upload & Analysis**:
         *   Purpose: Extract brand identity (voice, style, values) from sample content.
-        *   How: Users upload text files/PDFs. The content (as a data URI) is sent to `/api/brand/analyze`, which uses the `brand-learning` Genkit flow with Gemini to analyze and return a structured Brand DNA profile.
+        *   How: Users upload text files/PDFs. The content (as a data URI) is sent to `/api/brand/analyze`, which uses the `brand-learning` Genkit flow.
         *   Key Files: `src/app/(app)/dashboard/components/BrandDNAAnalyzer.tsx`, `src/ai/flows/brand-learning.ts`, `src/app/api/brand/analyze/route.ts`.
 
     *   **Creative War Room (Simulated Agent Debate)**:
         *   Purpose: Simulate collaboration between different AI agent personas to refine content strategy.
-        *   How: When a campaign brief is submitted for generation, the `agent-debate` Genkit flow generates a summary and suggestions. The dashboard page orchestrates simulated `AgentInteraction` messages (stored in campaign). Displayed in a chat-like UI.
-        *   Key Files: `src/app/(app)/dashboard/components/AgentDebatePanel.tsx`, `src/ai/flows/agent-debate.ts`, `src/app/(app)/dashboard/page.tsx`.
+        *   How: The `agent-debate` Genkit flow generates a summary and suggestions. Displayed in a chat-like UI.
+        *   Key Files: `src/app/(app)/dashboard/components/AgentDebatePanel.tsx`, `src/ai/flows/agent-debate.ts`.
 
     *   **Multi-Format Content Generation & Preview**:
         *   Purpose: Generate diverse content pieces from a single, refined brief.
-        *   How: The `content-generation` Genkit flow takes the campaign brief (augmented by debate insights) and uses Gemini to produce text for formats like blog posts, tweets, etc. Output stored as a `ContentVersion`. Previewed in a tabbed interface.
+        *   How: The `content-generation` Genkit flow produces text for various formats. Previewed in a tabbed interface.
         *   Key Files: `src/app/(app)/dashboard/components/MultiFormatPreview.tsx`, `src/ai/flows/content-generation.ts`.
 
     *   **Content Translation**:
         *   Purpose: Translate generated content into various languages.
-        *   How: Users can select a content format and target language. The `translate-content-flow` Genkit flow (via `/api/content/translate`) performs the translation. The translated content can be saved as a new `ContentVersion`.
+        *   How: Users select content and target language. The `translate-content-flow` Genkit flow performs the translation.
         *   Key Files: `src/app/(app)/dashboard/components/MultiFormatPreview.tsx` (UI), `src/ai/flows/translate-content-flow.ts`, `src/app/api/content/translate/route.ts`.
 
     *   **Content Evolution Timeline**:
         *   Purpose: Allow users to track the history of generated content for a campaign.
-        *   How: Each significant generation or revision (including translations) creates a `ContentVersion` object. These are displayed chronologically.
+        *   How: Displays `ContentVersion` objects chronologically.
         *   Key Files: `src/app/(app)/dashboard/components/ContentEvolutionTimeline.tsx`.
 
     *   **Performance Predictor (Simulated)**:
-        *   Purpose: Provide users with AI-driven estimates of how their content might perform.
-        *   How: A UI component allows users to trigger a (mocked) API call. The component then displays example performance metrics (CTR, engagement, etc.) using Recharts.
+        *   Purpose: Provide users with AI-driven estimates of content performance.
+        *   How: UI component displays example performance metrics using Recharts via a mock API.
         *   Key Files: `src/app/(app)/dashboard/components/PerformancePredictor.tsx`.
 
     *   **User Feedback Loop**:
         *   Purpose: Collect user opinions on generated content.
-        *   How: Users can rate content (thumbs up/down) and add comments in `MultiFormatPreview`. This feedback is sent to `/api/feedback` and stored in the `feedback_logs` MongoDB collection. Awards XP.
+        *   How: Users rate content (thumbs up/down) and add comments. Feedback is sent to `/api/feedback` and stored. Awards XP.
         *   Key Files: `src/app/(app)/dashboard/components/MultiFormatPreview.tsx`, `src/app/api/feedback/route.ts`.
 
     *   **Private Mode / Confidentiality Setting**:
         *   Purpose: Allow users to mark campaigns as private.
-        *   How: A boolean `isPrivate` flag is added to the `Campaign` schema and UI.
+        *   How: A boolean `isPrivate` flag on the `Campaign` schema and UI.
         *   Key Files: `src/app/(app)/dashboard/components/CampaignGenerator.tsx`, `src/app/api/campaigns/route.ts`.
 
     *   **Gamification / Creative XP System**:
-        *   Purpose: Engage users by awarding points for activities and allowing them to level up.
-        *   How: User profiles store `totalXP`, `level`, and `badges`. XP is awarded for generating content and giving feedback via `/api/user/update-xp`. Level and XP progress displayed in site header. Feature unlocks (e.g., A/B Testing panel) are level-gated.
-        *   Key Files: `src/components/UserXPDisplay.tsx`, `src/components/SiteHeader.tsx`, `src/app/api/user/update-xp/route.ts`, `src/app/(app)/dashboard/components/ABTestingPanel.tsx`.
+        *   Purpose: Engage users by awarding points and levels.
+        *   How: User profiles store `totalXP`, `level`, `badges`. XP awarded for activities via `/api/user/update-xp`. Progress displayed in site header. Feature unlocks are level-gated (e.g., A/B Testing placeholder).
+        *   Key Files: `src/components/UserXPDisplay.tsx`, `src/components/SiteHeader.tsx`, `src/app/api/user/update-xp/route.ts`.
 
-    *   **User Settings**:
-        *   Purpose: Allow users to manage their profile (name, simulated password change).
-        *   How: A dedicated settings page.
-        *   Key Files: `src/app/(app)/dashboard/settings/page.tsx`.
+    *   **User Settings & Profile Management**:
+        *   Purpose: Allow users to manage their profile (name, password).
+        *   How: Dedicated settings page with forms to update name (via `PUT /api/user/profile`) and change password (via `POST /api/user/change-password`). Session is updated upon name change.
+        *   Key Files: `src/app/(app)/dashboard/settings/page.tsx`, `src/app/api/user/profile/route.ts`, `src/app/api/user/change-password/route.ts`.
 
     3.2 Admin Features
     ------------------
     *   **Admin Dashboard & Platform Overview**:
         *   Purpose: Centralized control panel for administrators.
-        *   How: Accessible via `/admin/dashboard`. Displays summary statistics (total users, campaigns - partly mocked), charts for platform activity (mocked), and provides navigation to user and campaign management sections.
+        *   How: Accessible via `/admin/dashboard`. Displays summary statistics, charts for platform activity (some mocked), XP leaderboard, and provides navigation to user, campaign, and flagged content management sections.
         *   Key Files: `src/app/(admin)/dashboard/page.tsx`, `src/app/(admin)/layout.tsx`.
 
     *   **User Management (Roles & Banning)**:
         *   Purpose: Admins can manage user accounts, roles, and access.
-        *   How: Admins can view a table of all users, change their roles (viewer, editor, admin), and ban/unban users. Banned users are prevented from logging in or accessing protected routes. Changes are persisted to the `users` collection via `/api/admin/users/[userId]`.
+        *   How: Admins can view a table of all users, change their roles (viewer, editor, admin), and ban/unban users. Changes are persisted to the `users` collection via `PUT /api/admin/users/[userId]`.
         *   Key Files: `src/app/(admin)/dashboard/components/UserTable.tsx`, `src/app/api/admin/users/route.ts`, `src/app/api/admin/users/[userId]/route.ts`.
 
     *   **Campaign Oversight & Moderation**:
-        *   Purpose: Admins can view and moderate all campaigns on the platform.
-        *   How: Admins can list all campaigns (from all users) via `/api/admin/campaigns`. They can filter campaigns by status or flag status. They can view full details of any campaign (brief, debates, content versions). Admins can flag/unflag campaigns and add moderation notes via `/api/admin/campaigns/[campaignId]/flag`.
-        *   Key Files: `src/app/(admin)/dashboard/components/AdminCampaignList.tsx`, `src/app/api/admin/campaigns/route.ts`, `src/app/api/admin/campaigns/[campaignId]/flag/route.ts`.
+        *   Purpose: Admins can view, manage, and moderate all campaigns.
+        *   How: Admins list all campaigns (from `/api/admin/campaigns`). They can filter, view full details (brief, debates, content versions in a dedicated campaign detail tab), flag/unflag campaigns, add moderation notes (via `PUT /api/admin/campaigns/[campaignId]/flag`), and delete any campaign (via `DELETE /api/admin/campaigns/[campaignId]`).
+        *   Key Files: `src/app/(admin)/dashboard/components/AdminCampaignList.tsx`, `src/app/(admin)/dashboard/page.tsx` (for detail view), `src/app/api/admin/campaigns/route.ts`, `src/app/api/admin/campaigns/[campaignId]/route.ts`, `src/app/api/admin/campaigns/[campaignId]/flag/route.ts`.
 
-    *   **Content Version Moderation (Viewing)**:
-        *   Purpose: Admins can see if specific content versions within a campaign have been flagged.
-        *   How: The `ContentVersion` type includes `isFlagged` and `adminModerationNotes`. In admin views like `ContentEvolutionTimeline` and `MultiFormatPreview` (when accessed by an admin), these flags and notes are displayed. (Direct admin flagging of individual versions is a future step).
-        *   Key Files: `src/app/(app)/dashboard/components/ContentEvolutionTimeline.tsx`, `src/app/(app)/dashboard/components/MultiFormatPreview.tsx` (when used in admin context).
+    *   **Content Version Moderation**:
+        *   Purpose: Admins can review and moderate individual flagged content versions.
+        *   How: A dedicated "Flagged Content" tab shows a table of all `ContentVersion`s where `isFlagged` is true, fetched from `GET /api/admin/content/flagged`. Admins can preview content, see moderation notes, and unflag versions (which calls `PUT /api/admin/campaigns/[campaignId]/versions/[versionId]/flag`). Individual versions can also be flagged/unflagged from the campaign detail view's `ContentEvolutionTimeline`.
+        *   Key Files: `src/app/(admin)/dashboard/components/FlaggedContentTable.tsx`, `src/app/api/admin/content/flagged/route.ts`, `src/app/api/admin/campaigns/[campaignId]/versions/[versionId]/flag/route.ts`, `src/app/(app)/dashboard/components/ContentEvolutionTimeline.tsx` (admin context).
 
     *   **Admin Search**:
         *   Purpose: Allow admins to quickly find specific users or campaigns.
-        *   How: Search input fields are provided in the `UserTable` (searches name, email, ID) and `AdminCampaignList` (searches title, brief, user ID, campaign ID).
+        *   How: Search input fields in `UserTable` (name, email, ID) and `AdminCampaignList` (title, brief, user ID, campaign ID).
         *   Key Files: `src/app/(admin)/dashboard/components/UserTable.tsx`, `src/app/(admin)/dashboard/components/AdminCampaignList.tsx`.
 
     *   **Data Export (Conceptual)**:
@@ -168,7 +168,7 @@ The application is built using a modern JavaScript stack:
         *   `password`: String (hashed, if using credentials, nullable)
         *   `image`: String (URL to avatar, nullable)
         *   `role`: String ('viewer', 'editor', 'admin', default 'viewer')
-        *   `emailVerified`: Date (nullable, for OAuth or email verification)
+        *   `emailVerified`: Date (nullable)
         *   `createdAt`: Date
         *   `updatedAt`: Date
         *   `totalXP`: Number (default 0)
@@ -179,121 +179,66 @@ The application is built using a modern JavaScript stack:
     *   **Campaign** (`campaigns` collection):
         *   `_id`: ObjectId
         *   `id`: String (string version of _id)
-        *   `userId`: String (ObjectId string, links to User who created it)
+        *   `userId`: String (ObjectId string, links to User)
         *   `title`: String
-        *   `brief`: String (product/service description)
-        *   `targetAudience`: String (optional)
-        *   `tone`: String (optional)
-        *   `contentGoals`: Array of Strings (optional)
-        *   `brandId`: String (optional, links to a BrandDNA document)
-        *   `referenceMaterials`: Array of Objects (optional, for URLs/file IDs)
+        *   `brief`: String
+        *   ... (other fields like targetAudience, tone, contentGoals)
         *   `agentDebates`: Array of `AgentInteraction` objects
         *   `contentVersions`: Array of `ContentVersion` objects
-        *   `scheduledPosts`: Array of `ScheduledPost` objects (optional, conceptual)
-        *   `abTests`: Array of `ABTestInstance` objects (optional, conceptual)
-        *   `status`: String (e.g., 'draft', 'debating', 'generating', 'review', 'published', 'archived')
+        *   `status`: String (e.g., 'draft', 'generating', 'published')
         *   `isPrivate`: Boolean (default false)
-        *   `isFlagged`: Boolean (default false, for admin moderation)
-        *   `adminModerationNotes`: String (optional, for admin moderation)
+        *   `isFlagged`: Boolean (default false, for admin campaign moderation)
+        *   `adminModerationNotes`: String (optional, for admin campaign moderation)
         *   `createdAt`: Date
         *   `updatedAt`: Date
 
     *   **AgentInteraction** (embedded in Campaign):
-        *   `agentId`: String (e.g., "creative-director-01")
-        *   `agentName`: String (e.g., "Creative Director")
-        *   `agent`: String (legacy/fallback field for agent name/role)
-        *   `role`: `AgentRole` (e.g., "Creative Director")
-        *   `message`: String
-        *   `timestamp`: Date
-        *   `type`: String (e.g., 'statement', 'suggestion')
+        *   ... (fields like agentName, message, timestamp)
 
     *   **ContentVersion** (embedded in Campaign):
-        *   `id`: String (unique version identifier, e.g., "v1-timestamp")
+        *   `id`: String (unique version identifier)
         *   `versionNumber`: Number
         *   `timestamp`: Date
-        *   `actorName`: String (who/what created this version, e.g., "AI Team", "User Edit")
+        *   `actorName`: String
         *   `changeSummary`: String
-        *   `multiFormatContentSnapshot`: Object (keys are formats like 'blogPost', values are content strings)
-        *   `isFlagged`: Boolean (default false, for admin moderation of this specific version)
+        *   `multiFormatContentSnapshot`: Object
+        *   `isFlagged`: Boolean (default false, for admin moderation of this version)
         *   `adminModerationNotes`: String (optional, admin notes for this version)
 
     *   **UserFeedback** (`feedback_logs` collection):
-        *   `_id`: ObjectId
-        *   `userId`: ObjectId (links to User)
-        *   `campaignId`: ObjectId (links to Campaign)
-        *   `contentVersionId`: ObjectId (optional, links to ContentVersion)
-        *   `contentFormat`: String (e.g., 'blogPost')
-        *   `rating`: Number (1 or -1)
-        *   `comment`: String (optional)
-        *   `timestamp`: Date
+        *   ... (fields like userId, campaignId, rating, comment, timestamp)
 
-    *   **BrandDNA** (`brand_dna` collection - conceptual for future full persistence):
-        *   `_id`: ObjectId
-        *   `brandId`: String
-        *   `userId`: String
-        *   `voiceProfile`: Object { tone, values, languageStyle, keywords }
-        *   `visualStyle`: Object { colorPalette, fontPreferences, imageryStyle }
-        *   `contentPatterns`: Object { commonThemes, preferredFormats, negativeKeywords }
-        *   `consistencyScore`: Number
-        *   `warnings`: Array of Strings
-        *   `evolutionHistory`: Array of Objects
-        *   `createdAt`: Date
-        *   `updatedAt`: Date
+    *   **BrandDNA** (`brand_dna` collection - conceptual for full persistence):
+        *   ... (fields as previously defined)
 
 -----------------
 5. AI Integration
 -----------------
-*   **Genkit**: Used as the primary framework for defining and running AI flows. It simplifies interactions with AI models, manages prompts, and structures input/output schemas (using Zod).
-    *   Location: `src/ai/`
-    *   Key Files: `genkit.ts` (global setup), `dev.ts` (dev server), flow files in `src/ai/flows/`.
-*   **Google Gemini**: The primary Large Language Model (LLM) accessed via Genkit's `googleAI` plugin. Used for:
-    *   Brand DNA analysis
-    *   Simulating agent debates (generating strategic suggestions)
-    *   Generating multi-format content
-    *   Revising content
-    *   Translating content
-*   **Prompts**: Defined within each Genkit flow using Handlebars templating for dynamic input. Zod schemas for input and output are used by Genkit to structure prompts and parse model responses.
+*   **Genkit**: Primary framework for AI flows (`src/ai/`).
+*   **Google Gemini**: Main LLM via Genkit for analysis, debate simulation, content generation, translation.
+*   **Prompts**: Defined in Genkit flows using Handlebars and Zod schemas.
 
 -----------------
 6. Setup & Configuration
 -----------------
-Refer to the `README.md` for detailed setup instructions. Key environment variables to configure in `.env.local`:
-
-*   `MONGODB_URI`: Connection string for your MongoDB database.
-*   `MONGODB_DB_NAME`: (Optional) Name of the database to use.
-*   `NEXTAUTH_SECRET`: A strong secret for NextAuth.js session encryption.
-*   `NEXTAUTH_URL`: The canonical URL of your application (e.g., `http://localhost:9002` for local dev).
-*   `GOOGLE_CLIENT_ID` & `GOOGLE_CLIENT_SECRET`: For Google OAuth via NextAuth.js.
-*   `GOOGLE_API_KEY` (or other Google Cloud auth methods): For Genkit to access Gemini models.
-
-**Running the Application**:
-1.  Start the Genkit server: `npm run genkit:dev` (or `genkit:watch`)
-2.  Start the Next.js server: `npm run dev`
+Refer to `README.md`. Key `.env.local` variables: `MONGODB_URI`, `NEXTAUTH_SECRET`, `NEXTAUTH_URL`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_API_KEY`.
 
 -----------------
 7. Middleware & Security
 -----------------
-*   **Route Protection**: `src/middleware.ts` is used to protect routes.
-    *   `/dashboard/*` routes require authentication. Unauthenticated users are redirected to `/login`.
-    *   `/admin/*` routes require authentication AND the user to have an 'admin' role. Users not meeting these criteria are redirected appropriately.
-    *   Authenticated users trying to access `/login` or `/signup` are redirected to their respective dashboards.
-*   **API Security**:
-    *   API routes under `/api/admin/*` verify the JWT token for an 'admin' role.
-    *   Other sensitive API routes (e.g., `/api/campaigns`, `/api/feedback`) verify user authentication via JWT.
-*   **Banned Users**: The `signIn` callback in NextAuth.js checks the `isBanned` flag. If true, login is prevented. Middleware can provide an additional layer if a banned user's session somehow persists.
+*   **Route Protection**: `src/middleware.ts` protects `/dashboard/*` (authentication) and `/admin/*` (authentication + 'admin' role). Redirects unauthorized users.
+*   **Banned Users**: NextAuth `signIn` callback prevents login if `isBanned` is true. Middleware redirects already authenticated but subsequently banned users from protected routes.
+*   **API Security**: Admin APIs (`/api/admin/*`) check for 'admin' role in JWT. Other sensitive APIs check for general authentication.
 
 -----------------
 8. Future Enhancements
 -----------------
-Many features are currently placeholders or simulations and can be expanded:
-*   **Real-time Agent Debates**: Implement WebSockets for live updates.
-*   **Full File Uploads & Processing**: Integrate cloud storage (GCS/S3) and parsing for PDFs/Docs.
-*   **Advanced Brand DNA**: Store BrandDNA in DB, use it to actively guide content generation.
-*   **Functional Content Calendar**: Build a drag-and-drop calendar with scheduling.
-*   **Full A/B Testing Module**: Develop UI for variations, AI predictions, and comparisons.
-*   **Deeper Content Moderation**: Admin panel for reviewing and actioning flagged *content versions*.
-*   **Real Analytics**: Integrate with an analytics backend or perform real DB aggregations for admin dashboard.
-*   **Team Collaboration Features**: Implement `teams` collection and finer-grained permissions.
-*   **Advanced Content Export**: More formats and direct CMS integrations.
-*   **Feature Flags**: Admin control to toggle beta features.
-*   **AI Usage Monitoring**: Track Genkit flow executions and costs.
+*   Real-time Agent Debates (WebSockets).
+*   Full File Uploads & Processing (Cloud Storage).
+*   Advanced Brand DNA persistence and usage.
+*   Functional Content Calendar & A/B Testing.
+*   Real Analytics & Data Export.
+*   Team Collaboration features.
+*   AI Usage Monitoring & Cost Tracking.
+*   Feature Flags for beta features.
+```
