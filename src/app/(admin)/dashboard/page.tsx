@@ -8,13 +8,14 @@ import { Separator } from '@/components/ui/separator';
 import { Button } from '@/components/ui/button';
 import { UserTable } from './components/UserTable';
 import { AdminCampaignList } from './components/AdminCampaignList';
+import { FlaggedContentTable } from './components/FlaggedContentTable'; // New Import
 import { MultiFormatPreview } from '@/app/(app)/dashboard/components/MultiFormatPreview';
 import { AgentDebatePanel } from '@/app/(app)/dashboard/components/AgentDebatePanel';
 import { ContentEvolutionTimeline } from '@/app/(app)/dashboard/components/ContentEvolutionTimeline';
 import type { Campaign, CampaignStatus, ContentVersion, AgentInteraction, MultiFormatContent } from '@/types/content';
 import type { User as NextAuthUser } from 'next-auth';
 import type { AgentRole } from '@/types/agent';
-import { BarChart, LineChart as LucideLineChart, Users, FileText, Activity, Zap, Brain, Download, Info, PieChart, ListTree, Eye, Edit, XCircle, MessageSquare, Trophy, Star } from 'lucide-react';
+import { BarChart, LineChart as LucideLineChart, Users, FileText, Activity, Zap, Brain, Download, Info, PieChart, ListTree, Eye, Edit, XCircle, MessageSquare, Trophy, Star, ShieldAlert as ShieldAlertIcon } from 'lucide-react'; // Added ShieldAlertIcon
 import { ResponsiveContainer, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, BarChart as RechartsBarChart, Line, LineChart as RechartsLineChart, Pie, Cell, PieChart as RechartsPieChart } from 'recharts';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2 } from 'lucide-react';
@@ -77,6 +78,8 @@ export default function AdminDashboardPage() {
   const [leaderboardUsers, setLeaderboardUsers] = useState<AdminUser[]>([]);
   const [isLoadingLeaderboard, setIsLoadingLeaderboard] = useState(true);
 
+  const [flaggedContentRefreshTrigger, setFlaggedContentRefreshTrigger] = useState(0);
+
 
   const fetchAllCampaigns = useCallback(async (showToast = false) => {
     setIsLoadingCampaigns(true);
@@ -95,7 +98,7 @@ export default function AdminDashboardPage() {
         agentDebates: (c.agentDebates || []).map(ad => ({...ad, timestamp: new Date(ad.timestamp)})),
         contentVersions: (c.contentVersions || []).map(cv => ({
             ...cv, 
-            timestamp: new Date(cv.timestamp),
+            timestamp: new Date(cv.timestamp), 
             isFlagged: cv.isFlagged ?? false,
             adminModerationNotes: cv.adminModerationNotes ?? ''
         })),
@@ -177,14 +180,24 @@ export default function AdminDashboardPage() {
     }
   }, [allCampaigns, isLoadingCampaigns, fetchStats]);
 
+  const handleRefreshFlaggedContent = useCallback(() => {
+    setFlaggedContentRefreshTrigger(prev => prev + 1);
+    // Also refresh the main campaign list if a version flag impacts campaign-level display
+    fetchAllCampaigns(false); 
+     if (selectedCampaignForAdminView) {
+      fetchSingleCampaign(selectedCampaignForAdminView.id).then(updatedCampaign => {
+        if (updatedCampaign) setSelectedCampaignForAdminView(updatedCampaign);
+      });
+    }
+  }, [fetchAllCampaigns, selectedCampaignForAdminView]);
+
 
   const handleAdminCampaignAction = useCallback(async (campaignId: string, action: 'view' | 'edit' | 'delete' | 'flag') => {
     if (action === 'view') {
         setIsFetchingCampaignDetail(true);
-        // Find from allCampaigns first, as it contains more hydrated data
         let campaignDetail = allCampaigns.find(c => c.id === campaignId);
         
-        if (!campaignDetail) { // Fallback if not found (e.g., list was stale)
+        if (!campaignDetail) { 
             campaignDetail = await fetchSingleCampaign(campaignId);
         }
 
@@ -201,13 +214,13 @@ export default function AdminDashboardPage() {
     } else if (action === 'delete') {
         // This case is handled by onCampaignDeleted callback.
     } else if (action === 'flag') {
-        await fetchAllCampaigns(true); // Refresh the main list
+        await fetchAllCampaigns(true); 
         if (selectedCampaignForAdminView && selectedCampaignForAdminView.id === campaignId) {
-            const updatedCampaign = await fetchSingleCampaign(campaignId); // Re-fetch the specific campaign for detail view
+            const updatedCampaign = await fetchSingleCampaign(campaignId); 
             if (updatedCampaign) setSelectedCampaignForAdminView(updatedCampaign);
         }
     }
-  }, [allCampaigns, toast, fetchAllCampaigns, selectedCampaignForAdminView]); // Added fetchAllCampaigns
+  }, [allCampaigns, toast, fetchAllCampaigns, selectedCampaignForAdminView]); 
   
   const handleAdminCampaignDeleted = (deletedCampaignId: string) => {
     setAllCampaigns(prev => prev.filter(c => c.id !== deletedCampaignId));
@@ -218,14 +231,11 @@ export default function AdminDashboardPage() {
   };
   
   const fetchSingleCampaign = async (campaignId: string): Promise<Campaign | null> => {
+    setIsFetchingCampaignDetail(true);
     try {
-        // This function can be simplified if allCampaigns is always up-to-date.
-        // For safety, it could fetch from API or find in the list.
-        const campaignFromList = allCampaigns.find(c => c.id === campaignId);
-        if (campaignFromList) return campaignFromList;
-
-        // If not in list, fetch directly (less likely path if list is kept fresh)
-        const response = await fetch(`/api/campaigns?id=${campaignId}&single=true`); // Assuming user campaigns can be fetched if admin needs one that's not in general list
+        const response = await fetch(`/api/admin/campaigns?id=${campaignId}&single=true`); 
+        // Using admin endpoint for consistency if specific permissions were different
+        // Or use /api/campaigns if it has a way to fetch any campaign by ID for admin
         if (!response.ok) throw new Error("Failed to fetch updated campaign details");
         const campaign: Campaign = await response.json();
         return campaign 
@@ -247,10 +257,12 @@ export default function AdminDashboardPage() {
     } catch (err) {
         toast({title: "Error fetching campaign", description: (err as Error).message, variant: "destructive"});
         return null;
+    } finally {
+        setIsFetchingCampaignDetail(false);
     }
   };
   
-  const handleContentVersionFlagged = (updatedCampaignFull: Campaign) => {
+  const handleContentVersionFlaggedInDetailView = useCallback(async (updatedCampaignFull: Campaign) => {
     const processedCampaign: Campaign = {
         ...updatedCampaignFull,
         createdAt: new Date(updatedCampaignFull.createdAt),
@@ -272,8 +284,9 @@ export default function AdminDashboardPage() {
     if (selectedCampaignForAdminView && selectedCampaignForAdminView.id === processedCampaign.id) {
         setSelectedCampaignForAdminView(processedCampaign);
     }
+    setFlaggedContentRefreshTrigger(prev => prev +1); // Refresh flagged content list
     toast({title: "Version Moderation Updated", description: "Content version status has been reflected."});
-  };
+  }, [selectedCampaignForAdminView]);
 
 
   const handleDownloadPlaceholder = (dataType: string) => {
@@ -301,10 +314,11 @@ export default function AdminDashboardPage() {
       <Separator />
 
       <Tabs value={activeMainTab} onValueChange={setActiveMainTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-2 md:grid-cols-4">
+        <TabsList className="grid w-full grid-cols-2 sm:grid-cols-3 md:grid-cols-5">
           <TabsTrigger value="overview">Overview & Stats</TabsTrigger>
           <TabsTrigger value="users">User Management</TabsTrigger>
           <TabsTrigger value="campaigns">Campaign Oversight</TabsTrigger>
+          <TabsTrigger value="flagged_content"><ShieldAlertIcon className="mr-1 h-4 w-4" />Flagged Content</TabsTrigger>
           <TabsTrigger value="data_export">Data Export</TabsTrigger>
         </TabsList>
 
@@ -497,6 +511,22 @@ export default function AdminDashboardPage() {
           </Card>
         </TabsContent>
 
+         <TabsContent value="flagged_content" className="mt-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="font-headline text-xl flex items-center gap-2"><MessageSquareWarning className="h-5 w-5 text-destructive"/>Flagged Content Versions</CardTitle>
+              <CardDescription>Review and manage all content versions that have been flagged for moderation.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <FlaggedContentTable 
+                key={flaggedContentRefreshTrigger} // Force re-render on refresh
+                onViewCampaign={(campaignId) => handleAdminCampaignAction(campaignId, 'view')}
+                onRefreshNeeded={handleRefreshFlaggedContent}
+              />
+            </CardContent>
+          </Card>
+        </TabsContent>
+
         <TabsContent value="campaign_detail_view" className="mt-6 space-y-6">
              {isFetchingCampaignDetail && (
                 <div className="flex justify-center items-center min-h-[300px]">
@@ -561,7 +591,7 @@ export default function AdminDashboardPage() {
                                 toast({title: `Admin viewing version ${version.versionNumber}`});
                             }}
                             campaignId={selectedCampaignForAdminView.id}
-                            onVersionFlagged={handleContentVersionFlagged}
+                            onVersionFlagged={handleContentVersionFlaggedInDetailView}
                         />
                     </div>
                     <MultiFormatPreview
@@ -608,4 +638,3 @@ export default function AdminDashboardPage() {
     </div>
   );
 }
-
