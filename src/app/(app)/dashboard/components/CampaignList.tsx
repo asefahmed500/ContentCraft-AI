@@ -1,3 +1,4 @@
+
 "use client";
 
 import type { Campaign } from '@/types/content';
@@ -5,7 +6,7 @@ import { useEffect, useState } from 'react';
 import { CampaignCard } from './CampaignCard';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { Info, ServerCrash } from 'lucide-react';
+import { Info, ServerCrash, Trash2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import {
   AlertDialog,
@@ -16,8 +17,7 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  AlertDialogTrigger,
-} from "@/components/ui/alert-dialog"
+} from "@/components/ui/alert-dialog";
 import { Button } from '@/components/ui/button';
 
 
@@ -33,7 +33,7 @@ export function CampaignList({ refreshTrigger, onCampaignSelect }: CampaignListP
   const { toast } = useToast();
   
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
-  const [campaignToDelete, setCampaignToDelete] = useState<string | null>(null);
+  const [campaignToDelete, setCampaignToDelete] = useState<Campaign | null>(null);
 
 
   useEffect(() => {
@@ -61,31 +61,44 @@ export function CampaignList({ refreshTrigger, onCampaignSelect }: CampaignListP
     fetchCampaigns();
   }, [refreshTrigger, toast]);
 
-  const handleDeletePrompt = (campaignId: string) => {
-    setCampaignToDelete(campaignId);
+  const handleDeletePrompt = (campaign: Campaign) => {
+    setCampaignToDelete(campaign);
     setIsDeleteDialogOpen(true);
   };
 
   const handleDeleteCampaign = async () => {
     if (!campaignToDelete) return;
-    setIsLoading(true); // Visually indicate loading state during delete
+    
+    // Use a temporary variable for the toast message before setting campaignToDelete to null
+    const campaignTitleForToast = campaignToDelete.title;
+
+    // Optimistically update UI or show loading state
+    const originalCampaigns = [...campaigns];
+    setCampaigns(campaigns.filter(c => c.id !== campaignToDelete.id));
+    setIsDeleteDialogOpen(false); // Close dialog immediately
+
     try {
-      const response = await fetch(`/api/campaigns?id=${campaignToDelete}`, {
+      const response = await fetch(`/api/campaigns?id=${campaignToDelete.id}`, {
         method: 'DELETE',
       });
       if (!response.ok) {
         const errorData = await response.json();
+        // Revert optimistic update if delete failed
+        setCampaigns(originalCampaigns);
         throw new Error(errorData.error || 'Failed to delete campaign');
       }
-      setCampaigns(campaigns.filter(c => c.id !== campaignToDelete));
-      toast({ title: "Campaign Deleted", description: "The campaign has been successfully deleted." });
+      toast({ title: "Campaign Deleted", description: `"${campaignTitleForToast}" has been successfully deleted.` });
+      // No need to call onCampaignSelect here unless you want to clear a selected campaign view
+      if (typeof onCampaignSelect === 'function') {
+        onCampaignSelect(null, 'view'); // Clear selection if deleted campaign was selected
+      }
     } catch (err) {
+      // Revert optimistic update
+      setCampaigns(originalCampaigns);
       const errorMessage = err instanceof Error ? err.message : "An unknown error occurred during deletion.";
       toast({ title: "Error Deleting Campaign", description: errorMessage, variant: "destructive" });
     } finally {
-      setIsLoading(false);
-      setCampaignToDelete(null);
-      setIsDeleteDialogOpen(false);
+      setCampaignToDelete(null); // Clear the campaign to delete state
     }
   };
 
@@ -137,23 +150,26 @@ export function CampaignList({ refreshTrigger, onCampaignSelect }: CampaignListP
             campaign={campaign} 
             onView={() => onCampaignSelect(campaign.id, 'view')}
             onEdit={() => onCampaignSelect(campaign.id, 'edit')}
-            onDelete={() => handleDeletePrompt(campaign.id)}
+            onDelete={() => handleDeletePrompt(campaign)}
           />
         ))}
       </div>
       <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+            <AlertDialogTitle className="flex items-center gap-2">
+                <Trash2 className="h-5 w-5 text-destructive"/> Are you absolutely sure?
+            </AlertDialogTitle>
             <AlertDialogDescription>
-              This action cannot be undone. This will permanently delete the campaign
-              and all its associated data.
+              This action cannot be undone. This will permanently delete the campaign 
+              <span className="font-semibold"> &quot;{campaignToDelete?.title || 'this campaign'}&quot; </span> 
+              and all its associated data including content versions and debate logs.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel onClick={() => setCampaignToDelete(null)}>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={handleDeleteCampaign} className="bg-destructive hover:bg-destructive/90">
-              Delete Campaign
+            <AlertDialogAction onClick={handleDeleteCampaign} className="bg-destructive hover:bg-destructive/90 text-destructive-foreground">
+              Yes, Delete Campaign
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

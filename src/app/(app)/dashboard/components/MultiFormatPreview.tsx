@@ -17,6 +17,9 @@ interface MultiFormatPreviewProps {
   isLoading: boolean;
   campaignId?: string;
   contentVersionId?: string;
+  // Add functions to handle AI Revise and Translate when enabled
+  // onReviseRequest?: (formatKey: keyof MultiFormatContent, currentText: string) => void;
+  // onTranslateRequest?: (formatKey: keyof MultiFormatContent, currentText: string) => void;
 }
 
 const formatLabels: Record<keyof MultiFormatContent, string> = {
@@ -39,7 +42,14 @@ type FeedbackState = {
   }
 };
 
-export function MultiFormatPreview({ content, isLoading, campaignId, contentVersionId }: MultiFormatPreviewProps) {
+export function MultiFormatPreview({ 
+    content, 
+    isLoading, 
+    campaignId, 
+    contentVersionId,
+    // onReviseRequest, 
+    // onTranslateRequest 
+}: MultiFormatPreviewProps) {
   const { toast } = useToast();
   const [feedbackState, setFeedbackState] = useState<FeedbackState>({});
 
@@ -78,14 +88,14 @@ export function MultiFormatPreview({ content, isLoading, campaignId, contentVers
   };
 
   const handleComingSoon = (featureName: string) => {
-    toast({ title: `${featureName} is Coming Soon!`, description: "This feature is under development."});
+    toast({ title: `${featureName} is Coming Soon!`, description: `The next step is to implement the dialog for ${featureName.toLowerCase()} instructions and then call the API.`});
   };
 
   const handleFeedbackRating = (formatKey: keyof MultiFormatContent, rating: 1 | -1) => {
     setFeedbackState(prev => ({
       ...prev,
       [formatKey]: {
-        ...prev[formatKey],
+        ...(prev[formatKey] || { rating: null, comment: '', showCommentBox: false, isSubmitting: false, submitted: false }),
         rating: rating,
         showCommentBox: true,
         submitted: false,
@@ -97,7 +107,7 @@ export function MultiFormatPreview({ content, isLoading, campaignId, contentVers
     setFeedbackState(prev => ({
       ...prev,
       [formatKey]: {
-        ...prev[formatKey],
+        ...(prev[formatKey] || { rating: null, comment: '', showCommentBox: false, isSubmitting: false, submitted: false }),
         comment: comment,
       }
     }));
@@ -229,7 +239,7 @@ export function MultiFormatPreview({ content, isLoading, campaignId, contentVers
                       </Button>
                        <Tooltip>
                         <TooltipTrigger asChild>
-                          <Button variant="outline" size="sm" disabled onClick={() => handleComingSoon('AI Revise')}>
+                          <Button variant="outline" size="sm" onClick={() => handleComingSoon('AI Revise')}>
                             <WandSparkles className="mr-1 h-3 w-3" /> AI Revise
                           </Button>
                         </TooltipTrigger>
@@ -239,7 +249,7 @@ export function MultiFormatPreview({ content, isLoading, campaignId, contentVers
                       </Tooltip>
                        <Tooltip>
                         <TooltipTrigger asChild>
-                            <Button variant="outline" size="sm" disabled onClick={() => handleComingSoon('Translate')}>
+                            <Button variant="outline" size="sm" onClick={() => handleComingSoon('Translate')}>
                                 <Languages className="mr-1 h-3 w-3" /> Translate
                             </Button>
                         </TooltipTrigger>
@@ -291,7 +301,6 @@ export function MultiFormatPreview({ content, isLoading, campaignId, contentVers
                         size="sm" 
                         onClick={() => handleFeedbackRating(formatKey, -1)}
                         disabled={currentFeedback.isSubmitting || currentFeedback.submitted}
-                        className={currentFeedback.rating === -1 ? "" : ""}
                       >
                         <ThumbsDown className="mr-1 h-4 w-4" /> Needs Improvement
                       </Button>

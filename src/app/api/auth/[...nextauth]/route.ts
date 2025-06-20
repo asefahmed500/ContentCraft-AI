@@ -6,11 +6,14 @@ import { MongoDBAdapter } from '@next-auth/mongodb-adapter';
 import clientPromise from '@/lib/mongodb';
 import { MongoClient, Db } from 'mongodb';
 import bcrypt from 'bcryptjs';
-import type { User as NextAuthUser } from 'next-auth';
+import type { User as NextAuthUser, Account, Profile } from 'next-auth';
+import type { AdapterUser } from 'next-auth/adapters';
+
 
 interface MyAppUser extends NextAuthUser {
   role?: string;
-  id?: string; // Ensure id is part of the user type
+  id?: string; 
+  _id?: string; // MongoDB ObjectId as string
   totalXP?: number;
   level?: number;
   badges?: string[];
@@ -24,7 +27,7 @@ const defaultGamification = {
 
 export const authOptions: NextAuthOptions = {
   adapter: MongoDBAdapter(clientPromise as Promise<MongoClient>, {
-    databaseName: process.env.MONGODB_DB_NAME || undefined, // Optional: specify DB name if not in URI
+    databaseName: process.env.MONGODB_DB_NAME || undefined, 
   }),
   providers: [
     GoogleProvider({
@@ -50,8 +53,8 @@ export const authOptions: NextAuthOptions = {
         }
 
         const client: MongoClient = await clientPromise;
-        const db: Db = client.db();
-        const usersCollection = db.collection<MyAppUser>("users");
+        const db: Db = client.db(process.env.MONGODB_DB_NAME || undefined);
+        const usersCollection = db.collection<AdapterUser>("users");
 
         const user = await usersCollection.findOne({ email: credentials.email });
 
@@ -59,8 +62,8 @@ export const authOptions: NextAuthOptions = {
           throw new Error("No user found with this email.");
         }
 
-        if (!user.password) {
-            throw new Error("This account was created using a social login.");
+        if (!user.password) { // Check if password field exists, as OAuth users won't have it
+            throw new Error("This account was created using a social login. Please sign in with Google.");
         }
 
         const isValidPassword = await bcrypt.compare(credentials.password, user.password);
@@ -74,11 +77,11 @@ export const authOptions: NextAuthOptions = {
           email: user.email,
           name: user.name,
           image: user.image,
-          role: user.role || 'viewer',
-          totalXP: user.totalXP ?? defaultGamification.totalXP,
-          level: user.level ?? defaultGamification.level,
-          badges: user.badges || defaultGamification.badges, // `||` is fine for arrays defaulting to empty
-        } as MyAppUser;
+          role: (user as MyAppUser).role || 'viewer', // Cast to MyAppUser to access custom fields
+          totalXP: (user as MyAppUser).totalXP ?? defaultGamification.totalXP,
+          level: (user as MyAppUser).level ?? defaultGamification.level,
+          badges: (user as MyAppUser).badges || defaultGamification.badges,
+        } as MyAppUser; // Return as MyAppUser
       }
     })
   ],
@@ -86,24 +89,30 @@ export const authOptions: NextAuthOptions = {
     strategy: 'jwt',
   },
   callbacks: {
-    async jwt({ token, user, trigger, session }) {
-      if (trigger === "update" && session?.user) {
-        if (session.user.name) token.name = session.user.name;
-        if (session.user.image) token.picture = session.user.image; 
-        if ((session.user as MyAppUser).role) token.role = (session.user as MyAppUser).role;
-        if ((session.user as MyAppUser).totalXP !== undefined) token.totalXP = (session.user as MyAppUser).totalXP;
-        if ((session.user as MyAppUser).level !== undefined) token.level = (session.user as MyAppUser).level;
-        if ((session.user as MyAppUser).badges) token.badges = (session.user as MyAppUser).badges;
-        return token;
-      }
-
+    async jwt({ token, user, trigger, session, account, profile }) {
+      // Initial sign in or user object is present
       if (user) {
-        const typedUser = user as MyAppUser;
-        token.id = typedUser.id || (typedUser as any)._id?.toString();
+        const typedUser = user as MyAppUser; // User from authorize or signIn callback
+        token.id = typedUser.id || typedUser._id; // Use id if present (from authorize), else _id (from signIn)
         token.role = typedUser.role || 'viewer';
         token.totalXP = typedUser.totalXP ?? defaultGamification.totalXP;
         token.level = typedUser.level ?? defaultGamification.level;
         token.badges = typedUser.badges || defaultGamification.badges;
+        // Persist the OAuth access_token and or the user id to the token right after signin
+        if (account) {
+            token.accessToken = account.access_token
+        }
+      }
+      
+      // Handle session updates
+      if (trigger === "update" && session?.user) {
+        const sessionUser = session.user as MyAppUser;
+        if (sessionUser.name) token.name = sessionUser.name;
+        if (sessionUser.image) token.picture = sessionUser.image; 
+        if (sessionUser.role) token.role = sessionUser.role;
+        if (sessionUser.totalXP !== undefined) token.totalXP = sessionUser.totalXP;
+        if (sessionUser.level !== undefined) token.level = sessionUser.level;
+        if (sessionUser.badges) token.badges = sessionUser.badges;
       }
       return token;
     },
@@ -115,60 +124,55 @@ export const authOptions: NextAuthOptions = {
         typedSessionUser.totalXP = (token.totalXP as number) ?? defaultGamification.totalXP;
         typedSessionUser.level = (token.level as number) ?? defaultGamification.level;
         typedSessionUser.badges = (token.badges as string[]) || defaultGamification.badges;
+        (session as any).accessToken = token.accessToken; // Add accessToken to session if needed
       }
       return session;
     },
     async signIn({ user, account, profile }) {
       const client: MongoClient = await clientPromise;
-      const db: Db = client.db();
-      const usersCollection = db.collection<MyAppUser>("users");
+      const db: Db = client.db(process.env.MONGODB_DB_NAME || undefined);
+      const usersCollection = db.collection<AdapterUser>("users"); // Use AdapterUser for DB operations
       
       let dbUser = await usersCollection.findOne({ email: user.email as string });
 
       if (account?.provider === 'google') {
-        if (!dbUser) {
-          const newUserDoc: Partial<MyAppUser> = {
-            email: user.email as string,
+        const updateDoc: Partial<AdapterUser & MyAppUser> = {
             name: user.name,
             image: user.image,
-            emailVerified: new Date(),
-            role: 'viewer',
-            totalXP: defaultGamification.totalXP,
-            level: defaultGamification.level,
-            badges: defaultGamification.badges,
-          };
-          const result = await usersCollection.insertOne(newUserDoc as any); 
-          dbUser = { ...newUserDoc, _id: result.insertedId } as any;
+            emailVerified: new Date(), // Mark email as verified for Google sign-ins
+            role: dbUser ? (dbUser as MyAppUser).role || 'viewer' : 'viewer', // Preserve existing role or default
+            totalXP: dbUser ? ((dbUser as MyAppUser).totalXP ?? defaultGamification.totalXP) : defaultGamification.totalXP,
+            level: dbUser ? ((dbUser as MyAppUser).level ?? defaultGamification.level) : defaultGamification.level,
+            badges: dbUser ? (dbUser as MyAppUser).badges || defaultGamification.badges : defaultGamification.badges,
+        };
+
+        if (dbUser) {
+          // Update existing user if name/image changed, ensure gamification fields
+          await usersCollection.updateOne({ _id: dbUser._id }, { $set: updateDoc });
+          dbUser = {...dbUser, ...updateDoc }; // Reflect updates in dbUser
         } else {
-          const updates: Partial<MyAppUser> = {};
-          if (dbUser.image !== user.image && user.image) updates.image = user.image; // check user.image exists
-          if (dbUser.name !== user.name && user.name) updates.name = user.name; // update name if changed via Google
-          if (dbUser.totalXP === undefined) updates.totalXP = defaultGamification.totalXP;
-          if (dbUser.level === undefined) updates.level = defaultGamification.level;
-          if (dbUser.badges === undefined) updates.badges = defaultGamification.badges;
-          if (Object.keys(updates).length > 0) {
-            await usersCollection.updateOne(
-                { email: user.email as string },
-                { $set: updates }
-            );
-            // After updating, re-fetch dbUser to get the latest data
-            dbUser = await usersCollection.findOne({ email: user.email as string });
-          }
+          // This case should be handled by the adapter creating the user,
+          // but if not, we can ensure fields are set if user somehow bypasses adapter's initial creation.
+          // Typically, MongoDBAdapter handles the creation with info from Google profile.
+          // We just want to ensure our custom fields are there.
+          // The adapter usually runs createUser before this signIn callback.
         }
       }
       
+      // Enrich the user object passed to JWT callback
       if (dbUser) {
-        user.id = dbUser._id!.toString(); 
-        (user as MyAppUser).role = dbUser.role || 'viewer';
-        (user as MyAppUser).totalXP = dbUser.totalXP ?? defaultGamification.totalXP;
-        (user as MyAppUser).level = dbUser.level ?? defaultGamification.level;
-        (user as MyAppUser).badges = dbUser.badges || defaultGamification.badges;
+        user.id = dbUser._id!.toString(); // Ensure user.id is set for JWT callback
+        (user as MyAppUser).role = (dbUser as MyAppUser).role || 'viewer';
+        (user as MyAppUser).totalXP = (dbUser as MyAppUser).totalXP ?? defaultGamification.totalXP;
+        (user as MyAppUser).level = (dbUser as MyAppUser).level ?? defaultGamification.level;
+        (user as MyAppUser).badges = (dbUser as MyAppUser).badges || defaultGamification.badges;
       }
-      return true;
+      return true; // Proceed with sign-in
     }
   },
   pages: {
     signIn: '/login',
+    // error: '/auth/error', // Optional: Custom error page
   },
   secret: process.env.NEXTAUTH_SECRET,
   debug: process.env.NODE_ENV === 'development',

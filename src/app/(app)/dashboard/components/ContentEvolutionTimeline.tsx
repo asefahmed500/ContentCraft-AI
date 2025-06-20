@@ -14,7 +14,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 
 interface ContentEvolutionTimelineProps {
   versions: ContentVersion[];
-  onViewVersion?: (version: ContentVersion) => void; 
+  onViewVersion: (version: ContentVersion) => void; // Make sure this is actively used
 }
 
 export function ContentEvolutionTimeline({ versions, onViewVersion }: ContentEvolutionTimelineProps) {

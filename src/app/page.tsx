@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useEffect } from 'react';
@@ -7,7 +8,8 @@ import { Button } from '@/components/ui/button';
 import Link from 'next/link';
 import { Logo } from '@/components/Logo';
 import Image from 'next/image';
-import { Loader2 } from 'lucide-react';
+import { Loader2, Users, LayoutGrid, FlaskConical, Repeat, Share2, Zap, HelpCircle } from 'lucide-react'; // Added Users, LayoutGrid etc.
+
 
 function HomePageContent() { // Renamed from HomePage to HomePageContent
   const { isAuthenticated, isLoading } = useAuth();
@@ -36,6 +38,16 @@ function HomePageContent() { // Renamed from HomePage to HomePageContent
       </div>
     );
   }
+
+  const features = [
+      { title: "Creative War Room", description: "Watch AI agents debate and refine content in real-time.", icon: Users },
+      { title: "Multi-Format DNA", description: "One brief transforms into 15+ tailored content pieces.", icon: LayoutGrid },
+      { title: "Brand Learning", description: "AI learns your brand voice, style, and values instantly.", icon: FlaskConical },
+      { title: "Adversarial Improvement", description: "Content evolves through critique and collaboration.", icon: Repeat },
+      { title: "Cross-Platform Intelligence", description: "Optimized content for every channel, automatically.", icon: Share2 },
+      { title: "Real-Time Evolution", description: "See your campaign improve live as agents work.", icon: Zap },
+  ];
+
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -83,15 +95,8 @@ function HomePageContent() { // Renamed from HomePage to HomePageContent
             </p>
           </div>
           <div className="mx-auto grid justify-center gap-4 sm:grid-cols-2 md:max-w-[64rem] md:grid-cols-3">
-            {[
-              { title: "Creative War Room", description: "Watch AI agents debate and refine content in real-time.", icon: "Users" },
-              { title: "Multi-Format DNA", description: "One brief transforms into 15+ tailored content pieces.", icon: "LayoutGrid" },
-              { title: "Brand Learning", description: "AI learns your brand voice, style, and values instantly.", icon: "FlaskConical" },
-              { title: "Adversarial Improvement", description: "Content evolves through critique and collaboration.", icon: "Repeat" },
-              { title: "Cross-Platform Intelligence", description: "Optimized content for every channel, automatically.", icon: "Share2" },
-              { title: "Real-Time Evolution", description: "See your campaign improve live as agents work.", icon: "Zap" },
-            ].map((feature) => {
-              const LucideIcon = require('lucide-react')[feature.icon] || require('lucide-react')['HelpCircle'];
+            {features.map((feature) => {
+              const LucideIcon = feature.icon || HelpCircle;
               return (
                 <div key={feature.title} className="relative overflow-hidden rounded-lg border bg-background p-2 shadow-md hover:shadow-xl transition-shadow duration-300">
                   <div className="flex h-[180px] flex-col justify-between rounded-md p-6">

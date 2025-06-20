@@ -21,7 +21,7 @@ export async function POST(request: Request) {
     }
 
     const client: MongoClient = await clientPromise;
-    const db: Db = client.db();
+    const db: Db = client.db(process.env.MONGODB_DB_NAME || undefined); // Use DB name from env if provided
     const usersCollection = db.collection("users");
 
     const existingUser = await usersCollection.findOne({ email });
@@ -38,7 +38,7 @@ export async function POST(request: Request) {
       role: 'viewer', 
       createdAt: new Date(),
       updatedAt: new Date(),
-      image: `https://placehold.co/100x100.png?text=${name.charAt(0).toUpperCase()}`,
+      image: `https://placehold.co/100x100.png?text=${name.charAt(0).toUpperCase()}`, // data-ai-hint added client-side
       totalXP: 0,
       level: 1,
       badges: [],
@@ -52,6 +52,7 @@ export async function POST(request: Request) {
 
   } catch (error) {
     console.error('Registration Error:', error);
-    return NextResponse.json({ message: 'An error occurred during registration.' }, { status: 500 });
+    const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred.';
+    return NextResponse.json({ message: 'An error occurred during registration.', details: errorMessage }, { status: 500 });
   }
 }
