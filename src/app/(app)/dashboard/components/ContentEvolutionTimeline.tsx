@@ -19,7 +19,9 @@ interface ContentEvolutionTimelineProps {
 
 export function ContentEvolutionTimeline({ versions, onViewVersion }: ContentEvolutionTimelineProps) {
   const { toast } = useToast();
-  const sortedVersions = versions.slice().sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+  // Assuming versions are already sorted by timestamp descending by the parent component (DashboardPage)
+  // const sortedVersions = versions.slice().sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+  const sortedVersions = versions; // Relies on parent for sorting
 
   const getActorIcon = (actorName: string) => {
     const lowerActorName = actorName.toLowerCase();
@@ -129,3 +131,4 @@ export function ContentEvolutionTimeline({ versions, onViewVersion }: ContentEvo
     </TooltipProvider>
   );
 }
+

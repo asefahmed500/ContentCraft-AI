@@ -102,14 +102,15 @@ export default function DashboardPage() {
   // Derived states from selectedCampaignForProcessing
   const campaignStatus: CampaignStatus | undefined = selectedCampaignForProcessing?.status;
   const debateMessages: AgentInteraction[] = selectedCampaignForProcessing?.agentDebates || [];
-  const contentVersions: ContentVersion[] = selectedCampaignForProcessing?.contentVersions?.sort((a,b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()) || [];
+  const contentVersions: ContentVersion[] = (selectedCampaignForProcessing?.contentVersions || []).sort((a,b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
   const latestContentVersion: ContentVersion | null = contentVersions[0] || null;
   const latestContentVersionId: string | undefined = latestContentVersion?.id;
 
   useEffect(() => {
     if (selectedCampaignForProcessing) {
       setCurrentDebateTopic(`Debate for: "${selectedCampaignForProcessing.title.substring(0, 70)}${selectedCampaignForProcessing.title.length > 70 ? "..." : ""}"`);
-      const currentLatestVersionToSet = selectedCampaignForProcessing.contentVersions?.sort((a,b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())[0];
+      
+      const currentLatestVersionToSet = (selectedCampaignForProcessing.contentVersions || []).sort((a,b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())[0];
       setMultiFormatContent(currentLatestVersionToSet ? currentLatestVersionToSet.multiFormatContentSnapshot : null);
 
       const currentStatus = selectedCampaignForProcessing.status;
@@ -122,7 +123,7 @@ export default function DashboardPage() {
       setIsGeneratingCampaign(false);
       setSelectedCampaignForEditingInForm(null);
     }
-  }, [selectedCampaignForProcessing, latestContentVersion]);
+  }, [selectedCampaignForProcessing]);
 
 
   const handleNewCampaignCreatedOrUpdated = useCallback((campaign: Campaign) => {
@@ -140,11 +141,18 @@ export default function DashboardPage() {
     };
     setSelectedCampaignForProcessing(campaignWithClientDefaults);
 
-    const currentLatestVersion = campaignWithClientDefaults.contentVersions?.sort((a,b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())[0];
+    const currentLatestVersion = (campaignWithClientDefaults.contentVersions || []).sort((a,b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())[0];
     setMultiFormatContent(currentLatestVersion ? currentLatestVersion.multiFormatContentSnapshot : null);
 
-    setSelectedCampaignForEditingInForm(null);
-  }, []);
+    setSelectedCampaignForEditingInForm(null); // Clear edit form after save/create
+    if(campaign.status === 'draft' && !selectedCampaignForEditingInForm) { // If it's a new draft, switch to generator
+      setActiveTab('generator');
+    } else if (campaign.status === 'review' || (currentLatestVersion && campaign.status !== 'generating' && campaign.status !== 'debating')) {
+      setActiveTab('preview');
+    }
+
+
+  }, [selectedCampaignForEditingInForm]);
 
   const persistCurrentCampaignUpdates = useCallback(async (campaignToPersist?: Campaign | null) => {
     const campaign = campaignToPersist || selectedCampaignForProcessing;
@@ -227,40 +235,41 @@ export default function DashboardPage() {
       let messageTimestamp = new Date().getTime();
 
       const addDebateMessage = (agentRoleInput: AgentRole | typeof orchestratorAgentName, message: string, agentIdSuffix: string = '01') => {
-        const roleForMessage = agentRoleInput as AgentRole; // Treat orchestratorAgentName as compatible for type purposes here
+        const roleForMessage = agentRoleInput as AgentRole; 
         debateInteractions.push({
           agent: agentRoleInput,
           agentName: agentRoleInput,
           agentId: `${agentRoleInput.toLowerCase().replace(/\s+/g, '-')}-${agentIdSuffix}`,
-          type: 'statement',
-          role: roleForMessage,
+          type: 'statement', 
+          role: roleForMessage, 
           message: message,
           timestamp: new Date(messageTimestamp),
         });
         messageTimestamp += (Math.random() * 1500) + 500;
       };
-
+      
       addDebateMessage(orchestratorAgentName, `Debate initiated for campaign: "${currentCampaignState.title}".\nTopic: ${debateInput.topic}\nParticipating agents: ${debateInput.agentRoles.join(', ')}.\nFocusing on strategy refinement and key messaging.`);
-
+      
       agentRolesForDebate.forEach((role, index) => {
         let simulatedMessage = `As the ${role}, I suggest we `;
-        if (debateResult.contentSuggestions && debateResult.contentSuggestions.length > index) {
-          simulatedMessage += `focus on: "${debateResult.contentSuggestions[index]}". `;
-        } else if (debateResult.contentSuggestions && debateResult.contentSuggestions.length > 0) {
-          simulatedMessage += `align with the core suggestion of "${debateResult.contentSuggestions[0]}". `;
+        const suggestionIndex = Math.floor(Math.random() * (debateResult.contentSuggestions?.length || 0));
+
+        if (debateResult.contentSuggestions && debateResult.contentSuggestions.length > 0) {
+          simulatedMessage += `focus on: "${debateResult.contentSuggestions[suggestionIndex]}". `;
         } else {
           simulatedMessage += `contribute to developing a strong core message. `;
         }
+        
         switch(role) {
-            case 'Creative Director': simulatedMessage += "Let's ensure the overall vision is compelling."; break;
-            case 'Content Writer': simulatedMessage += "I'll craft engaging narratives around these points."; break;
-            case 'Brand Persona': simulatedMessage += `This needs to resonate with our brand's voice: ${currentCampaignState.tone || 'authentic and engaging'}.`; break;
-            case 'Analytics Strategist': simulatedMessage += "We should consider how we'll measure success for these angles."; break;
+            case 'Creative Director': simulatedMessage += "Let's ensure the overall vision is compelling and aligns with the brand's core values."; break;
+            case 'Content Writer': simulatedMessage += "I'll craft engaging narratives around these points, perhaps using storytelling techniques."; break;
+            case 'Brand Persona': simulatedMessage += `This needs to resonate with our brand's voice: ${currentCampaignState.tone || 'authentic and engaging'}. We must sound genuine.`; break;
+            case 'Analytics Strategist': simulatedMessage += "We should consider how we'll measure success for these angles. What are our KPIs? Let's define them now."; break;
             case 'SEO Optimization':
                 const keywords = debateResult.debateSummary.match(/keywords: ([\w\s,]+)/i);
-                simulatedMessage += keywords && keywords[1] ? `Good point on SEO. Let's target keywords like: ${keywords[1].trim()}.` : "We must integrate relevant keywords for visibility.";
+                simulatedMessage += keywords && keywords[1] ? `Good point on SEO. Let's target keywords like: ${keywords[1].trim()}. Also consider long-tail variations.` : "We must integrate relevant keywords for visibility. I'll research high-intent phrases.";
                 break;
-            case 'Quality Assurance': simulatedMessage += "I'll be checking for clarity, consistency, and any potential compliance issues."; break;
+            case 'Quality Assurance': simulatedMessage += "I'll be checking for clarity, consistency, factual accuracy, and any potential compliance issues before anything goes live."; break;
             default: simulatedMessage += "My input will be crucial here.";
         }
         addDebateMessage(role, simulatedMessage, `s${index + 1}`);
@@ -343,7 +352,7 @@ export default function DashboardPage() {
 
 
   const handleCampaignSelectionFromList = useCallback(async (campaignId: string | null, action: 'view' | 'edit') => {
-    setSelectedCampaignForEditingInForm(null);
+    setSelectedCampaignForEditingInForm(null); // Clear any ongoing edit
 
     if (!campaignId) {
       setSelectedCampaignForProcessing(null);
@@ -381,15 +390,15 @@ export default function DashboardPage() {
         setActiveTab('generator');
         toast({ title: "Editing Campaign", description: `Loaded "${campaignToSelect.title}" for editing.`});
       } else if (action === 'view') {
-        const currentLatestVersionToView = campaignToSelect.contentVersions.sort((a,b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())[0];
+        const currentLatestVersionToView = (campaignToSelect.contentVersions || []).sort((a,b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())[0];
         if (currentLatestVersionToView) {
              toast({ title: "Viewing Campaign", description: `Displaying latest content for "${campaignToSelect.title}".`});
              setActiveTab('preview');
         } else if (['draft', 'debating', 'generating'].includes(campaignToSelect.status) ) {
             toast({ title: `Campaign Status: ${campaignToSelect.status}`, description: `Generate content for "${campaignToSelect.title}" or edit the brief.`});
-            setSelectedCampaignForEditingInForm(campaignToSelect);
+            setSelectedCampaignForEditingInForm(campaignToSelect); // Allow editing for drafts or if stuck mid-gen
             setActiveTab('generator');
-        } else {
+        } else { // 'review' but no versions, or other states with no content
             toast({ title: "Viewing Campaign", description: `No content versions found for "${campaignToSelect.title}". Consider re-generating or editing.`});
             setSelectedCampaignForEditingInForm(campaignToSelect);
             setActiveTab('generator');
@@ -557,3 +566,4 @@ export default function DashboardPage() {
     </div>
   );
 }
+
