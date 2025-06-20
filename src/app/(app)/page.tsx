@@ -1,13 +1,11 @@
-// This file is intentionally left blank or exports null
-// to prevent a conflict with the root src/app/page.tsx.
-// If you intended to have a page here, please reconsider its path
-// or remove the root src/app/page.tsx if this was meant to be the main page.
-// The error "You cannot have two parallel pages that resolve to the same path"
-// indicates this file (or another page/route file in src/app/(app)/)
-// was conflicting with src/app/page.tsx.
-// The best solution is typically to delete this file if src/app/(app)/
-// is only meant to be a route group for layout purposes.
+// This file's content is modified to prevent Next.js from treating it as a page.
+// The (app) route group should not define its own page at the root level
+// if /app/page.tsx exists, as this causes a "parallel pages" error.
+//
+// The BEST and RECOMMENDED solution to the "You cannot have two parallel pages that resolve to the same path"
+// error (when it points to this (app) directory) is to MANUALLY DELETE this file
+// (src/app/(app)/page.tsx or any similar page/route file in src/app/(app)/).
+//
+// This modification is an attempt to work around system limitations on file deletion.
 
-export default function AppRootPagePlaceholder() {
-  return null;
-}
+export {}; // This ensures the file is treated as a module but exports nothing Next.js would pick up as a page component.
