@@ -1,13 +1,13 @@
 "use client";
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { BrandDNAAnalyzer } from './components/BrandDNAAnalyzer';
 import { AgentDebatePanel } from './components/AgentDebatePanel';
 import { MultiFormatPreview } from './components/MultiFormatPreview';
 import { CampaignGenerator } from './components/CampaignGenerator';
 import { ContentEvolutionTimeline } from './components/ContentEvolutionTimeline';
 import { PerformancePredictor } from './components/PerformancePredictor';
-import { CampaignList } from './components/CampaignList'; // New
+import { CampaignList } from './components/CampaignList'; 
 import type { AgentDebateInput, AgentDebateOutput } from '@/ai/flows/agent-debate';
 import { agentDebate } from '@/ai/flows/agent-debate';
 import type { GenerateContentInput, GenerateContentOutput } from '@/ai/flows/content-generation';
@@ -18,7 +18,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Separator } from '@/components/ui/separator';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Sparkles, Users, Bot, Library, FileText, Activity, TrendingUp, BadgeCheck, ListChecks, Lightbulb } from 'lucide-react';
+import { Sparkles, Users, Bot, Library, FileText, Activity, TrendingUp, BadgeCheck, ListChecks, Lightbulb, Edit } from 'lucide-react';
 
 async function agentDebateAction(input: AgentDebateInput): Promise<AgentDebateOutput | { error: string }> {
   try {
@@ -40,15 +40,35 @@ async function generateContentAction(input: GenerateContentInput): Promise<Gener
   }
 }
 
+async function updateCampaignStatusAPI(campaignId: string, status: CampaignStatus): Promise<Campaign | { error: string }> {
+  try {
+    const response = await fetch(`/api/campaigns?id=${campaignId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status }),
+    });
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.error || 'Failed to update campaign status');
+    }
+    return await response.json();
+  } catch (error) {
+    console.error("Error updating campaign status:", error);
+    return { error: error instanceof Error ? error.message : "An unknown error occurred." };
+  }
+}
+
+
 export default function DashboardPage() {
   const [debateMessages, setDebateMessages] = useState<AgentMessage[]>([]);
   const [multiFormatContent, setMultiFormatContent] = useState<MultiFormatContent | null>(null);
   const [isGeneratingCampaign, setIsGeneratingCampaign] = useState(false);
   const [isDebating, setIsDebating] = useState(false);
   const [currentDebateTopic, setCurrentDebateTopic] = useState<string | undefined>(undefined);
-  const [campaignStatus, setCampaignStatus] = useState<CampaignStatus>('draft');
+  const [currentCampaignOverallStatus, setCurrentCampaignOverallStatus] = useState<CampaignStatus>('draft');
   const [refreshCampaignListTrigger, setRefreshCampaignListTrigger] = useState(0);
-  const [selectedCampaign, setSelectedCampaign] = useState<Campaign | null>(null); // For viewing/editing
+  const [selectedCampaignForProcessing, setSelectedCampaignForProcessing] = useState<Campaign | null>(null); 
+  const [selectedCampaignForEditingInForm, setSelectedCampaignForEditingInForm] = useState<Campaign | null>(null);
   const [activeTab, setActiveTab] = useState("campaign-hub");
 
 
@@ -59,30 +79,35 @@ export default function DashboardPage() {
     "Analytics Strategist", "Visual Content", "SEO Optimization", "Quality Assurance"
   ];
 
-  const handleNewCampaignCreated = (newCampaign: Campaign) => {
-    // This function is called by CampaignGenerator after successfully creating a campaign via API
-    setRefreshCampaignListTrigger(prev => prev + 1); // Trigger CampaignList refresh
-    toast({ title: "Campaign Created", description: `Campaign "${newCampaign.brief.substring(0,30)}..." started.` });
-    // Optionally, select the new campaign and switch to its "edit" or "debate" view
-    // For now, just refresh the list.
+  const handleNewCampaignCreatedOrUpdated = (campaign: Campaign) => {
+    setRefreshCampaignListTrigger(prev => prev + 1); 
+    setSelectedCampaignForProcessing(campaign); // Set this as the campaign in focus if it was just created/updated
+    setSelectedCampaignForEditingInForm(null); // Clear form editing state after save
+    // toast({ title: "Campaign Ready", description: `Campaign "${campaign.brief.substring(0,30)}..." is ready.` });
   };
 
   const handleGenerateContentForCampaign = async (
     campaign: Campaign,
-    brandVoiceFromDNA?: string,
+    brandVoiceOverride?: string, // Renamed from brandVoiceFromDNA for clarity
   ) => {
+    if(!campaign || !campaign.id) {
+        toast({title: "Error", description: "No campaign selected to generate content.", variant: "destructive"});
+        return;
+    }
+
     setIsGeneratingCampaign(true);
     setIsDebating(true);
-    setCampaignStatus('debating'); // Set specific campaign status, if campaign object has it.
+    await updateCampaignStatusAndRefresh(campaign.id, 'debating');
     setDebateMessages([]);
     setMultiFormatContent(null);
-    setSelectedCampaign(campaign); // Keep track of the campaign being processed
+    setSelectedCampaignForProcessing(campaign); 
     
     const displayBrief = campaign.brief.substring(0, 50);
     const displayAudience = campaign.targetAudience ? `, for ${campaign.targetAudience.substring(0,30)}` : '';
     const displayTone = campaign.tone ? `, with ${campaign.tone} tone` : '';
     const campaignTitle = `Working on: "${displayBrief}..."${displayAudience}${displayTone}`;
     setCurrentDebateTopic(campaignTitle);
+    setActiveTab('debate');
 
     toast({ title: "Campaign Processing Started", description: "Agents are now working on your campaign." });
 
@@ -104,19 +129,21 @@ export default function DashboardPage() {
       }
       
       const newDebateMessages: AgentMessage[] = [
-        { agentId: 'orchestrator', agentName: 'Orchestrator', agentRole: 'Orchestrator', message: `Debate initiated for: ${augmentedBrief}`, timestamp: new Date(), type: 'statement'},
+        { agentId: 'orchestrator', agentName: 'Orchestrator', agentRole: 'Orchestrator', message: `Debate initiated for: ${augmentedBrief.substring(0,100)}...`, timestamp: new Date(), type: 'statement'},
         { agentId: 'agent-cd', agentName: 'Creative Director', agentRole: 'Creative Director', message: debateResult.contentSuggestions[0] || "Let's ensure bold, authentic messaging.", timestamp: new Date(), type: 'statement' },
         { agentId: 'agent-bp', agentName: 'Brand Persona', agentRole: 'Brand Persona', message: debateResult.contentSuggestions[1] || "Focus on transparency for the target audience.", timestamp: new Date(), type: 'critique' },
         { agentId: 'orchestrator', agentName: 'Orchestrator', agentRole: 'Orchestrator', message: `Debate Summary: ${debateResult.debateSummary}`, timestamp: new Date(), type: 'statement'},
       ];
       setDebateMessages(newDebateMessages);
       setIsDebating(false);
-      setCampaignStatus('generating');
-      toast({ title: "Debate Phase Complete", description: "Agents have concluded their discussion. Now generating content." });
+      await updateCampaignStatusAndRefresh(campaign.id, 'generating');
+      toast({ title: "Debate Phase Complete", description: "Agents have concluded. Generating content." });
+      setActiveTab('preview');
+
 
       const contentInput: GenerateContentInput = {
         inputContent: `${augmentedBrief}\n\nKey insights from debate: ${debateResult.debateSummary}\n${debateResult.contentSuggestions.join('\n')}`,
-        brandVoice: brandVoiceFromDNA, // Use voice from DNA if available, or from campaign override
+        brandVoice: brandVoiceOverride, 
       };
       const contentResult = await generateContentAction(contentInput);
 
@@ -125,107 +152,115 @@ export default function DashboardPage() {
       }
 
       setMultiFormatContent(contentResult);
-      setCampaignStatus('review'); 
-      // Here you would update the specific campaign's status in the DB to 'review' and store its content
-      // For now, this state is local to the dashboard page for the currently "active" generation flow.
+      await updateCampaignStatusAndRefresh(campaign.id, 'review');
       toast({ title: "Content Generation Complete", description: "Multi-format content is ready for preview." });
-      // Potentially update the selectedCampaign in DB with the new multiFormatContent and status.
-      // And refresh the CampaignList.
-      setRefreshCampaignListTrigger(prev => prev + 1);
+      // TODO: Persist multiFormatContent to the campaign document in DB
+      // For now, it's stored in local state `multiFormatContent` and associated with `selectedCampaignForProcessing`
 
 
     } catch (error) {
       console.error("Campaign Generation Error:", error);
-      const errorMessage = error instanceof Error ? error.message : "An unknown error occurred during campaign generation.";
+      const errorMessage = error instanceof Error ? error.message : "An unknown error occurred.";
       toast({ title: "Campaign Generation Failed", description: errorMessage, variant: "destructive" });
-      setCampaignStatus('draft'); 
+      await updateCampaignStatusAndRefresh(campaign.id, 'draft');
       setIsDebating(false);
     } finally {
       setIsGeneratingCampaign(false);
     }
   };
 
-  const handleCampaignSelection = async (campaignId: string | null, action: 'view' | 'edit') => {
+  const updateCampaignStatusAndRefresh = async (campaignId: string, status: CampaignStatus) => {
+    const result = await updateCampaignStatusAPI(campaignId, status);
+    if ('error' in result) {
+      toast({ title: "Status Update Failed", description: result.error, variant: "destructive"});
+    } else {
+      setCurrentCampaignOverallStatus(status);
+      setRefreshCampaignListTrigger(prev => prev + 1); // Refresh list to show new status
+    }
+  };
+
+
+  const handleCampaignSelectionFromList = async (campaignId: string | null, action: 'view' | 'edit') => {
+    setSelectedCampaignForEditingInForm(null); // Clear form editing state first
+
     if (!campaignId) {
-      setSelectedCampaign(null);
-      // Reset relevant states when deselecting or for a new campaign.
+      setSelectedCampaignForProcessing(null);
       setDebateMessages([]);
       setMultiFormatContent(null);
       setCurrentDebateTopic(undefined);
-      setCampaignStatus('draft');
-      setActiveTab('campaign-hub'); // Or wherever new campaign creation happens
+      setCurrentCampaignOverallStatus('draft');
+      setActiveTab('campaign-hub'); 
       return;
     }
 
-    // Fetch the specific campaign details if needed, or use already fetched list.
-    // For this example, let's assume we need to "activate" it for edit/view.
-    // We would typically fetch the campaign by ID here to get its full data if not already available.
-    // const campaignToSelect = campaigns.find(c => c.id === campaignId); // Assuming 'campaigns' state holds the list
-    // setSelectedCampaign(campaignToSelect || null);
+    // Fetch the full campaign details from API to ensure we have the latest data
+    try {
+      const response = await fetch(`/api/campaigns`); // Assuming GET /api/campaigns gets all, then filter
+      if (!response.ok) throw new Error("Failed to fetch campaigns");
+      const campaigns: Campaign[] = await response.json();
+      const campaignToSelect = campaigns.find(c => c.id === campaignId);
 
-    // Simulate fetching campaign data to populate debate, content, etc.
-    // In a real app, you'd fetch this campaign's specific data.
-    // For now, we'll just set a placeholder or trigger a flow.
-    
-    // This is a simplified selection. A real app might fetch campaign details.
-    const tempCampaign: Campaign = { 
-        id: campaignId, 
-        brief: `Campaign ${campaignId}`, 
-        createdAt: new Date(), 
-        updatedAt: new Date(), 
-        status: 'draft', 
-        userId: '', 
-        contentVersions: [] 
-    };
-    setSelectedCampaign(tempCampaign);
-
-
-    if (action === 'edit') {
-      // This would typically mean starting the debate/generation flow for an existing draft campaign
-      toast({ title: "Editing Campaign", description: `Loading campaign ${campaignId} for editing...`});
-      // For now, let's just clear content and set a topic.
-      // A real "edit" might resume a debate or re-generate content.
-      // We can re-purpose `handleGenerateContentForCampaign` if 'editing' means re-running the AI.
-      // Or, if it means editing the brief, then the CampaignGenerator needs to be pre-filled.
+      if (!campaignToSelect) {
+        toast({ title: "Error", description: "Campaign not found.", variant: "destructive" });
+        return;
+      }
       
-      // For this iteration, "Edit" will put the campaign in focus and allow to re-trigger generation.
-      // We can use the existing CampaignGenerator to *update* the brief.
-      // The `AgentDebatePanel` and `MultiFormatPreview` should reflect the *selected* campaign.
-      // For simplicity, clicking "Edit" might just allow re-running generation.
-      setCurrentDebateTopic(`Revisiting Campaign: ${tempCampaign.brief.substring(0,50)}...`);
-      setMultiFormatContent(null); // Clear previous preview for this campaign
-      setDebateMessages([]); // Clear previous debate messages
-      // If we want to start generation:
-      // handleGenerateContentForCampaign(tempCampaign);
-      setActiveTab('campaign-hub'); // Stay on hub, but generator might be prefilled or section appears for selected campaign
+      setSelectedCampaignForProcessing(campaignToSelect);
+      setCurrentCampaignOverallStatus(campaignToSelect.status);
+      // TODO: Fetch existing debate messages and multi-format content for this campaign if they exist in DB.
+      // For now, they will be cleared and re-generated if "Edit & Generate" is chosen, or shown if "View".
+      setDebateMessages([]); // Placeholder: load from campaignToSelect.agentDebates if stored
+      setMultiFormatContent(null); // Placeholder: load from campaignToSelect.contentVersions if stored
 
-    } else if (action === 'view') {
-      // "View" means seeing its current multi-format content and performance
-      toast({ title: "Viewing Campaign", description: `Loading content and metrics for campaign ${campaignId}...`});
-      // Fetch and display the campaign's generated content and performance data.
-      // For now, if multiFormatContent is for *this* campaign, show it.
-      // MultiFormatPreview and PerformancePredictor should show data for selectedCampaign.
-      // This requires these components to be aware of the selectedCampaign.
-      // This is a placeholder - actual content/metrics would be fetched or passed.
-      // setMultiFormatContent(selectedCampaign.generatedContent || null); // Assuming campaign object stores this
-      setActiveTab('preview'); // A new tab for just viewing generated content
+
+      if (action === 'edit') {
+        setSelectedCampaignForEditingInForm(campaignToSelect); // Pre-fill the generator form
+        setActiveTab('generator'); // Switch to generator tab for editing
+        toast({ title: "Editing Campaign", description: `Loaded "${campaignToSelect.brief.substring(0,30)}..." for editing.`});
+      } else if (action === 'view') {
+        // For "View", we'd typically show existing generated content and metrics.
+        // If content needs to be generated first, direct user or trigger it.
+        if (campaignToSelect.status === 'review' || campaignToSelect.status === 'published') {
+             // Assume content exists and set it (requires fetching/storing it on Campaign object)
+             // setMultiFormatContent(campaignToSelect.generatedContent || null); // Example
+             toast({ title: "Viewing Campaign", description: `Displaying content for "${campaignToSelect.brief.substring(0,30)}...". Metrics and evolution are mock.`});
+             setActiveTab('preview');
+        } else {
+            toast({ title: "Campaign Not Ready for View", description: `Campaign "${campaignToSelect.brief.substring(0,30)}..." is in '${campaignToSelect.status}' status. Generate content first.`});
+            setSelectedCampaignForEditingInForm(campaignToSelect); // Allow to start generation
+            setActiveTab('generator');
+        }
+      }
+    } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : "Failed to load campaign details.";
+        toast({ title: "Error Loading Campaign", description: errorMessage, variant: "destructive" });
     }
   };
 
+  useEffect(() => {
+    if (selectedCampaignForProcessing) {
+        setCurrentCampaignOverallStatus(selectedCampaignForProcessing.status);
+        setCurrentDebateTopic(selectedCampaignForProcessing.brief.substring(0,50) + "...");
+    } else {
+        setCurrentCampaignOverallStatus('draft');
+        setCurrentDebateTopic(undefined);
+    }
+  }, [selectedCampaignForProcessing]);
 
-  const getStatusBadge = (status: CampaignStatus) => {
+
+  const getStatusBadgeIcon = (status: CampaignStatus) => {
     switch(status) {
-      case 'draft': return <Lightbulb className="h-4 w-4 text-gray-500"/>; // Changed icon
+      case 'draft': return <Lightbulb className="h-4 w-4 text-gray-500"/>;
       case 'debating': return <Users className="h-4 w-4 text-blue-500 animate-pulse"/>;
       case 'generating': return <Bot className="h-4 w-4 text-purple-500 animate-spin"/>;
       case 'review': return <FileText className="h-4 w-4 text-green-500"/>;
-      case 'published': return <BadgeCheck className="h-4 w-4 text-teal-500"/>; // Changed icon
+      case 'published': return <BadgeCheck className="h-4 w-4 text-teal-500"/>;
       case 'archived': return <Library className="h-4 w-4 text-gray-400"/>;
-      default: return null;
+      default: return <Lightbulb className="h-4 w-4 text-gray-500"/>;
     }
   };
   
-  const campaignStatusText = {
+  const campaignStatusTextMap: Record<CampaignStatus, string> = {
     draft: "Draft",
     debating: "Agents Debating...",
     generating: "Generating Content...",
@@ -241,38 +276,37 @@ export default function DashboardPage() {
         <div>
             <h1 className="font-headline text-3xl md:text-4xl font-bold tracking-tight">ContentCraft AI Dashboard</h1>
             <p className="text-lg text-muted-foreground">
-            Orchestrate your AI creative team and generate stunning content campaigns.
+            Orchestrate your AI creative team for powerful content campaigns.
             </p>
         </div>
-        <div className="flex items-center gap-2 p-2 border rounded-md bg-card min-w-[200px] justify-center">
-            {getStatusBadge(campaignStatus)} {/* This status is for the *current generation process*, not overall app status */}
-            <span className="text-sm font-medium">{campaignStatusText[campaignStatus]}</span>
+        <div className="flex items-center gap-2 p-2 border rounded-md bg-card min-w-[200px] justify-center shadow">
+            {getStatusBadgeIcon(currentCampaignOverallStatus)}
+            <span className="text-sm font-medium">{campaignStatusTextMap[currentCampaignOverallStatus]}</span>
         </div>
       </div>
       <Separator />
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-2 md:grid-cols-3 lg:grid-cols-6">
-          <TabsTrigger value="campaign-hub"><ListChecks className="mr-2 h-4 w-4" />Campaign Hub</TabsTrigger>
-          <TabsTrigger value="generator"><Lightbulb className="mr-2 h-4 w-4" />New Campaign</TabsTrigger>
-          <TabsTrigger value="debate" disabled={!selectedCampaign && debateMessages.length === 0}><Users className="mr-2 h-4 w-4" />Agent Debate</TabsTrigger>
-          <TabsTrigger value="preview" disabled={!selectedCampaign && !multiFormatContent}><FileText className="mr-2 h-4 w-4" />Content Preview</TabsTrigger>
-          <TabsTrigger value="brand"><Sparkles className="mr-2 h-4 w-4" />Brand DNA</TabsTrigger>
-          <TabsTrigger value="evolution" disabled={!selectedCampaign}><Activity className="mr-2 h-4 w-4" />Evolution</TabsTrigger>
-          <TabsTrigger value="performance" disabled={!selectedCampaign}><TrendingUp className="mr-2 h-4 w-4" />Performance</TabsTrigger>
-          {/* <TabsTrigger value="library" disabled><Library className="mr-2 h-4 w-4" />Content Library</TabsTrigger> */}
+        <TabsList className="grid w-full grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-1">
+          <TabsTrigger value="campaign-hub"><ListChecks className="mr-1 sm:mr-2 h-4 w-4" />Campaigns</TabsTrigger>
+          <TabsTrigger value="generator"><Lightbulb className="mr-1 sm:mr-2 h-4 w-4" />{selectedCampaignForEditingInForm ? "Edit" : "New"} Campaign</TabsTrigger>
+          <TabsTrigger value="debate" disabled={!selectedCampaignForProcessing && debateMessages.length === 0}><Users className="mr-1 sm:mr-2 h-4 w-4" />Debate</TabsTrigger>
+          <TabsTrigger value="preview" disabled={!selectedCampaignForProcessing && !multiFormatContent}><FileText className="mr-1 sm:mr-2 h-4 w-4" />Preview</TabsTrigger>
+          <TabsTrigger value="brand"><Sparkles className="mr-1 sm:mr-2 h-4 w-4" />Brand DNA</TabsTrigger>
+          <TabsTrigger value="evolution" disabled={!selectedCampaignForProcessing}><Activity className="mr-1 sm:mr-2 h-4 w-4" />Evolution</TabsTrigger>
+          <TabsTrigger value="performance" disabled={!selectedCampaignForProcessing}><TrendingUp className="mr-1 sm:mr-2 h-4 w-4" />Performance</TabsTrigger>
         </TabsList>
 
         <TabsContent value="campaign-hub" className="mt-6">
            <Card>
                 <CardHeader>
                     <CardTitle className="font-headline flex items-center gap-2"><ListChecks className="h-6 w-6 text-primary"/>Your Campaigns</CardTitle>
-                    <CardDescription>View, edit, or manage your existing content campaigns.</CardDescription>
+                    <CardDescription>View, edit, or manage your existing content campaigns. Select a campaign to start.</CardDescription>
                 </CardHeader>
                 <CardContent>
                     <CampaignList 
                         refreshTrigger={refreshCampaignListTrigger} 
-                        onCampaignSelect={handleCampaignSelection} 
+                        onCampaignSelect={handleCampaignSelectionFromList} 
                     />
                 </CardContent>
             </Card>
@@ -280,10 +314,10 @@ export default function DashboardPage() {
         
         <TabsContent value="generator" className="mt-6">
             <CampaignGenerator 
-                onCampaignCreated={handleNewCampaignCreated} 
+                onCampaignCreated={handleNewCampaignCreatedOrUpdated} 
                 onGenerateContentForCampaign={handleGenerateContentForCampaign}
                 isGenerating={isGeneratingCampaign}
-                // selectedCampaignForEdit={selectedCampaign} // TODO: Pass selected campaign for prefilling form
+                selectedCampaignForEdit={selectedCampaignForEditingInForm} 
             />
         </TabsContent>
 
@@ -291,17 +325,16 @@ export default function DashboardPage() {
              <AgentDebatePanel 
                 debateMessages={debateMessages} 
                 isDebating={isDebating} 
-                debateTopic={currentDebateTopic || selectedCampaign?.brief} 
+                debateTopic={currentDebateTopic || selectedCampaignForProcessing?.brief.substring(0,70)} 
              />
         </TabsContent>
         
         <TabsContent value="preview" className="mt-6">
             <MultiFormatPreview 
                 content={multiFormatContent} 
-                isLoading={isGeneratingCampaign && campaignStatus === 'generating' && !multiFormatContent} 
+                isLoading={isGeneratingCampaign && currentCampaignOverallStatus === 'generating' && !multiFormatContent} 
             />
         </TabsContent>
-
 
         <TabsContent value="brand" className="mt-6">
           <BrandDNAAnalyzer />
@@ -309,30 +342,19 @@ export default function DashboardPage() {
 
         <TabsContent value="evolution" className="mt-6">
             <ContentEvolutionTimeline 
-                campaignId={selectedCampaign?.id || "current"} 
-                contentVersions={selectedCampaign && multiFormatContent ? [{id: 'v1', text: JSON.stringify(multiFormatContent, null, 2), agentName: 'AI Team', timestamp: new Date(), changeSummary: 'Initial generation based on brief and debate.'}] : []} 
+                campaignId={selectedCampaignForProcessing?.id || "current"} 
+                // Mocked versions based on current multiFormatContent. Real app would fetch from DB.
+                contentVersions={selectedCampaignForProcessing && multiFormatContent ? [{id: 'v1', text: JSON.stringify(multiFormatContent, null, 2), agentName: 'AI Team', timestamp: new Date(), changeSummary: 'Initial generation based on brief and debate.'}] : []} 
             />
         </TabsContent>
 
         <TabsContent value="performance" className="mt-6">
             <PerformancePredictor 
-                campaignId={selectedCampaign?.id || "current"} 
-                contentToAnalyze={selectedCampaign ? multiFormatContent : null} 
+                campaignId={selectedCampaignForProcessing?.id || "current"} 
+                contentToAnalyze={selectedCampaignForProcessing ? multiFormatContent : null} 
             />
         </TabsContent>
         
-        {/* <TabsContent value="library" className="mt-6">
-            <Card>
-                <CardHeader>
-                    <CardTitle className="font-headline flex items-center gap-2"><Library className="h-6 w-6 text-primary"/>Content Library</CardTitle>
-                    <CardDescription>Manage and review all your generated content campaigns. (Feature coming soon)</CardDescription>
-                </CardHeader>
-                <CardContent className="h-64 flex flex-col items-center justify-center text-muted-foreground">
-                    <FileText size={48} className="mb-4"/>
-                    <p>This section will display a list of all your past and current campaigns.</p>
-                </CardContent>
-            </Card>
-        </TabsContent> */}
       </Tabs>
     </div>
   );

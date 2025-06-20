@@ -9,17 +9,17 @@ import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, Wand2, Lightbulb, Users, Target, Palette, FileUp, Save } from 'lucide-react';
-import type { Campaign } from '@/types/content'; // Assuming Campaign type includes all necessary fields
+import { Loader2, Wand2, Lightbulb, Users, Target, Palette, FileUp, Save, Paperclip } from 'lucide-react';
+import type { Campaign } from '@/types/content'; 
 
 interface CampaignGeneratorProps {
-  onCampaignCreated: (newCampaign: Campaign) => void; // Callback after a new campaign is saved
-  onGenerateContentForCampaign: (campaign: Campaign, brandVoice?: string) => Promise<void>; // Callback to start AI processing
-  isGenerating: boolean; // True if AI is currently processing (debating/generating content)
-  selectedCampaignForEdit?: Campaign | null; // Optional: for pre-filling the form
+  onCampaignCreated: (newCampaign: Campaign) => void; 
+  onGenerateContentForCampaign: (campaign: Campaign, brandVoice?: string) => Promise<void>; 
+  isGenerating: boolean; 
+  selectedCampaignForEdit?: Campaign | null; 
 }
 
-const availableTones = ["Formal", "Informal", "Playful", "Serious", "Witty", "Empathetic", "Authoritative", "Casual", "Professional", "Friendly"];
+const availableTones = ["Formal", "Informal", "Playful", "Serious", "Witty", "Empathetic", "Authoritative", "Casual", "Professional", "Friendly", "Bold", "Authentic"];
 const availableGoals = ["Brand Awareness", "Lead Generation", "Sales Conversion", "Engagement", "Education", "Community Building", "Website Traffic", "Product Launch"];
 
 
@@ -30,11 +30,11 @@ export function CampaignGenerator({
     selectedCampaignForEdit 
 }: CampaignGeneratorProps) {
   const [brief, setBrief] = useState('');
-  const [brandVoice, setBrandVoice] = useState(''); // This might be an override or input if no BrandDNA
+  const [brandVoice, setBrandVoice] = useState('');
   const [targetAudience, setTargetAudience] = useState('');
   const [tone, setTone] = useState('');
   const [contentGoals, setContentGoals] = useState<string[]>([]);
-  const [isSaving, setIsSaving] = useState(false); // For "Save Draft" or "Create Campaign" DB operation
+  const [isSaving, setIsSaving] = useState(false);
 
   const { toast } = useToast();
 
@@ -58,43 +58,45 @@ export function CampaignGenerator({
 
   const handleSaveCampaign = async (andStartGeneration: boolean = false) => {
     if (!brief.trim()) {
-      toast({ title: "Brief is empty", description: "Please provide a campaign brief.", variant: "destructive" });
+      toast({ title: "Brief is empty", description: "Please provide a campaign brief/description.", variant: "destructive" });
       return;
     }
     setIsSaving(true);
 
     const campaignData = {
-      brief,
+      id: selectedCampaignForEdit?.id, // Include ID if editing
+      brief: brief.trim(),
       targetAudience: targetAudience.trim() || undefined,
       tone: tone || undefined,
       contentGoals: contentGoals.length > 0 ? contentGoals : undefined,
-      // brandVoice will be handled by the parent, possibly fetched from BrandDNA
-      // id: selectedCampaignForEdit?.id // If editing, pass ID for update
     };
 
     try {
       // If selectedCampaignForEdit, it's an update (PUT), else it's a create (POST)
-      // For simplicity, this example focuses on creation. Update logic would be similar with a PUT request.
-      const response = await fetch('/api/campaigns', {
-        method: 'POST',
+      // For this example, we'll use POST for create and assume PUT for update would be on /api/campaigns/[id] or similar
+      const method = selectedCampaignForEdit ? 'PUT' : 'POST';
+      const url = selectedCampaignForEdit ? `/api/campaigns?id=${selectedCampaignForEdit.id}` : '/api/campaigns';
+
+      const response = await fetch(url, {
+        method: method,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(campaignData),
       });
 
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to save campaign');
+        throw new Error(errorData.error || `Failed to save campaign (${method})`);
       }
-      const newCampaign: Campaign = await response.json();
+      const savedCampaign: Campaign = await response.json();
       
-      toast({ title: "Campaign Saved!", description: "Your campaign brief has been saved." });
-      onCampaignCreated(newCampaign); // Notify parent about the new/updated campaign
+      toast({ title: `Campaign ${selectedCampaignForEdit ? "Updated" : "Saved"}!`, description: `Your campaign brief has been ${selectedCampaignForEdit ? "updated" : "saved"}.` });
+      onCampaignCreated(savedCampaign); 
 
       if (andStartGeneration) {
-        await onGenerateContentForCampaign(newCampaign, brandVoice.trim() || undefined);
-      } else {
-        // Reset form if not starting generation immediately, or clear for next new one
-        // setBrief(''); setTargetAudience(''); setTone(''); setContentGoals([]); setBrandVoice('');
+        await onGenerateContentForCampaign(savedCampaign, brandVoice.trim() || undefined);
+      } else if (!selectedCampaignForEdit) { 
+        // Reset form only if creating a new campaign and not immediately generating
+        setBrief(''); setTargetAudience(''); setTone(''); setContentGoals([]); setBrandVoice('');
       }
 
     } catch (error) {
@@ -116,7 +118,7 @@ export function CampaignGenerator({
         <CardDescription>
             {selectedCampaignForEdit 
                 ? "Update the details for your campaign. Agents will use this information."
-                : "Describe your campaign goals, target audience, and key messages. Our AI agents will take it from there."
+                : "Describe your campaign, target audience, tone, and goals. Our AI agents will take it from there."
             }
         </CardDescription>
       </CardHeader>
@@ -149,7 +151,7 @@ export function CampaignGenerator({
             <Label htmlFor="tone" className="text-base flex items-center gap-1"><Palette className="h-4 w-4"/>Tone</Label>
             <Select value={tone} onValueChange={setTone}>
               <SelectTrigger id="tone" className="text-base">
-                <SelectValue placeholder="Select tone (e.g., Playful)" />
+                <SelectValue placeholder="Select tone (e.g., Playful, Bold)" />
               </SelectTrigger>
               <SelectContent>
                 {availableTones.map(t => <SelectItem key={t} value={t.toLowerCase()}>{t}</SelectItem>)}
@@ -159,7 +161,7 @@ export function CampaignGenerator({
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="content-goals" className="text-base flex items-center gap-1"><Target className="h-4 w-4"/>Content Goals (Max 3)</Label>
+          <Label htmlFor="content-goals" className="text-base flex items-center gap-1"><Target className="h-4 w-4"/>Content Goals (Select up to 3)</Label>
            <Select onValueChange={(value) => {
               const newGoals = contentGoals.includes(value) ? contentGoals.filter(g => g !== value) : [...contentGoals, value];
               if (newGoals.length <= 3) setContentGoals(newGoals);
@@ -172,12 +174,27 @@ export function CampaignGenerator({
             </SelectTrigger>
             <SelectContent>
                 {availableGoals.map(goal => (
-                    <SelectItem key={goal} value={goal} disabled={contentGoals.length >=3 && !contentGoals.includes(goal)}>
+                    <SelectItem 
+                        key={goal} 
+                        value={goal} 
+                        disabled={contentGoals.length >=3 && !contentGoals.includes(goal)}
+                        onPointerDown={(e) => e.preventDefault()} // Prevents closing on item click for multi-select like behavior
+                        onClick={() => { // Manages selection state
+                            const newGoals = contentGoals.includes(goal) ? contentGoals.filter(g => g !== goal) : [...contentGoals, goal];
+                             if (newGoals.length <= 3) setContentGoals(newGoals);
+                             else toast({ title: "Goal Limit Reached", description: "You can select up to 3 goals.", variant: "default"});
+                        }}
+                    >
                         {goal} {contentGoals.includes(goal) ? ' ✓' : ''}
                     </SelectItem>
                 ))}
             </SelectContent>
           </Select>
+          {contentGoals.length > 0 && (
+            <div className="pt-2 text-sm text-muted-foreground">
+                Selected: {contentGoals.join(', ')}
+            </div>
+          )}
         </div>
         
         <div className="space-y-2">
@@ -193,6 +210,23 @@ export function CampaignGenerator({
             If a Brand DNA analysis was performed, its voice profile will be used. You can provide specific voice instructions here to override or augment it for this campaign.
           </p>
         </div>
+
+        <div className="space-y-2">
+            <Label htmlFor="reference-materials" className="text-base flex items-center gap-1">
+                <Paperclip className="h-4 w-4" /> Reference Materials (Optional)
+            </Label>
+            <Input 
+                id="reference-materials" 
+                type="file" 
+                multiple 
+                disabled // File upload requires more backend setup
+                className="text-base"
+            />
+            <p className="text-xs text-muted-foreground">
+                Upload PDFs, URLs, or documents. (File upload functionality is planned for a future update).
+            </p>
+        </div>
+
       </CardContent>
       <CardFooter className="flex flex-col sm:flex-row justify-end gap-3 pt-6">
         <Button 
@@ -206,7 +240,7 @@ export function CampaignGenerator({
         </Button>
         <Button 
             onClick={() => handleSaveCampaign(true)} 
-            disabled={isSaving || isGenerating} 
+            disabled={isSaving || isGenerating || !brief.trim()} 
             size="lg" 
             className="w-full sm:w-auto"
         >

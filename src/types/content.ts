@@ -28,8 +28,9 @@ export type ContentFormat =
 export type CampaignStatus = 'draft' | 'debating' | 'generating' | 'review' | 'published' | 'archived';
 
 export interface Campaign {
+  _id?: any; // MongoDB ObjectId
   id: string;
-  brief: string;
+  brief: string; // Serves as title/main description
   targetAudience?: string;
   tone?: string;
   contentGoals?: string[];
@@ -52,3 +53,4 @@ export interface MultiFormatContent {
   adsCopy?: string;
   [key: string]: string | undefined; // For additional formats
 }
+
