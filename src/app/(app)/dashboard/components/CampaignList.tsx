@@ -21,7 +21,7 @@ import {
 
 
 interface CampaignListProps {
-  refreshTrigger: number; // Increment to trigger a re-fetch
+  refreshTrigger: number; 
   onCampaignSelect: (campaignId: string | null, action: 'view' | 'edit') => void;
   currentlySelectedCampaignId?: string | null;
 }
@@ -82,17 +82,16 @@ export function CampaignList({ refreshTrigger, onCampaignSelect, currentlySelect
       });
       if (!response.ok) {
         const errorData = await response.json();
-        setCampaigns(originalCampaigns); // Revert optimistic update
+        setCampaigns(originalCampaigns); 
         throw new Error(errorData.error || 'Failed to delete campaign');
       }
       toast({ title: "Campaign Deleted", description: `"${campaignTitleForToast}" has been successfully deleted.` });
       
-      // If the deleted campaign was the one currently selected in the dashboard, clear the selection.
       if (currentlySelectedCampaignId === campaignIdToDelete) {
         onCampaignSelect(null, 'view'); 
       }
     } catch (err) {
-      setCampaigns(originalCampaigns); // Revert optimistic update
+      setCampaigns(originalCampaigns); 
       const errorMessage = err instanceof Error ? err.message : "An unknown error occurred during deletion.";
       toast({ title: "Error Deleting Campaign", description: errorMessage, variant: "destructive" });
     } finally {
@@ -127,7 +126,7 @@ export function CampaignList({ refreshTrigger, onCampaignSelect, currentlySelect
     );
   }
 
-  if (campaigns.length === 0) {
+  if (campaigns.length === 0 && !isLoading) {
     return (
       <Alert>
         <Info className="h-5 w-5" />

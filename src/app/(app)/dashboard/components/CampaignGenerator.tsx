@@ -115,14 +115,9 @@ export function CampaignGenerator({
       isPrivate: isPrivate,
     };
     
-    // Determine status based on current state and action
     if (selectedCampaignForEdit) {
-      campaignDataPayload.status = selectedCampaignForEdit.status; // Keep current status if just saving edits
-      if (shouldStartGeneration) {
-        // If regenerating, the flow will set to 'debating' etc.
-        // No specific status change needed here, but could ensure it's not 'published' or 'archived' if needed
-      }
-    } else { // New campaign
+      campaignDataPayload.status = selectedCampaignForEdit.status; 
+    } else { 
         campaignDataPayload.status = 'draft';
     }
 

@@ -28,7 +28,6 @@ const mapCampaignDocumentToCampaign = (campaignDoc: Omit<Campaign, 'id'> & { _id
 };
 
 
-// GET /api/campaigns - List all campaigns for the authenticated user OR a single campaign
 export async function GET(request: NextRequest) {
   try {
     const token = await getToken({ req: request, secret: process.env.NEXTAUTH_SECRET });
@@ -68,7 +67,6 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// POST /api/campaigns - Create a new campaign
 export async function POST(request: NextRequest) {
   try {
     const token = await getToken({ req: request, secret: process.env.NEXTAUTH_SECRET });
@@ -123,7 +121,6 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// PUT /api/campaigns?id=<campaignId> - Update an existing campaign
 export async function PUT(request: NextRequest) {
   try {
     const token = await getToken({ req: request, secret: process.env.NEXTAUTH_SECRET });
@@ -146,7 +143,6 @@ export async function PUT(request: NextRequest) {
     
     const updateData: Partial<Omit<Campaign, 'id' | '_id' | 'userId' | 'createdAt'>> = { updatedAt: new Date() };
     
-    // Explicitly handle each field to avoid unintended overwrites with undefined
     if (body.title !== undefined) updateData.title = body.title;
     if (body.brief !== undefined) updateData.brief = body.brief;
     if (body.targetAudience !== undefined) updateData.targetAudience = body.targetAudience === null ? undefined : body.targetAudience;
@@ -212,7 +208,6 @@ export async function PUT(request: NextRequest) {
 }
 
 
-// DELETE /api/campaigns?id=<campaignId> - Delete a campaign
 export async function DELETE(request: NextRequest) {
   try {
     const token = await getToken({ req: request, secret: process.env.NEXTAUTH_SECRET });
