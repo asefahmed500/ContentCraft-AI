@@ -10,15 +10,15 @@ import { Button } from '@/components/ui/button';
 import { Activity, Bot, Edit3, Clock, Eye, GitCompareArrows, History, User } from 'lucide-react';
 import { formatDistanceToNow, format } from 'date-fns';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-
+import { useToast } from '@/hooks/use-toast';
 
 interface ContentEvolutionTimelineProps {
   versions: ContentVersion[];
-  onViewVersion: (version: ContentVersion) => void; // Make sure this is actively used
+  onViewVersion: (version: ContentVersion) => void;
 }
 
 export function ContentEvolutionTimeline({ versions, onViewVersion }: ContentEvolutionTimelineProps) {
-
+  const { toast } = useToast();
   const sortedVersions = versions.slice().sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
 
   const getActorIcon = (actorName: string) => {
@@ -32,6 +32,19 @@ export function ContentEvolutionTimeline({ versions, onViewVersion }: ContentEvo
     return <Edit3 className="h-5 w-5 text-muted-foreground" />;
   };
 
+  const handleCompareVersions = () => {
+    toast({
+      title: "Compare Versions (Coming Soon)",
+      description: "Next step: Implement a side-by-side diff view for selected versions.",
+    });
+  };
+
+  const handleRevertToVersion = () => {
+    toast({
+      title: "Revert to Version (Coming Soon)",
+      description: "Next step: Implement logic to revert campaign content to this snapshot.",
+    });
+  };
 
   return (
     <TooltipProvider>
@@ -85,22 +98,22 @@ export function ContentEvolutionTimeline({ versions, onViewVersion }: ContentEvo
                          )}
                           <Tooltip>
                             <TooltipTrigger asChild>
-                              <Button variant="outline" size="sm" disabled>
+                              <Button variant="outline" size="sm" onClick={handleCompareVersions}>
                                 <GitCompareArrows className="mr-1 h-3.5 w-3.5" /> Compare
                               </Button>
                             </TooltipTrigger>
                             <TooltipContent>
-                              <p>Compare with previous version (Coming Soon)</p>
+                              <p>Compare with previous version</p>
                             </TooltipContent>
                           </Tooltip>
                            <Tooltip>
                             <TooltipTrigger asChild>
-                              <Button variant="outline" size="sm" disabled>
+                              <Button variant="outline" size="sm" onClick={handleRevertToVersion}>
                                 <History className="mr-1 h-3.5 w-3.5" /> Revert
                               </Button>
                             </TooltipTrigger>
                             <TooltipContent>
-                              <p>Revert to this version (Coming Soon)</p>
+                              <p>Revert to this version</p>
                             </TooltipContent>
                           </Tooltip>
                       </div>

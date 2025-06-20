@@ -4,7 +4,7 @@
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { BarChartBig, Loader2, TrendingUp, AlertTriangle, FileText, Info, Percent, MousePointerClick, Users } from 'lucide-react'; // Updated BarChart to BarChartBig
+import { BarChartBig, Loader2, TrendingUp, AlertTriangle, FileText, Info, Percent, MousePointerClick, Users, Wand2 } from 'lucide-react'; // Updated BarChart to BarChartBig
 import { useToast } from '@/hooks/use-toast';
 import type { MultiFormatContent } from '@/types/content';
 import {ResponsiveContainer, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, BarChart as RechartsBarChart } from 'recharts';
@@ -34,6 +34,8 @@ async function predictPerformanceAPI(content: MultiFormatContent): Promise<Recor
 interface PerformancePredictorProps {
   campaignId: string | undefined; 
   contentToAnalyze: MultiFormatContent | null;
+  onGenerateContentRequest: () => void; // Callback to request content generation
+  currentCampaignStatus?: string;
 }
 
 type PredictionData = {
@@ -45,7 +47,7 @@ type PredictionData = {
 };
 
 
-export function PerformancePredictor({ campaignId, contentToAnalyze }: PerformancePredictorProps) {
+export function PerformancePredictor({ campaignId, contentToAnalyze, onGenerateContentRequest, currentCampaignStatus }: PerformancePredictorProps) {
   const [predictions, setPredictions] = useState<PredictionData[] | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -103,11 +105,24 @@ export function PerformancePredictor({ campaignId, contentToAnalyze }: Performan
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
-        {!hasContentToAnalyze ? (
-           <div className="flex flex-col items-center justify-center h-64 text-muted-foreground">
-            <Info size={48} className="mb-4" />
-            <p>No content available to analyze.</p>
-            <p className="text-sm">Generate content for a campaign first to enable predictions.</p>
+        {!campaignId ? (
+            <div className="flex flex-col items-center justify-center min-h-[200px] text-muted-foreground">
+                <Info size={48} className="mb-4" />
+                <p>Please select a campaign to predict its performance.</p>
+            </div>
+        ) : !hasContentToAnalyze ? (
+           <div className="flex flex-col items-center justify-center min-h-[200px] text-muted-foreground text-center">
+            <FileText size={48} className="mb-4" />
+            <p className="mb-4">No content available to analyze for the current campaign.</p>
+            {currentCampaignStatus === 'draft' || currentCampaignStatus === 'review' && (
+                 <Button onClick={onGenerateContentRequest} variant="default">
+                    <Wand2 className="mr-2 h-4 w-4" />
+                    Generate Content Now
+                </Button>
+            )}
+             {(currentCampaignStatus === 'generating' || currentCampaignStatus === 'debating') && (
+                <p className="text-sm flex items-center gap-2"><Loader2 className="h-4 w-4 animate-spin" /> Content generation in progress...</p>
+             )}
           </div>
         ) : (
              <Button onClick={fetchPredictions} disabled={isLoading || !hasContentToAnalyze}>
@@ -131,7 +146,7 @@ export function PerformancePredictor({ campaignId, contentToAnalyze }: Performan
           </div>
         )}
 
-        {!isLoading && !error && predictions && predictions.length > 0 && (
+        {!isLoading && !error && predictions && predictions.length > 0 && hasContentToAnalyze && (
           <div className="space-y-4 pt-4">
             <h3 className="font-semibold text-lg">Predicted Metrics:</h3>
              <ResponsiveContainer width="100%" height={350}>
@@ -174,7 +189,7 @@ export function PerformancePredictor({ campaignId, contentToAnalyze }: Performan
             </div>
         )}
 
-         {!isLoading && !error && predictions === null && hasContentToAnalyze && (
+         {!isLoading && !error && predictions === null && hasContentToAnalyze && campaignId && (
             <div className="flex flex-col items-center justify-center h-64 text-muted-foreground">
                 <FileText size={48} className="mb-4" />
                 <p>Click "Predict Performance" to see estimated metrics for the current content.</p>

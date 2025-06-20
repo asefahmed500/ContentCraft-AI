@@ -22,7 +22,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Separator } from '@/components/ui/separator';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Fingerprint, Users, Bot, Library, FileText, Activity, TrendingUp, BadgeCheck, ListChecks, Lightbulb, Edit, MessageSquareWarning, ShieldCheck, SearchCheck, Brain, BarChartBig, CalendarDays, TestTubeDual } from 'lucide-react';
+import { Fingerprint, Users, Bot, Library, FileText, Activity, TrendingUp, BadgeCheck, ListChecks, Lightbulb, Edit, MessageSquareWarning, ShieldCheck, SearchCheck, Brain, BarChartBig, CalendarDays, TestTubeDual, Wand2 } from 'lucide-react';
 
 async function agentDebateAction(input: AgentDebateInput): Promise<AgentDebateOutput | { error: string }> {
   try {
@@ -85,12 +85,10 @@ export default function DashboardPage() {
     setRefreshCampaignListTrigger(prev => prev + 1); 
     setSelectedCampaignForProcessing(campaign); 
     setSelectedCampaignForEditingInForm(null); 
-    // setActiveTab('campaign-hub'); // Commented out to stay on generator or move to preview later
     
-    // If it's a new campaign or a different campaign was edited, clear previous multiFormatContent
     if (!selectedCampaignForEditingInForm || selectedCampaignForEditingInForm.id !== campaign.id) {
         setMultiFormatContent(null);
-    } else { // If the same campaign was edited, update its preview
+    } else { 
         const latestVersion = campaign.contentVersions && campaign.contentVersions.length > 0 
             ? campaign.contentVersions.sort((a,b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())[0]
             : null;
@@ -100,13 +98,12 @@ export default function DashboardPage() {
   
   const persistCurrentCampaignUpdates = useCallback(async (campaignToPersist?: Campaign | null) => {
     const campaign = campaignToPersist || selectedCampaignForProcessing;
-    if (!campaign || !campaign.id) return campaign; // Return null or the campaign if no ID
+    if (!campaign || !campaign.id) return campaign; 
 
-    // Ensure all date fields are actual Date objects before sending
     const sanitizedCampaign = {
         ...campaign,
         createdAt: campaign.createdAt ? new Date(campaign.createdAt) : new Date(),
-        updatedAt: new Date(), // Always set updatedAt to current time on save
+        updatedAt: new Date(), 
         agentDebates: (campaign.agentDebates || []).map(ad => ({...ad, timestamp: ad.timestamp ? new Date(ad.timestamp) : new Date()})),
         contentVersions: (campaign.contentVersions || []).map(cv => ({...cv, timestamp: cv.timestamp ? new Date(cv.timestamp) : new Date()})),
         scheduledPosts: (campaign.scheduledPosts || []).map(sp => ({...sp, scheduledAt: sp.scheduledAt ? new Date(sp.scheduledAt) : new Date()})),
@@ -116,11 +113,11 @@ export default function DashboardPage() {
     const result = await updateCampaignAPI(campaign.id, sanitizedCampaign);
     if ('error' in result) {
         toast({ title: "Failed to Save Campaign Updates", description: result.error, variant: "destructive"});
-        return campaign; // Return original campaign on error
+        return campaign; 
     } else {
         setSelectedCampaignForProcessing(result); 
         setRefreshCampaignListTrigger(prev => prev + 1); 
-        return result; // Return updated campaign
+        return result; 
     }
   }, [selectedCampaignForProcessing, toast]);
 
@@ -141,12 +138,10 @@ export default function DashboardPage() {
         ...campaign, 
         status: 'debating' as CampaignStatus, 
         agentDebates: [], 
-        contentVersions: campaign.contentVersions || [] // Preserve existing versions if any (e.g. re-generating)
+        contentVersions: campaign.contentVersions || [] 
     };
-    // Clear previous live content for this new generation cycle
     setMultiFormatContent(null); 
     
-    // Persist initial "debating" status
     currentCampaignState = await persistCurrentCampaignUpdates(currentCampaignState) || currentCampaignState;
     setSelectedCampaignForProcessing(currentCampaignState);
     
@@ -228,7 +223,7 @@ export default function DashboardPage() {
       const errorMessage = error instanceof Error ? error.message : "An unknown error occurred.";
       toast({ title: "Campaign Generation Failed", description: errorMessage, variant: "destructive" });
        if (selectedCampaignForProcessing && selectedCampaignForProcessing.id) { 
-            const tempCamp = {...selectedCampaignForProcessing, status: 'draft' as CampaignStatus, agentDebates: selectedCampaignForProcessing.agentDebates || [], contentVersions: selectedCampaignForProcessing.contentVersions || []}; // Keep existing debates/versions if error occurs mid-process
+            const tempCamp = {...selectedCampaignForProcessing, status: 'draft' as CampaignStatus, agentDebates: selectedCampaignForProcessing.agentDebates || [], contentVersions: selectedCampaignForProcessing.contentVersions || []}; 
             setSelectedCampaignForProcessing(tempCamp);
             await persistCurrentCampaignUpdates(tempCamp);
        }
@@ -251,16 +246,11 @@ export default function DashboardPage() {
 
     if (!campaignId) {
       setSelectedCampaignForProcessing(null);
-      // Do not change tab if just clearing selection, user might be on 'generator' tab
-      // setActiveTab('campaign-hub'); 
       return;
     }
 
     try {
-      // It's better to fetch the specific campaign directly if possible, or find from a list if already fetched by CampaignList
-      // For now, assuming CampaignList provides enough data or we refetch.
-      // This is a simplified fetch, ideally CampaignList would pass the full campaign object.
-      const campaignsResponse = await fetch(`/api/campaigns`); // This fetches all, inefficient.
+      const campaignsResponse = await fetch(`/api/campaigns`); 
       if (!campaignsResponse.ok) throw new Error("Failed to fetch campaigns to find the selected one.");
       const campaigns: Campaign[] = await campaignsResponse.json();
       const campaignToSelect = campaigns.find(c => c.id === campaignId);
@@ -283,17 +273,17 @@ export default function DashboardPage() {
 
         if (latestVersion) {
              toast({ title: "Viewing Campaign", description: `Displaying latest content for "${campaignToSelect.title}".`});
-             setMultiFormatContent(latestVersion.multiFormatContentSnapshot); // Ensure preview updates
+             setMultiFormatContent(latestVersion.multiFormatContentSnapshot); 
              setActiveTab('preview');
         } else if (['draft', 'debating', 'generating'].includes(campaignToSelect.status) ) {
             toast({ title: `Campaign Status: ${campaignToSelect.status}`, description: `Generate content for "${campaignToSelect.title}" or edit the brief.`});
             setSelectedCampaignForEditingInForm(campaignToSelect); 
-            setMultiFormatContent(null); // Clear preview for draft/generating
+            setMultiFormatContent(null); 
             setActiveTab('generator');
         } else { 
             toast({ title: "Viewing Campaign", description: `No content versions found for "${campaignToSelect.title}". Consider re-generating or editing.`});
             setSelectedCampaignForEditingInForm(campaignToSelect);
-            setMultiFormatContent(null); // Clear preview
+            setMultiFormatContent(null); 
             setActiveTab('generator');
         }
       }
@@ -328,7 +318,7 @@ export default function DashboardPage() {
         setMultiFormatContent(null);
         setIsDebating(false);
         setIsGeneratingCampaign(false);
-        setSelectedCampaignForEditingInForm(null); // Clear edit form if no campaign is selected
+        setSelectedCampaignForEditingInForm(null); 
     }
   }, [selectedCampaignForProcessing]);
 
@@ -363,6 +353,15 @@ export default function DashboardPage() {
   const hasContentForPreview = multiFormatContent && Object.values(multiFormatContent).some(v => v && typeof v === 'string' && v.length > 0);
   const hasContentForPerformance = multiFormatContent && Object.values(multiFormatContent).some(v => v && typeof v === 'string' && v.length > 0);
 
+  const handleRequestContentGenerationForPerformance = () => {
+    if (selectedCampaignForProcessing) {
+        handleGenerateContentForCampaign(selectedCampaignForProcessing);
+        setActiveTab('preview'); // Switch to preview after initiating generation
+    } else {
+        toast({title: "No Campaign Selected", description: "Please select or create a campaign first.", variant: "destructive"});
+    }
+  };
+
 
   return (
     <div className="space-y-8">
@@ -391,7 +390,7 @@ export default function DashboardPage() {
           <TabsTrigger value="debate" className="text-xs sm:text-sm" disabled={!selectedCampaignForProcessing || (campaignStatus === 'draft' && debateMessages.length === 0) }><Users className="mr-1 sm:mr-2 h-3 w-3 sm:h-4 sm:w-4" />War Room</TabsTrigger>
           <TabsTrigger value="preview" className="text-xs sm:text-sm" disabled={!selectedCampaignForProcessing || !hasContentForPreview}><FileText className="mr-1 sm:mr-2 h-3 w-3 sm:h-4 sm:w-4" />Preview</TabsTrigger>
           <TabsTrigger value="evolution" className="text-xs sm:text-sm" disabled={!selectedCampaignForProcessing || contentVersions.length === 0}><Activity className="mr-1 sm:mr-2 h-3 w-3 sm:h-4 sm:w-4" />Evolution</TabsTrigger>
-          <TabsTrigger value="performance" className="text-xs sm:text-sm" disabled={!selectedCampaignForProcessing || !hasContentForPerformance}><BarChartBig className="mr-1 sm:mr-2 h-3 w-3 sm:h-4 sm:w-4" />Performance</TabsTrigger>
+          <TabsTrigger value="performance" className="text-xs sm:text-sm" disabled={!selectedCampaignForProcessing}><BarChartBig className="mr-1 sm:mr-2 h-3 w-3 sm:h-4 sm:w-4" />Performance</TabsTrigger>
           <TabsTrigger value="ab-testing" className="text-xs sm:text-sm" disabled={!selectedCampaignForProcessing}><TestTubeDual className="mr-1 sm:mr-2 h-3 w-3 sm:h-4 sm:w-4" />A/B Tests</TabsTrigger>
           <TabsTrigger value="calendar" className="text-xs sm:text-sm"><CalendarDays className="mr-1 sm:mr-2 h-3 w-3 sm:h-4 sm:w-4" />Calendar</TabsTrigger>
         </TabsList>
@@ -462,7 +461,9 @@ export default function DashboardPage() {
         <TabsContent value="performance" className="mt-6">
             <PerformancePredictor 
                 campaignId={selectedCampaignForProcessing?.id} 
-                contentToAnalyze={multiFormatContent} 
+                contentToAnalyze={multiFormatContent}
+                onGenerateContentRequest={handleRequestContentGenerationForPerformance}
+                currentCampaignStatus={campaignStatus}
             />
         </TabsContent>
 

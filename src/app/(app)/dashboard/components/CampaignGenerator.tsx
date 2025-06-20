@@ -105,6 +105,7 @@ export function CampaignGenerator({
       tone: tone || undefined,
       contentGoals: contentGoals.length > 0 ? contentGoals : undefined,
       isPrivate: isPrivate,
+      // referenceMaterials will be handled if a proper upload mechanism is implemented
     };
 
     try {
@@ -145,7 +146,7 @@ export function CampaignGenerator({
     setReferenceFiles(e.target.files);
     if (e.target.files && e.target.files.length > 0) {
         const fileNames = Array.from(e.target.files).map(f => f.name).join(', ');
-        toast({title: "Files Selected (Simulated)", description: `Selected: ${fileNames}. Full upload & processing for PDF/links is a planned feature.`});
+        toast({title: "Files Selected (Simulated)", description: `Selected: ${fileNames}. Full upload, parsing, and AI processing for these files are planned features.`});
     }
   };
 
@@ -153,7 +154,7 @@ export function CampaignGenerator({
     if (e.target.files && e.target.files[0]) {
         setVideoFile(e.target.files[0]);
         setVideoUrl(''); // Clear URL if file is selected
-        toast({title: "Video File Selected", description: `Selected: ${e.target.files[0].name}. This is a UI placeholder.`});
+        toast({title: "Video File Selected", description: `Selected: ${e.target.files[0].name}. This is a UI placeholder for video analysis.`});
     }
   };
 
@@ -209,7 +210,6 @@ Please review and refine this extracted information and the suggestions above to
     setIsProcessingVideo(false);
     setVideoUrl('');
     setVideoFile(null);
-    // Clear file input visually if possible (complex, often needs a ref or key change)
     const videoFileInput = document.getElementById('video-file-input') as HTMLInputElement;
     if (videoFileInput) videoFileInput.value = '';
   };
@@ -231,7 +231,7 @@ Please review and refine this extracted information and the suggestions above to
       </CardHeader>
       <CardContent className="space-y-6">
         <div className="space-y-2">
-          <Label htmlFor="campaign-title" className="text-base flex items-center gap-1"><Tag className="h-4 w-4"/>Campaign Name*</Label>
+          <Label htmlFor="campaign-title" className="text-base flex items-center gap-1"><Tag className="mr-1 h-4 w-4"/>Campaign Name*</Label>
           <Input
             id="campaign-title"
             placeholder="e.g., Spring Collection Launch, Q4 SaaS Promotion"
@@ -271,7 +271,7 @@ Please review and refine this extracted information and the suggestions above to
                 <Input 
                     id="video-file-input"
                     type="file"
-                    accept="video/mp4,video/quicktime,video/x-msvideo,video/webm" // Common video formats
+                    accept="video/mp4,video/quicktime,video/x-msvideo,video/webm" 
                     onChange={handleVideoFileChange}
                     disabled={isProcessingVideo || !!videoUrl.trim()} 
                 />
@@ -292,7 +292,7 @@ Please review and refine this extracted information and the suggestions above to
 
         <div className="space-y-4">
             <div className="space-y-2">
-                <Label htmlFor="import-url" className="text-base flex items-center gap-1"><Link2 className="h-4 w-4"/>Import Content from URL (Optional)</Label>
+                <Label htmlFor="import-url" className="text-base flex items-center gap-1"><Link2 className="mr-1 h-4 w-4"/>Import Content from URL (Optional)</Label>
                 <div className="flex items-center space-x-2">
                     <Input
                         id="import-url"
@@ -315,7 +315,7 @@ Please review and refine this extracted information and the suggestions above to
             <Separator />
 
             <div className="space-y-2">
-              <Label htmlFor="campaign-brief" className="text-base flex items-center gap-1"><Info className="h-4 w-4"/>Product or Service Description*</Label>
+              <Label htmlFor="campaign-brief" className="text-base flex items-center gap-1"><Info className="mr-1 h-4 w-4"/>Product or Service Description*</Label>
               <Textarea
                 id="campaign-brief"
                 placeholder="Describe the product, service, or topic this campaign is about. e.g., Our new line of eco-friendly yoga mats... This field can be auto-populated by the import features above."
@@ -332,7 +332,7 @@ Please review and refine this extracted information and the suggestions above to
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="space-y-2">
-            <Label htmlFor="target-audience" className="text-base flex items-center gap-1"><Users className="h-4 w-4"/>Target Audience</Label>
+            <Label htmlFor="target-audience" className="text-base flex items-center gap-1"><Users className="mr-1 h-4 w-4"/>Target Audience</Label>
             <Input
               id="target-audience"
               placeholder="e.g., Gen Z, Millennial Moms, B2B Tech Decision Makers"
@@ -342,7 +342,7 @@ Please review and refine this extracted information and the suggestions above to
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="tone" className="text-base flex items-center gap-1"><Palette className="h-4 w-4"/>Desired Tone</Label>
+            <Label htmlFor="tone" className="text-base flex items-center gap-1"><Palette className="mr-1 h-4 w-4"/>Desired Tone</Label>
             <Select value={tone} onValueChange={setTone}>
               <SelectTrigger id="tone" className="text-base">
                 <SelectValue placeholder="Select tone (e.g., Playful, Bold)" />
@@ -355,7 +355,7 @@ Please review and refine this extracted information and the suggestions above to
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="content-goals" className="text-base flex items-center gap-1"><Target className="h-4 w-4"/>Content Goals (Select up to 3)</Label>
+          <Label htmlFor="content-goals" className="text-base flex items-center gap-1"><Target className="mr-1 h-4 w-4"/>Content Goals (Select up to 3)</Label>
            <Select onValueChange={(value) => { /* This select is used for display only, logic is in items */ }}>
             <SelectTrigger id="content-goals" className="text-base h-auto min-h-10 py-2">
                 <SelectValue placeholder="Select up to 3 goals">
@@ -400,7 +400,7 @@ Please review and refine this extracted information and the suggestions above to
             className="text-base"
           />
           <p className="text-xs text-muted-foreground">
-            If a Brand DNA analysis was performed, its voice profile will be used by default. You can provide specific voice instructions here to override or augment it for this campaign.
+            Provide specific voice instructions here to guide the AI for this campaign. This will be used by default. If a Brand DNA profile exists (from the Brand DNA Analyzer tab), these instructions can augment or override it for this specific campaign's content generation.
           </p>
         </div>
 
@@ -430,7 +430,7 @@ Please review and refine this extracted information and the suggestions above to
 
         <div className="space-y-2">
             <Label htmlFor="reference-materials" className="text-base flex items-center gap-1">
-                <Paperclip className="mr-2 h-4 w-4" /> Upload PDFs or Links (Reference Materials)
+                <Paperclip className="mr-1 h-4 w-4" /> Upload PDFs or Links (Reference Materials)
             </Label>
             <Input 
                 id="reference-materials" 
@@ -438,8 +438,7 @@ Please review and refine this extracted information and the suggestions above to
                 multiple 
                 onChange={handleFileChange}
                 className="text-base"
-                accept=".pdf, .txt, .md, .doc, .docx" 
-                disabled 
+                accept=".pdf,.txt,.md,.doc,.docx"
             />
              {referenceFiles && referenceFiles.length > 0 && (
                 <div className="pt-2 text-sm text-muted-foreground">
@@ -447,7 +446,7 @@ Please review and refine this extracted information and the suggestions above to
                 </div>
              )}
             <p className="text-xs text-muted-foreground">
-                (File upload & URL parsing for AI processing (e.g. to GCS/GridFS & Gemini analysis) is a planned feature and currently simulated for UI. Files are not uploaded. Use the URL/Video import above for brief generation).
+                (Optional) Upload supporting documents. Full parsing & AI processing for these files are planned features. Currently, this is a UI placeholder for file selection.
             </p>
         </div>
 

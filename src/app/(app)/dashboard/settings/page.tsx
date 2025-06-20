@@ -17,6 +17,9 @@ export default function SettingsPage() {
   
   const [userName, setUserName] = useState("");
   const [userEmail, setUserEmail] = useState(""); // Email might not be editable
+  const [isSavingProfile, setIsSavingProfile] = useState(false);
+  const [isSendingInvite, setIsSendingInvite] = useState(false);
+
 
   useEffect(() => {
     if (user) {
@@ -27,21 +30,36 @@ export default function SettingsPage() {
 
   const handleProfileSave = async (e: React.FormEvent) => {
     e.preventDefault();
+    setIsSavingProfile(true);
     // In a real app, you'd call an API to update the user's profile
     // For example: /api/user/profile with { name: userName, currentPassword, newPassword }
     // This might also involve re-fetching session or updating NextAuth session if name changes.
     // For password changes, ensure backend handles verification and secure update.
-    toast({ title: "Profile Update (Simulated)", description: `If password fields were filled, a change would be attempted. Name would be updated to: ${userName}.` });
+    await new Promise(resolve => setTimeout(resolve, 1000)); // Simulate API call
+    toast({ 
+      title: "Profile Update (Simulated)", 
+      description: `Name update to "${userName}" is simulated. Password changes would require a secure backend process and are also simulated here. No actual data has been changed on the server.` 
+    });
+    setIsSavingProfile(false);
   };
 
-  const handleInviteUser = (e: React.FormEvent) => {
+  const handleInviteUser = async (e: React.FormEvent) => {
     e.preventDefault();
+    setIsSendingInvite(true);
     const target = e.target as typeof e.target & { email: { value: string }; role: { value: string } };
-    toast({ title: "Invitation Sent (Simulated)", description: `User ${target.email.value} invited as ${target.role.value}. A real system would email them and add to a 'teams' or 'invitations' collection.`});
-    // Reset form or clear inputs here if needed
+    const invitedEmail = target.email.value;
+    const invitedRole = target.role.value;
+
+    await new Promise(resolve => setTimeout(resolve, 1000)); // Simulate API call
+    
+    toast({ 
+        title: "Invitation Sent (Simulated)", 
+        description: `User ${invitedEmail} invited as ${invitedRole}. In a real system, an email would be sent, and the user would be added to a 'teams' or 'invitations' collection. This is a UI simulation.`
+    });
     if (user?.role === 'admin') {
         (e.target as HTMLFormElement).reset();
     }
+    setIsSendingInvite(false);
   };
 
   if (authIsLoading) {
@@ -53,7 +71,6 @@ export default function SettingsPage() {
   }
 
   if (!user) {
-    // This case should ideally be handled by the dashboard layout redirecting to login
     return <p>Please log in to view settings.</p>;
   }
 
@@ -81,7 +98,7 @@ export default function SettingsPage() {
             <CardContent className="space-y-4">
               <div className="space-y-1">
                 <Label htmlFor="userName">Name</Label>
-                <Input id="userName" value={userName} onChange={(e) => setUserName(e.target.value)} placeholder="Your Name" />
+                <Input id="userName" value={userName} onChange={(e) => setUserName(e.target.value)} placeholder="Your Name" disabled={isSavingProfile} />
               </div>
               <div className="space-y-1">
                 <Label htmlFor="userEmail">Email</Label>
@@ -90,17 +107,17 @@ export default function SettingsPage() {
               </div>
                <div className="space-y-1">
                 <Label htmlFor="currentPassword">Current Password</Label>
-                <Input id="currentPassword" name="currentPassword" type="password" placeholder="Enter current password to change" />
+                <Input id="currentPassword" name="currentPassword" type="password" placeholder="Enter current password to change" disabled={isSavingProfile} />
               </div>
               <div className="space-y-1">
                 <Label htmlFor="newPassword">New Password</Label>
-                <Input id="newPassword" name="newPassword" type="password" placeholder="Enter new password (min. 6 chars)" />
+                <Input id="newPassword" name="newPassword" type="password" placeholder="Enter new password (min. 6 chars)" disabled={isSavingProfile} />
                  <p className="text-xs text-muted-foreground">Leave blank to keep current password.</p>
               </div>
             </CardContent>
             <CardFooter className="flex justify-between items-center">
-              <Button type="submit">
-                <Save className="mr-2 h-4 w-4" /> Save Changes
+              <Button type="submit" disabled={isSavingProfile}>
+                {isSavingProfile ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />} Save Changes
               </Button>
             </CardFooter>
           </form>
@@ -119,7 +136,7 @@ export default function SettingsPage() {
             <CardContent className="space-y-4">
                 <div className="space-y-1">
                     <Label htmlFor="inviteEmail">Invite User by Email</Label>
-                    <Input id="inviteEmail" name="email" type="email" placeholder="teammate@example.com" disabled={user.role !== 'admin'} required/>
+                    <Input id="inviteEmail" name="email" type="email" placeholder="teammate@example.com" disabled={user.role !== 'admin' || isSendingInvite} required/>
                 </div>
                 <div className="space-y-1">
                     <Label htmlFor="inviteRole">Assign Role</Label>
@@ -128,7 +145,7 @@ export default function SettingsPage() {
                         name="role" 
                         defaultValue="viewer"
                         className="w-full p-2 border rounded-md bg-background text-foreground disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 h-10 text-sm" 
-                        disabled={user.role !== 'admin'}
+                        disabled={user.role !== 'admin' || isSendingInvite}
                     >
                         <option value="viewer">Viewer</option>
                         <option value="editor">Editor</option>
@@ -140,7 +157,10 @@ export default function SettingsPage() {
                 </p>
             </CardContent>
             <CardFooter>
-                 <Button type="submit" variant="outline" disabled={user.role !== 'admin'}>Invite User</Button>
+                 <Button type="submit" variant="outline" disabled={user.role !== 'admin' || isSendingInvite}>
+                    {isSendingInvite ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Users className="mr-2 h-4 w-4" /> }
+                    Invite User
+                </Button>
             </CardFooter>
            </form>
         </Card>
@@ -148,7 +168,7 @@ export default function SettingsPage() {
       
       <Separator />
       <div className="flex justify-start">
-          <Button variant="destructive" onClick={() => logout()}>
+          <Button variant="destructive" onClick={() => logout()} disabled={isSavingProfile || isSendingInvite}>
             <LogOut className="mr-2 h-4 w-4" /> Log Out
           </Button>
       </div>
