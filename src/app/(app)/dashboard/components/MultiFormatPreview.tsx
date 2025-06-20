@@ -6,7 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Button } from '@/components/ui/button';
-import { FileText, Tv2, Copy, Download, Loader2, FileType, Share2, CalendarClock } from 'lucide-react';
+import { FileText, Tv2, Copy, Download, Loader2, FileType, Share2, WandSparkles } from 'lucide-react'; // Added WandSparkles
 import { useToast } from '@/hooks/use-toast';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
@@ -138,6 +138,16 @@ export function MultiFormatPreview({ content, isLoading }: MultiFormatPreviewPro
                       <Button variant="outline" size="sm" onClick={() => handleDownload(content?.[formatKey], formatLabels[formatKey] || formatKey)}>
                         <Download className="mr-1 h-3 w-3" /> TXT
                       </Button>
+                       <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button variant="outline" size="sm" disabled onClick={() => handleComingSoon('AI Revise')}>
+                            <WandSparkles className="mr-1 h-3 w-3" /> AI Revise
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p>Get AI-powered revision suggestions (Coming Soon)</p>
+                        </TooltipContent>
+                      </Tooltip>
                       <Tooltip>
                         <TooltipTrigger asChild>
                           <Button variant="outline" size="sm" disabled onClick={() => handleComingSoon('PDF Export')}>
