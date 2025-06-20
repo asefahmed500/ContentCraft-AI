@@ -4,35 +4,10 @@ import type { NextRequest } from 'next/server';
 import { getToken } from 'next-auth/jwt';
 import clientPromise from '@/lib/mongodb';
 import { MongoClient, Db, ObjectId } from 'mongodb';
-import type { Campaign, ContentVersion } from '@/types/content'; // Ensure ContentVersion is imported
+import type { Campaign, ContentVersion } from '@/types/content'; 
+import { mapCampaignDocumentToCampaign } from '@/app/api/campaigns/route'; // Import the shared mapper
 
-const ensureDate = (dateInput: string | Date | undefined | null): Date | undefined => {
-  if (!dateInput) return undefined;
-  if (dateInput instanceof Date) return dateInput;
-  const date = new Date(dateInput);
-  return isNaN(date.getTime()) ? undefined : date;
-};
-
-const mapCampaignDocumentToCampaign = (campaignDoc: Omit<Campaign, 'id'> & { _id: ObjectId }): Campaign => {
-  return {
-    ...campaignDoc,
-    id: campaignDoc._id.toString(),
-    agentDebates: (campaignDoc.agentDebates || []).map(ad => ({ ...ad, timestamp: ensureDate(ad.timestamp) || new Date() })),
-    contentVersions: (campaignDoc.contentVersions || []).map(cv => ({
-        ...cv,
-        timestamp: ensureDate(cv.timestamp) || new Date(),
-        isFlagged: cv.isFlagged ?? false, // Handle new field
-        adminModerationNotes: cv.adminModerationNotes ?? undefined, // Handle new field
-    })),
-    scheduledPosts: (campaignDoc.scheduledPosts || []).map(sp => ({ ...sp, scheduledAt: ensureDate(sp.scheduledAt) || new Date() })),
-    abTests: (campaignDoc.abTests || []).map(ab => ({ ...ab, createdAt: ensureDate(ab.createdAt) || new Date() })),
-    isPrivate: campaignDoc.isPrivate ?? false,
-    isFlagged: campaignDoc.isFlagged ?? false, // Campaign level flag
-    adminModerationNotes: campaignDoc.adminModerationNotes ?? undefined, // Campaign level notes
-    createdAt: ensureDate(campaignDoc.createdAt) || new Date(),
-    updatedAt: ensureDate(campaignDoc.updatedAt) || new Date(),
-  };
-};
+// ensureDate function is implicitly available via mapCampaignDocumentToCampaign
 
 export async function GET(request: NextRequest) {
   try {
@@ -45,7 +20,26 @@ export async function GET(request: NextRequest) {
     const db: Db = client.db(process.env.MONGODB_DB_NAME || undefined);
     const campaignsCollection = db.collection<Omit<Campaign, 'id'>>('campaigns');
     
-    const allCampaignDocs = await campaignsCollection.find({}).sort({ createdAt: -1 }).toArray();
+    // New: Support fetching a single campaign by ID for admin detail view
+    const { searchParams } = new URL(request.url);
+    const campaignId = searchParams.get('id');
+    const fetchSingle = searchParams.get('single') === 'true';
+
+    if (fetchSingle && campaignId) {
+        if (!ObjectId.isValid(campaignId)) {
+            return NextResponse.json({ error: 'Invalid Campaign ID format for single fetch' }, { status: 400 });
+        }
+        // Admins can view any campaign
+        const campaignDoc = await campaignsCollection.findOne({ _id: new ObjectId(campaignId) });
+        if (!campaignDoc) {
+            return NextResponse.json({ error: 'Campaign not found' }, { status: 404 });
+        }
+        const campaign = mapCampaignDocumentToCampaign({ ...campaignDoc, _id: campaignDoc._id! });
+        return NextResponse.json(campaign, { status: 200 });
+    }
+    
+    // Fetch all campaigns for admin overview
+    const allCampaignDocs = await campaignsCollection.find({}).sort({ updatedAt: -1, createdAt: -1 }).toArray();
     
     const formattedCampaigns: Campaign[] = allCampaignDocs.map(doc => 
         mapCampaignDocumentToCampaign({ ...doc, _id: doc._id! })
@@ -58,4 +52,3 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Failed to fetch campaigns for admin.', details: errorMessage }, { status: 500 });
   }
 }
-

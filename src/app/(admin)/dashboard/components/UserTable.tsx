@@ -33,8 +33,8 @@ interface AdminUser extends NextAuthUser {
   totalXP?: number;
   level?: number;
   isBanned?: boolean;
-  createdAt?: Date;
-  updatedAt?: Date;
+  createdAt?: Date | string; // Allow string for initial fetch, convert to Date
+  updatedAt?: Date | string; // Allow string for initial fetch, convert to Date
 }
 
 export function UserTable() {
@@ -60,7 +60,7 @@ export function UserTable() {
           updatedAt: u.updatedAt ? new Date(u.updatedAt) : undefined 
       }));
       setAllUsers(usersWithDates);
-      setFilteredUsers(usersWithDates); // Initialize filteredUsers
+      setFilteredUsers(usersWithDates);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : "An unknown error occurred";
       toast({ title: "Error fetching users", description: errorMessage, variant: "destructive" });
@@ -166,7 +166,7 @@ export function UserTable() {
                         {user.isBanned ? "Banned" : "Active"}
                     </Badge>
                     </TableCell>
-                    <TableCell>{user.createdAt ? format(user.createdAt, 'MMM d, yyyy') : 'N/A'}</TableCell>
+                    <TableCell>{user.createdAt ? format(new Date(user.createdAt), 'MMM d, yyyy') : 'N/A'}</TableCell>
                     <TableCell className="text-right">
                     {updatingUserId === user.id ? (
                         <Loader2 className="h-4 w-4 animate-spin" />
@@ -180,7 +180,7 @@ export function UserTable() {
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
                             <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                            <DropdownMenuItem onSelect={() => alert("View user profile/details - Not implemented yet")}>
+                            <DropdownMenuItem onSelect={() => alert("View user profile/details - This is a conceptual action. User details are visible in the table.")}>
                             <Edit className="mr-2 h-4 w-4" /> View Details
                             </DropdownMenuItem>
                             <DropdownMenuSeparator />
