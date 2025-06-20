@@ -10,8 +10,9 @@ import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, Wand2, Lightbulb, Users, Target, Palette, FileUp, Save, Paperclip, Tag, Info } from 'lucide-react';
+import { Loader2, Wand2, Lightbulb, Users, Target, Palette, FileUp, Save, Paperclip, Tag, Info, Link2, Combine } from 'lucide-react';
 import type { Campaign } from '@/types/content'; 
+import { Separator } from '@/components/ui/separator';
 
 interface CampaignGeneratorProps {
   onCampaignCreated: (newCampaign: Campaign) => void; 
@@ -38,6 +39,9 @@ export function CampaignGenerator({
   const [contentGoals, setContentGoals] = useState<string[]>([]);
   const [isSaving, setIsSaving] = useState(false);
   const [referenceFiles, setReferenceFiles] = useState<FileList | null>(null);
+  const [importUrl, setImportUrl] = useState('');
+  const [isImportingUrl, setIsImportingUrl] = useState(false);
+
 
   const { toast } = useToast();
 
@@ -48,9 +52,9 @@ export function CampaignGenerator({
       setTargetAudience(selectedCampaignForEdit.targetAudience || '');
       setTone(selectedCampaignForEdit.tone || '');
       setContentGoals(selectedCampaignForEdit.contentGoals || []);
-      // Assuming brandVoice is not directly part of campaign model for edit, but an override for generation
-      setBrandVoice(''); // Reset override unless specifically stored and loaded
+      setBrandVoice(''); 
       setReferenceFiles(null);
+      setImportUrl('');
     } else {
       // Reset form for new campaign
       setCampaignTitle('');
@@ -60,6 +64,7 @@ export function CampaignGenerator({
       setContentGoals([]);
       setBrandVoice('');
       setReferenceFiles(null);
+      setImportUrl('');
     }
   }, [selectedCampaignForEdit]);
 
@@ -76,13 +81,11 @@ export function CampaignGenerator({
     setIsSaving(true);
 
     const campaignData: Partial<Campaign> = {
-      // id: selectedCampaignForEdit?.id, // ID is used in URL for PUT
       title: campaignTitle.trim(),
-      brief: brief.trim(), // This is the "Product or service description"
+      brief: brief.trim(), 
       targetAudience: targetAudience.trim() || undefined,
       tone: tone || undefined,
       contentGoals: contentGoals.length > 0 ? contentGoals : undefined,
-      // referenceMaterials processing would happen here
     };
 
     try {
@@ -107,8 +110,7 @@ export function CampaignGenerator({
       if (andStartGeneration) {
         await onGenerateContentForCampaign(savedCampaign, brandVoice.trim() || undefined);
       } else if (!selectedCampaignForEdit) { 
-        // Reset form only if creating a new campaign and not immediately generating
-        setCampaignTitle(''); setBrief(''); setTargetAudience(''); setTone(''); setContentGoals([]); setBrandVoice(''); setReferenceFiles(null);
+        setCampaignTitle(''); setBrief(''); setTargetAudience(''); setTone(''); setContentGoals([]); setBrandVoice(''); setReferenceFiles(null); setImportUrl('');
       }
 
     } catch (error) {
@@ -125,6 +127,25 @@ export function CampaignGenerator({
         const fileNames = Array.from(e.target.files).map(f => f.name).join(', ');
         toast({title: "Files Selected (Simulated)", description: `Selected: ${fileNames}. Full upload & processing for PDF/links is a planned feature.`});
     }
+  };
+
+  const handleImportFromUrl = async () => {
+    if (!importUrl.trim()) {
+      toast({ title: "No URL provided", description: "Please enter a URL to import content.", variant: "destructive"});
+      return;
+    }
+    setIsImportingUrl(true);
+    toast({ title: "Importing Content...", description: `Attempting to fetch and analyze content from ${importUrl}. This is a simulation.`});
+
+    // Simulate API call and processing delay
+    await new Promise(resolve => setTimeout(resolve, 2000));
+
+    const simulatedExtractedText = `Content successfully "imported" from: ${importUrl}.\n\n[Simulated extracted content appears here... This text is a placeholder. In a real system, the actual content from the URL would be fetched, parsed (e.g., using readability.js), and then displayed here or used for analysis.]\n\nPlease review and refine this text to serve as the core brief for your campaign. You can edit it directly below.`;
+    setBrief(simulatedExtractedText);
+
+    toast({ title: "Content Imported (Simulated)", description: "The 'Product or Service Description' has been updated. Please review and edit as needed."});
+    setIsImportingUrl(false);
+    setImportUrl(''); // Clear URL input after "import"
   };
 
 
@@ -154,19 +175,44 @@ export function CampaignGenerator({
             required
           />
         </div>
+        
+        <div className="space-y-4">
+            <div className="space-y-2">
+                <Label htmlFor="import-url" className="text-base flex items-center gap-1"><Link2 className="h-4 w-4"/>Import Content from URL (Optional)</Label>
+                <div className="flex items-center space-x-2">
+                    <Input
+                        id="import-url"
+                        placeholder="Paste URL (e.g., blog post, article)"
+                        value={importUrl}
+                        onChange={(e) => setImportUrl(e.target.value)}
+                        className="text-base"
+                    />
+                    <Button onClick={handleImportFromUrl} disabled={isImportingUrl || !importUrl.trim()} variant="outline">
+                        {isImportingUrl ? <Loader2 className="h-4 w-4 animate-spin"/> : <Combine className="h-4 w-4"/>}
+                        Import & Use for Brief
+                    </Button>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                    This will attempt to fetch content from the URL and populate the description below (simulated).
+                </p>
+            </div>
 
-        <div className="space-y-2">
-          <Label htmlFor="campaign-brief" className="text-base flex items-center gap-1"><Info className="h-4 w-4"/>Product or Service Description*</Label>
-          <Textarea
-            id="campaign-brief"
-            placeholder="Describe the product, service, or topic this campaign is about. e.g., Our new line of eco-friendly yoga mats made from recycled materials, designed for ultimate comfort and sustainability."
-            value={brief}
-            onChange={(e) => setBrief(e.target.value)}
-            rows={5}
-            className="text-base"
-            required
-          />
+            <Separator />
+
+            <div className="space-y-2">
+              <Label htmlFor="campaign-brief" className="text-base flex items-center gap-1"><Info className="h-4 w-4"/>Product or Service Description*</Label>
+              <Textarea
+                id="campaign-brief"
+                placeholder="Describe the product, service, or topic this campaign is about. e.g., Our new line of eco-friendly yoga mats made from recycled materials, designed for ultimate comfort and sustainability. You can also paste content here directly or use the URL import feature above."
+                value={brief}
+                onChange={(e) => setBrief(e.target.value)}
+                rows={8}
+                className="text-base"
+                required
+              />
+            </div>
         </div>
+
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="space-y-2">
@@ -261,7 +307,7 @@ export function CampaignGenerator({
                 </div>
              )}
             <p className="text-xs text-muted-foreground">
-                (File upload & URL parsing for AI processing (e.g. to GCS/GridFS & Gemini analysis) is a planned feature and currently simulated for UI. Files are not uploaded).
+                (File upload & URL parsing for AI processing (e.g. to GCS/GridFS & Gemini analysis) is a planned feature and currently simulated for UI. Files are not uploaded. Use the URL import above for brief generation).
             </p>
         </div>
 
@@ -269,7 +315,7 @@ export function CampaignGenerator({
       <CardFooter className="flex flex-col sm:flex-row justify-end gap-3 pt-6">
         <Button 
             onClick={() => handleSaveCampaign(false)} 
-            disabled={isSaving || isGenerating} 
+            disabled={isSaving || isGenerating || isImportingUrl} 
             variant="outline"
             className="w-full sm:w-auto"
         >
@@ -278,11 +324,11 @@ export function CampaignGenerator({
         </Button>
         <Button 
             onClick={() => handleSaveCampaign(true)} 
-            disabled={isSaving || isGenerating || !campaignTitle.trim() || !brief.trim()} 
+            disabled={isSaving || isGenerating || !campaignTitle.trim() || !brief.trim() || isImportingUrl} 
             size="lg" 
             className="w-full sm:w-auto"
         >
-          {isSaving && andStartGeneration ? <Loader2 className="animate-spin" /> : <Wand2 />} 
+          {(isSaving || isGenerating) && andStartGeneration ? <Loader2 className="animate-spin" /> : <Wand2 />} 
           {selectedCampaignForEdit ? "Update & Regenerate" : "Save & Generate Campaign"}
         </Button>
       </CardFooter>

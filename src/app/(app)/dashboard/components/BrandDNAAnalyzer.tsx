@@ -80,7 +80,7 @@ export function BrandDNAAnalyzer() {
           <Fingerprint className="h-6 w-6 text-primary" />
           Brand DNA Analyzer
         </CardTitle>
-        <CardDescription>Upload sample brand content (e.g., PDFs, text files, blog links, marketing copy) to extract its unique voice, style, values, and visual language cues. Gemini AI will analyze the content.</CardDescription>
+        <CardDescription>Upload sample brand content (e.g., text files, markdown, or PDFs with selectable text) to extract its unique voice, style, values, and visual language cues. Gemini AI will analyze the content.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
         <div className="space-y-2">
@@ -92,6 +92,7 @@ export function BrandDNAAnalyzer() {
             </Button>
           </div>
           {file && <p className="text-sm text-muted-foreground">Selected file: {file.name}</p>}
+           <p className="text-xs text-muted-foreground">Note: For PDFs, ensure text is selectable/extractable for best results. Analysis focuses on textual content.</p>
         </div>
 
         {analysisResult && (
