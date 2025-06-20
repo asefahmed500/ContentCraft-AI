@@ -9,10 +9,6 @@ import { Button } from '@/components/ui/button';
 import { UserTable } from './components/UserTable';
 import { AdminCampaignList } from './components/AdminCampaignList';
 import { FlaggedContentTable } from './components/FlaggedContentTable'; 
-// Removed imports for components from (app) directory
-// import { MultiFormatPreview } from '@/app/(app)/dashboard/components/MultiFormatPreview';
-// import { AgentDebatePanel } from '@/app/(app)/dashboard/components/AgentDebatePanel';
-// import { ContentEvolutionTimeline } from '@/app/(app)/dashboard/components/ContentEvolutionTimeline';
 import type { Campaign, CampaignStatus, ContentVersion, AgentInteraction, MultiFormatContent } from '@/types/content';
 import type { User as NextAuthUser } from 'next-auth';
 import type { AgentRole } from '@/types/agent';
@@ -571,15 +567,12 @@ export default function AdminDashboardPage() {
                             ): <p className="text-sm text-muted-foreground">No content versions recorded for this campaign.</p>}
                         </CardContent>
                     </Card>
-
-                    {/* Removed AgentDebatePanel, ContentEvolutionTimeline, and MultiFormatPreview components */}
-                    {/* These components relied on files from the deleted (app) directory */}
                     <Alert variant="default">
                         <Info className="h-5 w-5"/>
                         <AlertTitle>Simplified Detail View</AlertTitle>
                         <AlertDescription>
                             Detailed agent debate, content evolution timeline, and multi-format preview components are unavailable in this view
-                            as their source files (from the `src/app/(app)/dashboard/components/` directory) are not present.
+                            as their source files (from the `src/app/(app)/dashboard/components/` directory) appear to be missing or were deleted.
                             Raw campaign data for debates and versions is shown above.
                         </AlertDescription>
                     </Alert>

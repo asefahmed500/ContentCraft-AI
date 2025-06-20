@@ -50,7 +50,6 @@ export function SiteHeader() {
               </Link>
             </Button>
           )}
-          {/* Removed the generic /dashboard link for non-admins as src/app/(app)/dashboard is deleted */}
         </nav>
         <div className="flex items-center space-x-4">
           {isAuthenticated && user ? (
@@ -78,16 +77,6 @@ export function SiteHeader() {
                 <DropdownMenuSeparator />
                 <UserXPDisplay /> 
                 <DropdownMenuSeparator />
-                {/* Settings link removed as /app/(app)/dashboard/settings is deleted */}
-                {/* 
-                <DropdownMenuItem asChild>
-                  <Link href="/dashboard/settings">
-                    <Settings className="mr-2 h-4 w-4" />
-                    <span>Settings</span>
-                  </Link>
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                */}
                 <DropdownMenuItem onClick={handleLogout}>
                   <LogOut className="mr-2 h-4 w-4" />
                   <span>Log out</span>
