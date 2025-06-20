@@ -10,8 +10,8 @@
 
 import {ai} from '@/ai/genkit';
 import {z} from 'genkit';
-import type { BrandContentPatterns, BrandVisualStyle, BrandVoiceProfile } from '@/types/brand';
-
+// Removed direct import of BrandVoiceProfile etc. from '@/types/brand' as they are now defined via Zod schemas below
+// and the final output type will be inferred. The structures should remain compatible.
 
 const AnalyzeBrandDNAInputSchema = z.object({
   contentDataUri: z
@@ -59,13 +59,8 @@ const AnalyzeBrandDNAOutputSchema = z.object({
     ),
 });
 
-export type AnalyzeBrandDNAOutput = {
-  voiceProfile: BrandVoiceProfile;
-  visualStyle: BrandVisualStyle;
-  contentPatterns: BrandContentPatterns;
-  consistencyScore: number;
-  warnings: string[];
-};
+// The AnalyzeBrandDNAOutput type is now inferred directly from the Zod schema.
+export type AnalyzeBrandDNAOutput = z.infer<typeof AnalyzeBrandDNAOutputSchema>;
 
 
 export async function analyzeBrandDNA(
@@ -114,4 +109,3 @@ const analyzeBrandDNAFlow = ai.defineFlow(
     return output!;
   }
 );
-
