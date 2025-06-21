@@ -48,7 +48,7 @@ ContentCraft AI is a Next.js web application designed as a multi-agent AI conten
 
 *   **Middleware**:
     *   Next.js middleware (`src/middleware.ts`) protects routes.
-    *   `/creator-dashboard/*` requires authentication.
+    *   `/creator-dashboard/*` requires authentication and redirects admins to `/admin/dashboard`.
     *   `/admin/*` requires authentication and an 'admin' role.
     *   Handles banned user access.
 
@@ -65,7 +65,7 @@ ContentCraft AI is a Next.js web application designed as a multi-agent AI conten
         *   Secure sign-up and login via email/password or Google. New users default to 'editor' role.
 
     *   **Creator Dashboard**:
-        *   Main hub for authenticated users at `/creator-dashboard`.
+        *   Main hub for authenticated 'editor' users at `/creator-dashboard`.
         *   Lists all campaigns created by the current user.
         *   Provides an interface to create new campaigns.
         *   Allows users to drill down into a detailed view for each campaign.

@@ -43,6 +43,10 @@ export async function middleware(request: NextRequest) {
         loginUrl.searchParams.set('callbackUrl', pathname);
         return NextResponse.redirect(loginUrl);
       }
+      // If the user is an admin, redirect them to their own dashboard.
+      if (token.role === 'admin') {
+        return NextResponse.redirect(new URL('/admin/dashboard', request.url));
+      }
   }
 
 
