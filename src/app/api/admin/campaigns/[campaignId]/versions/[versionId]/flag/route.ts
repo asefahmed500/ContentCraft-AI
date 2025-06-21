@@ -11,14 +11,14 @@ interface FlagContentVersionPayload {
   adminModerationNotes?: string;
 }
 
-export async function PUT(request: NextRequest, { params }: { params: { campaignId: string, versionId: string } }) {
+export async function PUT(request: NextRequest, context: { params: { campaignId: string, versionId: string } }) {
   try {
     const token = await getToken({ req: request, secret: process.env.NEXTAUTH_SECRET });
     if (!token || token.role !== 'admin') {
       return NextResponse.json({ error: 'Unauthorized. Admin access required.' }, { status: 401 });
     }
 
-    const { campaignId, versionId } = params;
+    const { campaignId, versionId } = context.params;
     if (!campaignId || !ObjectId.isValid(campaignId)) {
       return NextResponse.json({ error: 'Invalid campaign ID provided.' }, { status: 400 });
     }
