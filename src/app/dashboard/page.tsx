@@ -1,5 +1,4 @@
-// This file has been intentionally left blank to resolve the Next.js build conflict
-// related to parallel routes. By removing the default export, Next.js will no longer
-// treat this file as a page, thus eliminating the route conflict.
+// This file is deprecated and part of a conflicting route.
+// It has been intentionally cleared to resolve a Next.js build error.
 // The active user dashboard is located at /creator-dashboard.
-// This file can be safely deleted in the future.
+// This file can be safely deleted.
