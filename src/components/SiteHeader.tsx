@@ -46,7 +46,14 @@ export function SiteHeader() {
           {isAuthenticated && user?.role === 'admin' && (
             <Button variant="ghost" asChild className="text-sm font-medium text-foreground/70 hover:text-foreground transition-colors">
               <Link href="/admin/dashboard">
-                <LayoutDashboard className="mr-2 h-4 w-4"/> Admin Dashboard
+                <LayoutDashboard className="mr-2 h-4 w-4"/> Admin Panel
+              </Link>
+            </Button>
+          )}
+           {isAuthenticated && user?.role !== 'admin' && (
+            <Button variant="ghost" asChild className="text-sm font-medium text-foreground/70 hover:text-foreground transition-colors">
+              <Link href="/creator-dashboard">
+                <LayoutDashboard className="mr-2 h-4 w-4"/> Dashboard
               </Link>
             </Button>
           )}

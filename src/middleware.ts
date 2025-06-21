@@ -31,16 +31,26 @@ export async function middleware(request: NextRequest) {
       return NextResponse.redirect(loginUrl);
     }
     if (token.role !== 'admin') {
-      // Non-admin trying to access /admin, redirect to home page
-      return NextResponse.redirect(new URL('/', request.url));
+      // Non-admin trying to access /admin, redirect to their own dashboard.
+      return NextResponse.redirect(new URL('/creator-dashboard', request.url));
     }
   }
+
+  // User dashboard protection
+  if (pathname.startsWith('/creator-dashboard')) {
+      if (!isAuthenticated) {
+        const loginUrl = new URL('/login', request.url);
+        loginUrl.searchParams.set('callbackUrl', pathname);
+        return NextResponse.redirect(loginUrl);
+      }
+  }
+
 
   // If trying to access login/signup and already authenticated (and not banned)
   if ((pathname === '/login' || pathname === '/signup') && isAuthenticated) {
     const destinationUrl = token.role === 'admin'
       ? new URL('/admin/dashboard', request.url)
-      : new URL('/', request.url); // Non-admins go to the home page now
+      : new URL('/creator-dashboard', request.url);
     return NextResponse.redirect(destinationUrl);
   }
 
@@ -48,6 +58,5 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  // Apply middleware to all relevant routes, removing /dashboard since it no longer exists.
-  matcher: ['/admin/:path*', '/login', '/signup', '/api/((?!auth|public).*)'],
+  matcher: ['/admin/:path*', '/creator-dashboard/:path*', '/login', '/signup', '/api/((?!auth|public).*)'],
 };

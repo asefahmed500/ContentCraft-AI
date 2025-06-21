@@ -20,14 +20,12 @@ function HomePageContent() {
 
   useEffect(() => {
     if (!isLoading && isAuthenticated) {
-       // Only redirect admins to their dashboard. Non-admins stay on the homepage.
-       if (session.user?.role === 'admin') {
-         router.replace('/admin/dashboard');
-       }
+       const destination = session.user?.role === 'admin' ? '/admin/dashboard' : '/creator-dashboard';
+       router.replace(destination);
     }
   }, [isAuthenticated, isLoading, router, session]);
 
-  if (isLoading || (isAuthenticated && session?.user?.role === 'admin')) {
+  if (isLoading || isAuthenticated) {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center bg-background">
         <Loader2 className="h-12 w-12 animate-spin text-primary" />

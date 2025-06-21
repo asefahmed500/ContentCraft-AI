@@ -22,7 +22,7 @@ function AdminLayoutContent({ children }: AdminLayoutProps) {
     if (!isLoading && !isAdmin) {
       // This should ideally be caught by middleware first,
       // but this is a client-side fallback.
-      router.replace('/dashboard'); 
+      router.replace('/creator-dashboard'); 
     }
   }, [isAdmin, isLoading, router]);
 

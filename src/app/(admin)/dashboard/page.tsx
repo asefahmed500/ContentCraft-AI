@@ -16,9 +16,8 @@ import { ResponsiveContainer, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
 import { useToast } from '@/hooks/use-toast';
 import { Loader2 } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { format } from 'date-fns';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
+import { AgentDebateDisplay } from './components/AgentDebateDisplay';
 
 interface PlatformStats {
   totalUsers: number;
@@ -494,9 +493,19 @@ export default function AdminDashboardPage() {
                     </Card>
 
                     <Card>
+                        <CardHeader>
+                            <CardTitle className="text-base">Creative War Room (Read-Only)</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                             <AgentDebateDisplay debates={selectedCampaignForAdminView.agentDebates} />
+                        </CardContent>
+                    </Card>
+
+
+                    <Card>
                          <CardHeader>
                             <CardTitle>Content Versions (Read-Only)</CardTitle>
-                            <CardDescription>View generated content versions. Creative tools are available on the user dashboard.</CardDescription>
+                            <CardDescription>View generated content versions. Creative tools are available on the user's dashboard.</CardDescription>
                         </CardHeader>
                         <CardContent className="space-y-4">
                              {selectedCampaignForAdminView.contentVersions && selectedCampaignForAdminView.contentVersions.length > 0 ? (

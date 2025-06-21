@@ -37,7 +37,7 @@ function SignUpPageContent() {
 
   useEffect(() => {
     if (!authLoading && isAuthenticated) {
-      const destination = session.user?.role === 'admin' ? '/admin/dashboard' : '/';
+      const destination = session.user?.role === 'admin' ? '/admin/dashboard' : '/creator-dashboard';
       router.replace(destination);
     }
   }, [authLoading, isAuthenticated, router, session]);
@@ -97,7 +97,7 @@ function SignUpPageContent() {
     setIsGoogleSubmitting(true);
     setError('');
     try {
-      await signIn('google', { callbackUrl: '/', redirect: false });
+      await signIn('google', { callbackUrl: '/creator-dashboard', redirect: false });
     } catch (e: any) {
       setError(e.message || 'Google Sign-Up failed. Please try again.');
     } finally {

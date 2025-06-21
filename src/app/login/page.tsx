@@ -46,7 +46,7 @@ function LoginPageContent() {
 
   useEffect(() => {
     if (!authLoading && isAuthenticated) {
-      const destination = session.user?.role === 'admin' ? '/admin/dashboard' : '/';
+      const destination = session.user?.role === 'admin' ? '/admin/dashboard' : '/creator-dashboard';
       router.replace(callbackUrlFromParams || destination);
     }
   }, [authLoading, isAuthenticated, router, callbackUrlFromParams, session]);
