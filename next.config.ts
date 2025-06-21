@@ -18,6 +18,14 @@ const nextConfig: NextConfig = {
       },
     ],
   },
+  webpack: (config) => {
+    config.ignoreWarnings = [
+      ...(config.ignoreWarnings || []),
+      /Critical dependency: the request of a dependency is an expression/,
+      /require\.extensions is not supported by webpack/,
+    ];
+    return config;
+  },
 };
 
 export default nextConfig;
