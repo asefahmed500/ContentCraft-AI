@@ -7,18 +7,15 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Separator } from '@/components/ui/separator';
-import { Loader2, Sparkles, PencilRuler, ThumbsUp, ThumbsDown, SearchCheck, Languages, Zap, Pencil } from 'lucide-react';
-import { format } from 'date-fns';
+import { Loader2, Sparkles, PencilRuler, ThumbsUp, ThumbsDown, SearchCheck, Languages, Zap } from 'lucide-react';
+import { useState } from 'react';
 
 interface ContentVersionsDisplayProps {
     campaign: Campaign;
     isGeneratingContent: boolean;
     submittedFeedback: SubmittedFeedback;
     onGenerateInitialContent: () => void;
-    onOpenReviseDialog: (original: string, type: string, version: ContentVersion) => void;
-    onOpenAuditDialog: (content: string) => void;
-    onOpenTranslateDialog: (original: string, type: string, version: ContentVersion) => void;
-    onOpenOptimizeDialog: (original: string, type: string, version: ContentVersion) => void;
+    onOpenToolDialog: (tool: 'revise' | 'audit' | 'translate' | 'optimize', version: ContentVersion, originalContent: string, contentType: string) => void;
     onFeedbackSubmit: (version: ContentVersion, format: string, rating: 1 | -1) => Promise<void>;
 }
 
@@ -27,10 +24,7 @@ export function ContentVersionsDisplay({
     isGeneratingContent,
     submittedFeedback,
     onGenerateInitialContent,
-    onOpenReviseDialog,
-    onOpenAuditDialog,
-    onOpenTranslateDialog,
-    onOpenOptimizeDialog,
+    onOpenToolDialog,
     onFeedbackSubmit,
 }: ContentVersionsDisplayProps) {
     const [feedbackLoading, setFeedbackLoading] = useState<string | null>(null);
@@ -100,16 +94,16 @@ export function ContentVersionsDisplay({
                                                     </div>
                                                     <pre className="whitespace-pre-wrap text-xs p-2 border rounded bg-background max-h-40 overflow-y-auto">{text}</pre>
                                                     <div className="flex flex-wrap gap-2 mt-3">
-                                                        <Button size="sm" variant="outline" onClick={() => onOpenReviseDialog(text, format, version)}>
+                                                        <Button size="sm" variant="outline" onClick={() => onOpenToolDialog('revise', version, text, format)}>
                                                             <Sparkles className="mr-1 h-3 w-3"/> Revise
                                                         </Button>
-                                                        <Button size="sm" variant="outline" onClick={() => onOpenAuditDialog(text)} disabled={!campaign.brandProfile}>
+                                                        <Button size="sm" variant="outline" onClick={() => onOpenToolDialog('audit', version, text, format)} disabled={!campaign.brandProfile}>
                                                             <SearchCheck className="mr-1 h-3 w-3"/> Audit
                                                         </Button>
-                                                        <Button size="sm" variant="outline" onClick={() => onOpenTranslateDialog(text, format, version)}>
+                                                        <Button size="sm" variant="outline" onClick={() => onOpenToolDialog('translate', version, text, format)}>
                                                             <Languages className="mr-1 h-3 w-3"/> Translate
                                                         </Button>
-                                                        <Button size="sm" variant="outline" onClick={() => onOpenOptimizeDialog(text, format, version)}>
+                                                        <Button size="sm" variant="outline" onClick={() => onOpenToolDialog('optimize', version, text, format)}>
                                                             <Zap className="mr-1 h-3 w-3"/> Optimize
                                                         </Button>
                                                     </div>

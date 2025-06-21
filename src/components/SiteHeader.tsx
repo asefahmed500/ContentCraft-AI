@@ -12,11 +12,14 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { LogOut, UserCircle, LayoutDashboard } from 'lucide-react';
+import { LogOut, UserCircle, LayoutDashboard, Settings } from 'lucide-react';
 import { Logo } from '@/components/Logo';
 import { useSession, signOut } from 'next-auth/react'; 
 import UserXPDisplay from '@/components/UserXPDisplay';
 import type { User as NextAuthUser } from 'next-auth';
+import { useState } from 'react';
+import { UserSettingsDialog } from './UserSettingsDialog';
+
 
 interface SessionUser extends NextAuthUser {
   id?: string;
@@ -31,12 +34,14 @@ export function SiteHeader() {
   const { data: session, status } = useSession();
   const isAuthenticated = status === 'authenticated';
   const user = session?.user as SessionUser | undefined;
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
   const handleLogout = async () => {
     await signOut({ callbackUrl: '/login' });
   };
 
   return (
+    <>
     <header className="sticky top-0 z-50 w-full border-b border-border/40 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div className="container flex h-16 max-w-screen-2xl items-center">
         <Link href="/" className="mr-6 flex items-center space-x-2">
@@ -84,6 +89,10 @@ export function SiteHeader() {
                 <DropdownMenuSeparator />
                 <UserXPDisplay /> 
                 <DropdownMenuSeparator />
+                <DropdownMenuItem onSelect={() => setIsSettingsOpen(true)}>
+                  <Settings className="mr-2 h-4 w-4" />
+                  <span>Settings</span>
+                </DropdownMenuItem>
                 <DropdownMenuItem onClick={handleLogout}>
                   <LogOut className="mr-2 h-4 w-4" />
                   <span>Log out</span>
@@ -103,5 +112,9 @@ export function SiteHeader() {
         </div>
       </div>
     </header>
+    {isAuthenticated && user && (
+        <UserSettingsDialog isOpen={isSettingsOpen} onOpenChange={setIsSettingsOpen} />
+    )}
+    </>
   );
 }

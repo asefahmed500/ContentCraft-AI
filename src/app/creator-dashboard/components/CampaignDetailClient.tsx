@@ -13,14 +13,17 @@ import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, Sparkles, ArrowLeft, Save, Languages, Zap } from 'lucide-react';
+import { Loader2, Sparkles, ArrowLeft, Save } from 'lucide-react';
 import { analyzeBrandProfile } from '@/ai/flows/brand-learning';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useSession } from 'next-auth/react';
 
 import { CampaignHeader } from './CampaignHeader';
 import { CampaignTools } from './CampaignTools';
 import { ContentVersionsDisplay } from './ContentVersionsDisplay';
+import { ReviseToolDialog } from './dialogs/ReviseToolDialog';
+import { AuditToolDialog } from './dialogs/AuditToolDialog';
+import { TranslateToolDialog } from './dialogs/TranslateToolDialog';
+import { OptimizeToolDialog } from './dialogs/OptimizeToolDialog';
 
 interface CampaignDetailClientProps {
   initialCampaign: Campaign;
@@ -51,7 +54,7 @@ export function CampaignDetailClient({ initialCampaign, onBack, onCampaignUpdate
   const [campaign, setCampaign] = useState<Campaign>(initialCampaign);
   const [isPending, startTransition] = useTransition();
 
-  // Dialog states
+  // Main dialog states
   const [isAnalyzeDialogOpen, setIsAnalyzeDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   
@@ -59,6 +62,10 @@ export function CampaignDetailClient({ initialCampaign, onBack, onCampaignUpdate
   const [isDebating, setIsDebating] = useState(false);
   const [isGeneratingSchedule, setIsGeneratingSchedule] = useState(false);
   const [isGeneratingContent, setIsGeneratingContent] = useState(false);
+
+  // Tool Dialog states and data
+  const [activeTool, setActiveTool] = useState<'revise' | 'audit' | 'translate' | 'optimize' | null>(null);
+  const [toolData, setToolData] = useState<{ version: ContentVersion, originalContent: string, contentType: string } | null>(null);
 
   // Form for editing campaign
   const form = useForm<CampaignEditValues>({
@@ -76,28 +83,6 @@ export function CampaignDetailClient({ initialCampaign, onBack, onCampaignUpdate
   
   // Feedback state
   const [submittedFeedback, setSubmittedFeedback] = useState<SubmittedFeedback>({});
-
-  // Tool Dialog States
-  const [isReviseDialogOpen, setIsReviseDialogOpen] = useState(false);
-  const [contentToRevise, setContentToRevise] = useState<{ originalContent: string; contentType: string; version: ContentVersion } | null>(null);
-  const [revisionInstructions, setRevisionInstructions] = useState('');
-  const [revisedContent, setRevisedContent] = useState<string | null>(null);
-
-  const [isAuditDialogOpen, setIsAuditDialogOpen] = useState(false);
-  const [auditResult, setAuditResult] = useState<{ alignmentScore: number; justification: string; suggestions: string[] } | null>(null);
-  const [contentToAudit, setContentToAudit] = useState<string>('');
-  
-  const [isTranslateDialogOpen, setIsTranslateDialogOpen] = useState(false);
-  const [contentToTranslate, setContentToTranslate] = useState<{ originalContent: string; contentType: string; version: ContentVersion } | null>(null);
-  const [targetLanguage, setTargetLanguage] = useState('');
-  const [toneDescription, setToneDescription] = useState('');
-  const [translatedContent, setTranslatedContent] = useState<string | null>(null);
-
-  const [isOptimizeDialogOpen, setIsOptimizeDialogOpen] = useState(false);
-  const [contentToOptimize, setContentToOptimize] = useState<{ originalContent: string; contentType: string; version: ContentVersion } | null>(null);
-  const [optimizationGoal, setOptimizationGoal] = useState('Improve user engagement');
-  const [optimizationResult, setOptimizationResult] = useState<{ predictedPerformance: { score: number, justification: string }, optimizedContent: string, explanation: string } | null>(null);
-
 
   const fetchFeedbackHistory = useCallback(async () => {
     try {
@@ -318,120 +303,17 @@ export function CampaignDetailClient({ initialCampaign, onBack, onCampaignUpdate
         if (updatedCampaign) {
             toast({ title: "New Version Saved!", description: `Version ${newVersion.versionNumber} has been added to the campaign.` });
             await awardXP(15, "saving a new version");
-            // Close all dialogs
-            setIsReviseDialogOpen(false);
-            setIsTranslateDialogOpen(false);
-            setIsOptimizeDialogOpen(false);
-        }
-    });
-  };
-
-  const handleReviseContent = async () => {
-    if (!contentToRevise || !revisionInstructions.trim()) {
-        toast({ title: "Input Required", description: "Please provide revision instructions.", variant: "destructive" });
-        return;
-    }
-    startTransition(async () => {
-        try {
-            const response = await fetch('/api/content/revise', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    originalContent: contentToRevise.originalContent,
-                    contentType: contentToRevise.contentType,
-                    revisionInstructions,
-                    campaignId: campaign.id,
-                }),
-            });
-            const result = await response.json();
-            if (!response.ok) throw new Error(result.error || 'Failed to revise content.');
-            setRevisedContent(result.revisedContent);
-            toast({ title: "Content Revised", description: "The AI has provided a revision below." });
-            await awardXP(10, "revising content");
-        } catch (err) {
-            const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred.';
-            toast({ title: "Revision Failed", description: errorMessage, variant: "destructive" });
+            setActiveTool(null);
+            setToolData(null);
         }
     });
   };
   
-  const handleRunAudit = async () => {
-    if (!contentToAudit) return;
-    startTransition(async () => {
-      try {
-        const response = await fetch('/api/brand/audit', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ contentToCheck: contentToAudit, campaignId: campaign.id }),
-        });
-        const result = await response.json();
-        if (!response.ok) throw new Error(result.error || 'Failed to run brand audit.');
-        setAuditResult(result);
-        toast({ title: "Audit Complete", description: "Brand alignment results are shown below." });
-        await awardXP(10, "auditing content");
-      } catch (err) {
-        const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred.';
-        toast({ title: "Audit Failed", description: errorMessage, variant: "destructive" });
-      }
-    });
+  const openToolDialog = (tool: 'revise' | 'audit' | 'translate' | 'optimize', version: ContentVersion, originalContent: string, contentType: string) => {
+    setToolData({ version, originalContent, contentType });
+    setActiveTool(tool);
   };
 
-  const handleTranslateContent = async () => {
-    if (!contentToTranslate || !targetLanguage.trim()) {
-        toast({ title: "Input Required", description: "Please enter a target language.", variant: "destructive" });
-        return;
-    }
-    startTransition(async () => {
-        try {
-            const response = await fetch('/api/content/translate', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    originalContent: contentToTranslate.originalContent,
-                    targetLanguage: targetLanguage,
-                    toneDescription: toneDescription,
-                }),
-            });
-            const result = await response.json();
-            if (!response.ok) throw new Error(result.error || 'Failed to translate content.');
-            setTranslatedContent(result.translatedContent);
-            toast({ title: "Translation Complete", description: `Content translated to ${targetLanguage}.` });
-            await awardXP(10, "translating content");
-        } catch (err) {
-            const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred.';
-            toast({ title: "Translation Failed", description: errorMessage, variant: "destructive" });
-        }
-    });
-  };
-  
-  const handleOptimizeContent = async () => {
-    if (!contentToOptimize || !optimizationGoal.trim()) {
-        toast({ title: "Input Required", description: "Please select an optimization goal.", variant: "destructive" });
-        return;
-    }
-    startTransition(async () => {
-        try {
-            const response = await fetch('/api/content/optimize', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    originalContent: contentToOptimize.originalContent,
-                    contentType: contentToOptimize.contentType,
-                    optimizationGoal,
-                    campaignId: campaign.id,
-                }),
-            });
-            const result = await response.json();
-            if (!response.ok) throw new Error(result.error || 'Failed to optimize content.');
-            setOptimizationResult(result);
-            toast({ title: "Optimization Complete", description: "The AI has provided an optimized version below." });
-            await awardXP(10, "optimizing content");
-        } catch (err) {
-            const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred.';
-            toast({ title: "Optimization Failed", description: errorMessage, variant: "destructive" });
-        }
-    });
-  };
 
   return (
     <div className="space-y-6">
@@ -456,10 +338,7 @@ export function CampaignDetailClient({ initialCampaign, onBack, onCampaignUpdate
                 isGeneratingContent={isGeneratingContent}
                 submittedFeedback={submittedFeedback}
                 onGenerateInitialContent={handleGenerateInitialContent}
-                onOpenReviseDialog={(original, type, version) => { setContentToRevise({ originalContent: original, contentType: type, version }); setIsReviseDialogOpen(true); setRevisedContent(null); }}
-                onOpenAuditDialog={(content) => { setContentToAudit(content); setIsAuditDialogOpen(true); setAuditResult(null); }}
-                onOpenTranslateDialog={(original, type, version) => { setContentToTranslate({ originalContent: original, contentType: type, version }); setIsTranslateDialogOpen(true); setTranslatedContent(null); }}
-                onOpenOptimizeDialog={(original, type, version) => { setContentToOptimize({ originalContent: original, contentType: type, version }); setIsOptimizeDialogOpen(true); setOptimizationResult(null); }}
+                onOpenToolDialog={openToolDialog}
                 onFeedbackSubmit={async (version, format, rating) => {
                     try {
                         const response = await fetch('/api/feedback', {
@@ -576,40 +455,40 @@ export function CampaignDetailClient({ initialCampaign, onBack, onCampaignUpdate
           </DialogContent>
       </Dialog>
       
-      <Dialog open={isReviseDialogOpen} onOpenChange={setIsReviseDialogOpen}>
-        <DialogContent className="sm:max-w-2xl">
-            <DialogHeader>
-                <DialogTitle>Revise Content</DialogTitle>
-                <DialogDescription>Refine the content to better match your needs. The original is on the left, the revision will appear on the right.</DialogDescription>
-            </DialogHeader>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 py-4">
-                <div className="space-y-2">
-                    <Label>Original Content ({contentToRevise?.contentType})</Label>
-                    <Textarea readOnly value={contentToRevise?.originalContent} rows={8} className="text-xs"/>
-                </div>
-                 <div className="space-y-2">
-                    <Label>Revised Content</Label>
-                    <Textarea readOnly value={revisedContent ?? "AI revision will appear here..."} rows={8} className="text-xs"/>
-                </div>
-            </div>
-             <div className="space-y-2">
-                <Label htmlFor="revision-instructions">Revision Instructions</Label>
-                <Textarea id="revision-instructions" value={revisionInstructions} onChange={(e) => setRevisionInstructions(e.target.value)} placeholder="e.g., Make this more persuasive for Gen Z. Add more technical details. Shorten it to two sentences."/>
-            </div>
-            <DialogFooter>
-                 {revisedContent && contentToRevise && (
-                    <Button onClick={() => handleSaveAsNewVersion(revisedContent, contentToRevise.contentType, contentToRevise.version, `Revised "${contentToRevise.contentType}" with new instructions.`, "User Revision")} disabled={isPending} variant="secondary">
-                        <Save className="mr-2 h-4 w-4" /> Save as New Version
-                    </Button>
-                )}
-                <Button onClick={handleReviseContent} disabled={isPending}>
-                    {isPending && !revisedContent ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Sparkles className="mr-2 h-4 w-4"/>}
-                    {isPending && !revisedContent ? 'Revising...' : 'Run Revision'}
-                </Button>
-                <DialogClose asChild><Button variant="outline">Close</Button></DialogClose>
-            </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {toolData && (
+        <>
+          <ReviseToolDialog
+            isOpen={activeTool === 'revise'}
+            onOpenChange={() => setActiveTool(null)}
+            campaignId={campaign.id}
+            contentToRevise={toolData}
+            onSave={handleSaveAsNewVersion}
+            awardXP={awardXP}
+          />
+          <AuditToolDialog
+            isOpen={activeTool === 'audit'}
+            onOpenChange={() => setActiveTool(null)}
+            campaignId={campaign.id}
+            contentToAudit={toolData.originalContent}
+            awardXP={awardXP}
+          />
+          <TranslateToolDialog
+            isOpen={activeTool === 'translate'}
+            onOpenChange={() => setActiveTool(null)}
+            contentToTranslate={toolData}
+            onSave={handleSaveAsNewVersion}
+            awardXP={awardXP}
+          />
+          <OptimizeToolDialog
+            isOpen={activeTool === 'optimize'}
+            onOpenChange={() => setActiveTool(null)}
+            campaignId={campaign.id}
+            contentToOptimize={toolData}
+            onSave={handleSaveAsNewVersion}
+            awardXP={awardXP}
+          />
+        </>
+      )}
     </div>
   );
 }

@@ -94,7 +94,7 @@ ContentCraft AI is a Next.js web application designed as a multi-agent AI conten
         *   Users can provide "thumbs up" or "thumbs down" feedback on individual pieces of generated content, earning XP and helping to refine the AI models over time. The system prevents duplicate feedback submissions.
 
     *   **API-Based Settings**:
-        *   User profile (name) and password changes are supported via API endpoints (`/api/user/*`). A dedicated settings UI is not present but can be added.
+        *   User profile (name) and password changes are supported via API endpoints (`/api/user/*`). A dedicated settings UI is now present in the user dropdown menu in the site header.
 
 
     3.2 Admin Features
@@ -189,7 +189,6 @@ Refer to `README.md`. Key `.env.local` variables remain `MONGODB_URI`, `NEXTAUTH
 -----------------
 8. Future Enhancements
 -----------------
-*   UI for users to manage their profile (name, password).
 *   Real-time Agent Debates (WebSockets).
 *   Full File Uploads & Processing (Cloud Storage).
 *   Functional A/B Testing and performance feedback loops.
