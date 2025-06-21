@@ -20,7 +20,7 @@ ContentCraft AI is a revolutionary multi-agent content creation system designed 
     *   **Audit**: Check how well the content aligns with your generated Brand Profile.
     *   **Translate**: Localize the content into different languages.
     *   **Optimize**: Improve the content for a specific goal like engagement or click-through-rate.
-*   **Gamification System**: Earn Creative XP for actions like providing feedback. Level up and track your progress in the site header.
+*   **Gamification System**: Earn Creative XP for actions like generating content or using AI tools. Level up and track your progress in the site header.
 
 ### Admin Features
 *   **Comprehensive Admin Dashboard**: Centralized control panel at `/admin/dashboard` for platform oversight, including usage statistics and analytics charts.
@@ -40,7 +40,7 @@ ContentCraft AI is a revolutionary multi-agent content creation system designed 
 *   **State Management**: React Context, `useState`, `useEffect`, NextAuth.js session
 *   **AI Integration**: Genkit, Google Gemini (via `@genkit-ai/googleai`)
 *   **Authentication**: NextAuth.js (with JWT sessions and MongoDB adapter)
-*   **Database**: MongoDB (via `mongodb` driver and `clientPromise`)
+*   **Database**: MongoDB (via official `mongodb` driver and `clientPromise`)
 *   **Charting**: Recharts (for admin analytics)
 *   **Styling**: Tailwind CSS, PostCSS
 *   **Deployment**: Firebase App Hosting (configured via `apphosting.yaml`)

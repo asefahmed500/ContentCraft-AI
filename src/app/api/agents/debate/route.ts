@@ -32,14 +32,17 @@ export async function POST(request: NextRequest) {
     const campaignsCollection = db.collection<Omit<Campaign, 'id'>>('campaigns');
 
     // Verify user owns the campaign
-    const campaign = await campaignsCollection.findOne({
+    const campaignDoc = await campaignsCollection.findOne({
       _id: new ObjectId(campaignId),
       userId: userId
     });
 
-    if (!campaign) {
+    if (!campaignDoc) {
       return NextResponse.json({ error: 'Campaign not found or user is not authorized to access it.' }, { status: 404 });
     }
+    
+    const campaign = mapCampaignDocumentToCampaign({ ...campaignDoc, _id: campaignDoc._id });
+
 
     if (!campaign.brief || !campaign.title) {
       return NextResponse.json({ error: 'Campaign brief and title are required to run the war room.' }, { status: 400 });
@@ -57,12 +60,11 @@ export async function POST(request: NextRequest) {
         timestamp: new Date()
     }));
 
-    // Save the debate log to the campaign
     const updatedResult = await campaignsCollection.findOneAndUpdate(
       { _id: new ObjectId(campaignId) },
       { $set: { 
           agentDebates: debateLogWithTimestamps,
-          status: 'review', // Move status to review after debate
+          status: 'review',
           updatedAt: new Date() 
         } 
       },

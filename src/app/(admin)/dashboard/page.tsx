@@ -19,6 +19,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { AgentDebateDisplay } from '@/components/AgentDebateDisplay';
 import { Skeleton } from '@/components/ui/skeleton';
+import { format } from 'date-fns';
 
 interface PlatformStats {
   totalUsers: number;
@@ -111,7 +112,6 @@ export default function AdminDashboardPage() {
     setIsLoadingStats(true);
     setIsLoadingInsights(true);
     try {
-      // Parallel fetches for users and insights
       const usersPromise = fetch('/api/admin/users');
       const insightsPromise = fetch('/api/admin/insights');
       
