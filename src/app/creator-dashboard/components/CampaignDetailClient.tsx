@@ -1,7 +1,7 @@
 
 "use client";
 
-import type { Campaign, ContentVersion, AgentInteraction, MultiFormatContent } from '@/types/content';
+import type { Campaign, ContentVersion, AgentInteraction, MultiFormatContent, ScheduledPost } from '@/types/content';
 import type { BrandProfile } from '@/types/brand';
 import { useState, useTransition } from 'react';
 import { Button } from '@/components/ui/button';
@@ -11,13 +11,14 @@ import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, Beaker, FileText, Sparkles, ArrowLeft, Bot, MessageSquare, Microscope, FlaskConical, PencilRuler, SearchCheck, CheckCircle2 } from 'lucide-react';
+import { Loader2, Beaker, FileText, Sparkles, ArrowLeft, Bot, MessageSquare, Microscope, FlaskConical, PencilRuler, SearchCheck, CheckCircle2, CalendarDays } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { analyzeBrandProfile } from '@/ai/flows/brand-learning';
 import { AgentDebateDisplay } from '@/app/(admin)/dashboard/components/AgentDebateDisplay';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { format } from 'date-fns';
 import { Separator } from '@/components/ui/separator';
+import { ContentCalendarDisplay } from './ContentCalendarDisplay';
 
 interface CampaignDetailClientProps {
   initialCampaign: Campaign;
@@ -42,6 +43,9 @@ export function CampaignDetailClient({ initialCampaign, onBack, onCampaignUpdate
 
   // War Room State
   const [isDebating, setIsDebating] = useState(false);
+
+  // Content Calendar State
+  const [isGeneratingSchedule, setIsGeneratingSchedule] = useState(false);
   
   // Revise Content State
   const [isReviseDialogOpen, setIsReviseDialogOpen] = useState(false);
@@ -123,6 +127,31 @@ export function CampaignDetailClient({ initialCampaign, onBack, onCampaignUpdate
      } finally {
         setIsDebating(false);
      }
+  };
+
+  const handleGenerateSchedule = async () => {
+    setIsGeneratingSchedule(true);
+    try {
+      const response = await fetch(`/api/campaigns/${campaign.id}/schedule`, {
+          method: 'POST'
+      });
+      const result = await response.json();
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to generate content schedule.');
+      }
+
+      // The API returns the full updated campaign, so we can just set it
+      const newlyUpdatedCampaign = result as Campaign;
+      setCampaign(newlyUpdatedCampaign);
+      onCampaignUpdate(newlyUpdatedCampaign);
+
+      toast({ title: "Content Schedule Generated!", description: "Your 7-day content plan is ready." });
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred.';
+      toast({ title: "Schedule Generation Error", description: errorMessage, variant: "destructive" });
+    } finally {
+      setIsGeneratingSchedule(false);
+    }
   };
 
   const handleOpenReviseDialog = (originalContent: string, contentType: string) => {
@@ -208,7 +237,7 @@ export function CampaignDetailClient({ initialCampaign, onBack, onCampaignUpdate
       </Card>
       
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Left Column: Brand & Debate */}
+        {/* Left Column: Tools & Actions */}
         <div className="lg:col-span-1 space-y-6">
            <Card>
             <CardHeader>
@@ -250,6 +279,26 @@ export function CampaignDetailClient({ initialCampaign, onBack, onCampaignUpdate
                     <AgentDebateDisplay debates={campaign.agentDebates} />
                 )}
             </CardContent>
+           </Card>
+
+           <Card>
+             <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-lg"><CalendarDays className="h-5 w-5 text-primary"/> Content Calendar</CardTitle>
+                <CardDescription>Generate a strategic content schedule.</CardDescription>
+              </CardHeader>
+              <CardContent>
+                {(!campaign.scheduledPosts || campaign.scheduledPosts.length === 0) ? (
+                  <div className="text-center py-4">
+                    <p className="text-muted-foreground mb-4 text-sm">No content schedule has been generated yet.</p>
+                    <Button onClick={handleGenerateSchedule} disabled={isGeneratingSchedule} size="sm">
+                      {isGeneratingSchedule ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Sparkles className="mr-2 h-4 w-4" />}
+                      {isGeneratingSchedule ? 'Generating...' : 'Generate Schedule'}
+                    </Button>
+                  </div>
+                ) : (
+                  <ContentCalendarDisplay schedule={campaign.scheduledPosts} />
+                )}
+              </CardContent>
            </Card>
         </div>
 

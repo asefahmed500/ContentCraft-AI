@@ -62,6 +62,7 @@ export interface ScheduledPost {
   contentVersionId?: string; // Which version of content is scheduled
   contentFormat: keyof MultiFormatContent | string; // e.g., 'tweet', 'linkedInArticle'
   platform: string; // e.g., "Twitter", "LinkedIn", "Instagram"
+  description?: string; // Strategic note from the AI about this post
   scheduledAt: Date;
   status: 'scheduled' | 'posted' | 'failed' | 'draft';
 }
