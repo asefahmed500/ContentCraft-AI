@@ -10,14 +10,14 @@ interface UpdateUserPayload {
   isBanned?: boolean;
 }
 
-export async function PUT(request: NextRequest, { params }: { params: { userId: string } }) {
+export async function PUT(request: NextRequest, context: any) {
   try {
     const token = await getToken({ req: request, secret: process.env.NEXTAUTH_SECRET });
     if (!token || token.role !== 'admin') {
       return NextResponse.json({ error: 'Unauthorized. Admin access required.' }, { status: 401 });
     }
 
-    const { userId } = params;
+    const { userId } = context.params;
     if (!userId || !ObjectId.isValid(userId)) {
       return NextResponse.json({ error: 'Invalid user ID provided.' }, { status: 400 });
     }

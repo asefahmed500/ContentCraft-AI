@@ -7,14 +7,14 @@ import { MongoClient, Db, ObjectId } from 'mongodb';
 import { auditUserBehavior, type UserAuditInput } from '@/ai/flows/admin/user-audit';
 import { differenceInDays } from 'date-fns';
 
-export async function POST(request: NextRequest, { params }: { params: { userId: string } }) {
+export async function POST(request: NextRequest, context: any) {
   try {
     const token = await getToken({ req: request, secret: process.env.NEXTAUTH_SECRET });
     if (!token || token.role !== 'admin') {
       return NextResponse.json({ error: 'Unauthorized. Admin access required.' }, { status: 401 });
     }
 
-    const { userId } = params;
+    const { userId } = context.params;
     if (!userId || !ObjectId.isValid(userId)) {
       return NextResponse.json({ error: 'Invalid user ID provided.' }, { status: 400 });
     }

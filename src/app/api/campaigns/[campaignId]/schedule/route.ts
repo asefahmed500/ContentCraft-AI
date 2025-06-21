@@ -8,7 +8,7 @@ import type { Campaign, ScheduledPost } from '@/types/content';
 import { generateContentStrategy, type ContentStrategyInput } from '@/ai/flows/content-strategy-flow';
 import { addDays } from 'date-fns';
 
-export async function POST(request: NextRequest, { params }: { params: { campaignId: string } }) {
+export async function POST(request: NextRequest, context: any) {
   try {
     const token = await getToken({ req: request, secret: process.env.NEXTAUTH_SECRET });
     if (!token || !token.id) {
@@ -16,7 +16,7 @@ export async function POST(request: NextRequest, { params }: { params: { campaig
     }
     const userId = token.id;
 
-    const { campaignId } = params;
+    const { campaignId } = context.params;
     if (!campaignId || !ObjectId.isValid(campaignId)) {
       return NextResponse.json({ error: 'Valid campaign ID is required.' }, { status: 400 });
     }
