@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
-import { agentDebate, type AgentDebateInput } from '@/ai/flows/agent-debate';
+import { runCreativeWarRoom, type CreativeWarRoomInput } from '@/ai/flows/agent-debate';
 import { getToken } from 'next-auth/jwt';
 
 export async function POST(request: NextRequest) {
@@ -10,13 +10,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const body = await request.json() as AgentDebateInput;
+    const body = await request.json() as CreativeWarRoomInput;
 
-    if (!body.topic || !body.initialContent || !body.agentRoles) {
-      return NextResponse.json({ error: 'Missing required fields: topic, initialContent, agentRoles' }, { status: 400 });
+    if (!body.brief || !body.title) {
+      return NextResponse.json({ error: 'Missing required fields: brief, title' }, { status: 400 });
     }
 
-    const result = await agentDebate(body);
+    const result = await runCreativeWarRoom(body);
     return NextResponse.json(result, { status: 200 });
 
   } catch (error) {

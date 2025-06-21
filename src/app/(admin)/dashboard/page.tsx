@@ -9,9 +9,10 @@ import { Button } from '@/components/ui/button';
 import { UserTable } from './components/UserTable';
 import { AdminCampaignList } from './components/AdminCampaignList';
 import { FlaggedContentTable } from './components/FlaggedContentTable'; 
+import { AgentDebateDisplay } from './components/AgentDebateDisplay'; // New Import
 import type { Campaign, ContentVersion, AgentInteraction, MultiFormatContent } from '@/types/content';
 import type { User as NextAuthUser } from 'next-auth';
-import { BarChart, LineChart as LucideLineChart, Users, FileText, Activity, Zap, Brain, Download, Info, PieChart, ListTree, XCircle, MessageSquare, Trophy, ShieldAlert as ShieldAlertIcon } from 'lucide-react';
+import { BarChart, BrainCircuit, LineChart as LucideLineChart, Users, FileText, Activity, Zap, Brain, Download, Info, PieChart, ListTree, XCircle, MessageSquare, Trophy, ShieldAlert as ShieldAlertIcon } from 'lucide-react';
 import { ResponsiveContainer, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, BarChart as RechartsBarChart, Line, LineChart as RechartsLineChart, Pie, Cell, PieChart as RechartsPieChart } from 'recharts';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2 } from 'lucide-react';
@@ -74,6 +75,8 @@ export default function AdminDashboardPage() {
   const [isLoadingLeaderboard, setIsLoadingLeaderboard] = useState(true);
 
   const [flaggedContentRefreshTrigger, setFlaggedContentRefreshTrigger] = useState(0);
+
+  const [isDebating, setIsDebating] = useState(false);
 
   const fetchAllCampaigns = useCallback(async (showToast = false) => {
     setIsLoadingCampaigns(true);
@@ -185,6 +188,58 @@ export default function AdminDashboardPage() {
     }
   }, [fetchAllCampaigns, selectedCampaignForAdminView, fetchSingleCampaign]);
 
+  const handleRunDebate = async (campaign: Campaign) => {
+    setIsDebating(true);
+    toast({ title: "Creative War Room Initialized", description: "AI agents are collaborating. This may take a moment."});
+    try {
+      const debateResponse = await fetch('/api/agents/debate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ brief: campaign.brief, title: campaign.title })
+      });
+
+      if (!debateResponse.ok) {
+        const errorData = await debateResponse.json();
+        throw new Error(errorData.error || 'Failed to get debate from AI agents.');
+      }
+
+      const debateResult = await debateResponse.json();
+
+      const agentDebatesForDb: AgentInteraction[] = debateResult.debateLog.map((log: any) => ({
+          agent: log.agentRole,
+          agentName: log.agentName,
+          message: log.message,
+          timestamp: new Date()
+      }));
+
+      const updateResponse = await fetch(`/api/campaigns?id=${campaign.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ agentDebates: agentDebatesForDb, status: 'review' })
+      });
+      
+      if (!updateResponse.ok) {
+          const errorData = await updateResponse.json();
+          throw new Error(errorData.error || "Failed to save debate results to campaign.");
+      }
+
+      toast({ title: "Strategy Session Complete!", description: "Debate log has been saved to the campaign." });
+      // Refresh campaign data to show the new debate
+      const updatedCampaign = await fetchSingleCampaign(campaign.id);
+      if (updatedCampaign) {
+          setSelectedCampaignForAdminView(updatedCampaign);
+          // Also update the main list
+          setAllCampaigns(prev => prev.map(c => c.id === updatedCampaign.id ? updatedCampaign : c));
+      }
+
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred.';
+      toast({ title: "War Room Error", description: errorMessage, variant: 'destructive' });
+    } finally {
+      setIsDebating(false);
+    }
+  };
+
 
   const handleAdminCampaignAction = useCallback(async (campaignId: string, action: 'view' | 'edit' | 'delete' | 'flag') => {
     if (action === 'view') {
@@ -214,17 +269,6 @@ export default function AdminDashboardPage() {
         setActiveMainTab("campaigns"); 
     }
   };
-  
-  const handleContentVersionFlaggedInDetailView = useCallback(async (campaignId: string) => {
-    await fetchAllCampaigns(true);
-    if (selectedCampaignForAdminView && selectedCampaignForAdminView.id === campaignId) {
-        const updatedCampaign = await fetchSingleCampaign(campaignId); 
-        if (updatedCampaign) setSelectedCampaignForAdminView(updatedCampaign);
-    }
-    setFlaggedContentRefreshTrigger(prev => prev +1);
-    toast({title: "Version Moderation Updated", description: "Content version status has been reflected."});
-  }, [selectedCampaignForAdminView, toast, fetchAllCampaigns, fetchSingleCampaign]);
-
 
   const handleDownloadPlaceholder = (dataType: string) => {
     toast({
@@ -495,35 +539,41 @@ export default function AdminDashboardPage() {
                             {selectedCampaignForAdminView.targetAudience && <div><span className="font-semibold">Audience:</span> {selectedCampaignForAdminView.targetAudience}</div>}
                             {selectedCampaignForAdminView.tone && <div><span className="font-semibold">Tone:</span> {selectedCampaignForAdminView.tone}</div>}
                             {selectedCampaignForAdminView.contentGoals && selectedCampaignForAdminView.contentGoals.length > 0 && <div><span className="font-semibold">Goals:</span> {selectedCampaignForAdminView.contentGoals.join(', ')}</div>}
-                            
-                            <div className="mt-4">
-                                <h4 className="font-semibold mb-1">Agent Debates (Raw Data):</h4>
-                                {selectedCampaignForAdminView.agentDebates && selectedCampaignForAdminView.agentDebates.length > 0 ? (
-                                    <pre className="whitespace-pre-wrap text-xs p-2 border rounded bg-muted/50 max-h-60 overflow-y-auto">
-                                        {JSON.stringify(selectedCampaignForAdminView.agentDebates, null, 2)}
-                                    </pre>
-                                ): <p className="text-sm text-muted-foreground">No agent debates recorded for this campaign.</p>}
-                            </div>
-
-                            <div className="mt-4">
-                                <h4 className="font-semibold mb-1">Content Versions (Raw Data):</h4>
-                                 {selectedCampaignForAdminView.contentVersions && selectedCampaignForAdminView.contentVersions.length > 0 ? (
-                                    <pre className="whitespace-pre-wrap text-xs p-2 border rounded bg-muted/50 max-h-96 overflow-y-auto">
-                                        {JSON.stringify(selectedCampaignForAdminView.contentVersions, null, 2)}
-                                    </pre>
-                                ): <p className="text-sm text-muted-foreground">No content versions recorded for this campaign.</p>}
-                            </div>
                         </CardContent>
                     </Card>
-                    <Alert variant="default">
-                        <Info className="h-5 w-5"/>
-                        <AlertTitle>Simplified Campaign Detail View</AlertTitle>
-                        <AlertDescription>
-                            The richer UI components for agent debates and content version timelines are currently unavailable as their source files (previously in `src/app/(app)/dashboard/components/`) were removed.
-                            Raw campaign data for debates and versions is displayed above for administrative review.
-                            Individual content versions can still be moderated (flagged/unflagged) via the &quot;Flagged Content&quot; tab.
-                        </AlertDescription>
-                    </Alert>
+
+                    <Card>
+                        <CardHeader>
+                            <CardTitle className="font-headline text-xl">Creative Strategy War Room</CardTitle>
+                            <CardDescription>AI agents collaborate here to define the campaign strategy.</CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                            {selectedCampaignForAdminView.agentDebates && selectedCampaignForAdminView.agentDebates.length > 0 ? (
+                                <AgentDebateDisplay debates={selectedCampaignForAdminView.agentDebates} />
+                            ) : (
+                                <div className="text-center py-6">
+                                    <p className="text-muted-foreground mb-4">No strategy session has been run for this campaign yet.</p>
+                                    <Button onClick={() => handleRunDebate(selectedCampaignForAdminView)} disabled={isDebating}>
+                                        {isDebating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <BrainCircuit className="mr-2 h-4 w-4"/>}
+                                        {isDebating ? 'Agents are Debating...' : 'Start Strategy Session'}
+                                    </Button>
+                                </div>
+                            )}
+                        </CardContent>
+                    </Card>
+
+                    <Card>
+                         <CardHeader>
+                            <CardTitle>Content Versions (Raw Data)</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                             {selectedCampaignForAdminView.contentVersions && selectedCampaignForAdminView.contentVersions.length > 0 ? (
+                                <pre className="whitespace-pre-wrap text-xs p-2 border rounded bg-muted/50 max-h-96 overflow-y-auto">
+                                    {JSON.stringify(selectedCampaignForAdminView.contentVersions, null, 2)}
+                                </pre>
+                            ): <p className="text-sm text-muted-foreground">No content versions recorded for this campaign.</p>}
+                        </CardContent>
+                    </Card>
                 </>
             )}
         </TabsContent>

@@ -4,7 +4,7 @@ import { Briefcase, FileText, Smile, BarChartBig, Image as ImageIcon, Search, Sh
 import type { LucideProps } from 'lucide-react';
 
 interface AgentAvatarProps {
-  agent: Pick<Agent, 'name' | 'role' | 'avatar'>;
+  agent: Partial<Pick<Agent, 'name' | 'avatar'>> & { role: AgentRole | string }; // Allow string for flexibility
   size?: 'sm' | 'md' | 'lg';
 }
 
@@ -12,15 +12,16 @@ const roleIcons: Record<AgentRole, React.ComponentType<LucideProps>> = {
   'Creative Director': Briefcase,
   'Content Writer': FileText,
   'Brand Persona': Smile,
+  'Brand Specialist': Smile,
   'Analytics Strategist': BarChartBig,
   'Visual Content': ImageIcon,
-  'SEO Optimization': Search,
-  'Quality Assurance': ShieldCheck,
+  'SEO Expert': Search,
+  'QA Advisor': ShieldCheck,
   'Orchestrator': GitFork,
 };
 
 export function AgentAvatar({ agent, size = 'md' }: AgentAvatarProps) {
-  const IconComponent = roleIcons[agent.role] || HelpCircle;
+  const IconComponent = roleIcons[agent.role as AgentRole] || HelpCircle;
   
   const avatarSizeClasses = {
     sm: 'h-8 w-8',
@@ -37,7 +38,7 @@ export function AgentAvatar({ agent, size = 'md' }: AgentAvatarProps) {
     <div className="flex items-center space-x-3">
       <Avatar className={avatarSizeClasses[size]}>
         {agent.avatar ? (
-          <AvatarImage src={agent.avatar} alt={agent.name} data-ai-hint="robot avatar" />
+          <AvatarImage src={agent.avatar} alt={agent.name || agent.role} data-ai-hint="robot avatar" />
         ) : null}
         <AvatarFallback className="bg-secondary">
           <IconComponent className={`${iconSizeClasses[size]} text-secondary-foreground`} />
@@ -45,7 +46,7 @@ export function AgentAvatar({ agent, size = 'md' }: AgentAvatarProps) {
       </Avatar>
       {size !== 'sm' && (
         <div>
-          <p className={`font-medium ${size === 'lg' ? 'text-base' : 'text-sm'}`}>{agent.name}</p>
+          <p className={`font-medium ${size === 'lg' ? 'text-base' : 'text-sm'}`}>{agent.name || agent.role}</p>
           <p className={`text-xs text-muted-foreground ${size === 'lg' ? 'text-sm' : 'text-xs'}`}>{agent.role}</p>
         </div>
       )}

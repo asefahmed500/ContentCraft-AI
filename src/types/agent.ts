@@ -11,10 +11,11 @@ export type AgentRole =
   | 'Creative Director'
   | 'Content Writer'
   | 'Brand Persona'
+  | 'Brand Specialist'
   | 'Analytics Strategist'
   | 'Visual Content' 
-  | 'SEO Optimization'
-  | 'Quality Assurance'
+  | 'SEO Expert'
+  | 'QA Advisor'
   | 'Orchestrator';
 
 // This type is for UI representation in AgentDebatePanel
