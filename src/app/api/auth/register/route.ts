@@ -1,4 +1,5 @@
 
+
 import { NextResponse } from 'next/server';
 import clientPromise from '@/lib/mongodb';
 import bcrypt from 'bcryptjs';
@@ -35,7 +36,7 @@ export async function POST(request: Request) {
       name,
       email,
       password: hashedPassword,
-      role: 'viewer', 
+      role: 'editor', // Default role is now 'editor'
       createdAt: new Date(),
       updatedAt: new Date(),
       image: `https://placehold.co/100x100.png?text=${name.charAt(0).toUpperCase()}`, 
@@ -43,7 +44,7 @@ export async function POST(request: Request) {
       level: 1,
       badges: [],
       emailVerified: null,
-      isBanned: false, // Initialize isBanned to false
+      isBanned: false,
     });
 
     if (!result.insertedId) {

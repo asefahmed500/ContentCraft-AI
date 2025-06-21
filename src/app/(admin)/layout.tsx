@@ -30,7 +30,7 @@ function AdminLayoutContent({ children }: AdminLayoutProps) {
     return (
       <div className="flex h-screen items-center justify-center bg-background">
         <Loader2 className="h-12 w-12 animate-spin text-primary" />
-        {isLoading && <p className="ml-4">Loading session...</p>}
+        {isLoading && <p className="ml-4">Verifying admin permissions...</p>}
         {!isLoading && !isAdmin && <p className="ml-4">Access Denied. Redirecting...</p>}
       </div>
     );

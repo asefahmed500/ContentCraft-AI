@@ -1,4 +1,5 @@
 
+
 import NextAuth, { type NextAuthOptions } from 'next-auth';
 import GoogleProvider from 'next-auth/providers/google';
 import CredentialsProvider from 'next-auth/providers/credentials';
@@ -24,14 +25,11 @@ interface MyAppUser extends NextAuthUser {
 }
 
 const defaultGamificationAndStatus = {
-  role: 'viewer' as 'viewer' | 'editor' | 'admin',
+  role: 'editor' as 'viewer' | 'editor' | 'admin', // Default to editor now
   totalXP: 0,
   level: 1,
   badges: [] as string[],
   isBanned: false,
-  // emailVerified: null, // handled per provider
-  // createdAt: new Date(), // Handled by adapter or DB
-  // updatedAt: new Date(), // Handled by adapter or DB
 };
 
 const getDbName = (): string | undefined => {
@@ -126,14 +124,10 @@ export const authOptions: NextAuthOptions = {
       const updates: Partial<AdapterUser & MyAppUser> = {};
       let needsDbUpdate = false;
 
-      // Ensure NextAuth user object has id for JWT population later
       if (dbUser) {
         user.id = dbUser._id.toString(); 
       }
-      // For new users, the adapter creates them. We rely on signIn to enrich them.
-      // user.id will be populated by the adapter for new users before this callback.
 
-      // Sync profile info from Google if it's a Google sign-in
       if (account?.provider === "google") {
         const googleProfile = profile as (Profile & { picture?: string; email_verified?: boolean });
         if (googleProfile?.name && (!dbUser || dbUser.name !== googleProfile.name)) {
@@ -150,13 +144,12 @@ export const authOptions: NextAuthOptions = {
         } else {
            (user as MyAppUser).emailVerified = null;
         }
-      } else if (dbUser?.emailVerified) { // For credentials login, ensure NextAuth user object has emailVerified from DB
+      } else if (dbUser?.emailVerified) {
           (user as MyAppUser).emailVerified = new Date(dbUser.emailVerified);
       } else {
           (user as MyAppUser).emailVerified = null;
       }
 
-      // Check and set default custom fields if missing
       if (typeof (dbUser?.role) === 'undefined') { updates.role = defaultGamificationAndStatus.role; (user as MyAppUser).role = defaultGamificationAndStatus.role; needsDbUpdate = true; } 
       else { (user as MyAppUser).role = dbUser.role; }
       if (typeof (dbUser?.totalXP) === 'undefined') { updates.totalXP = defaultGamificationAndStatus.totalXP; (user as MyAppUser).totalXP = defaultGamificationAndStatus.totalXP; needsDbUpdate = true; } 
@@ -168,16 +161,15 @@ export const authOptions: NextAuthOptions = {
       if (typeof (dbUser?.isBanned) === 'undefined') { updates.isBanned = defaultGamificationAndStatus.isBanned; (user as MyAppUser).isBanned = defaultGamificationAndStatus.isBanned; needsDbUpdate = true; }
       else { (user as MyAppUser).isBanned = dbUser.isBanned; }
 
-      if (needsDbUpdate && dbUser) { // Only update if user exists
+      if (needsDbUpdate && dbUser) { 
         updates.updatedAt = new Date();
         await usersCollection.updateOne({ _id: dbUser._id }, { $set: updates });
-      } else if (needsDbUpdate && !dbUser && user.id) { // New user created by adapter, now update with defaults
-        // This case might be less common if adapter already sets some fields, but good for safety.
+      } else if (needsDbUpdate && !dbUser && user.id) { 
         updates.updatedAt = new Date();
         await usersCollection.updateOne({ _id: new ObjectId(user.id) }, { $set: updates });
       }
       
-      if ((user as MyAppUser).isBanned) { // Final check on the user object being passed to JWT
+      if ((user as MyAppUser).isBanned) { 
         return false; 
       }
       return true; 
@@ -200,9 +192,6 @@ export const authOptions: NextAuthOptions = {
         const updateData = sessionUpdate.user as Partial<MyAppUser>;
         if (updateData.name !== undefined) token.name = updateData.name;
         if (updateData.image !== undefined) token.picture = updateData.image;
-        // For security, role and isBanned should not be updated directly from client-side session update.
-        // They should be updated via trusted admin APIs, and then the session re-fetched or token re-evaluated.
-        // However, for XP/Level/Badges, if updated by a trusted API and then session updated, it's fine:
         if (updateData.totalXP !== undefined) token.totalXP = updateData.totalXP;
         if (updateData.level !== undefined) token.level = updateData.level;
         if (updateData.badges !== undefined) token.badges = updateData.badges;

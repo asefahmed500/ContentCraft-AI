@@ -24,7 +24,6 @@ function LoginPageContent() {
   const { data: session, status } = useSession();
   const router = useRouter();
   const searchParams = useSearchParams();
-  // Default to '/' and let middleware handle admin redirect or if callbackUrl was specific
   const callbackUrlFromParams = searchParams.get('callbackUrl');
   const initialError = searchParams.get('error');
 
@@ -41,15 +40,14 @@ function LoginPageContent() {
     if (initialError === "CredentialsSignin" || initialError === "OAuthSignin" || initialError === "OAuthCallback") {
       setError("Invalid email or password, or social login failed.");
     } else if (initialError) {
-      setError(initialError); // Display other errors passed from NextAuth
+      setError(initialError); 
     }
   }, [initialError]);
 
   useEffect(() => {
     if (!authLoading && isAuthenticated) {
-      // Redirect based on callbackUrl from params if it exists and is valid,
-      // otherwise, middleware will handle default redirection (e.g., to /admin/dashboard or /)
-      router.replace(callbackUrlFromParams || '/');
+      const destination = session.user?.role === 'admin' ? '/admin/dashboard' : '/';
+      router.replace(callbackUrlFromParams || destination);
     }
   }, [authLoading, isAuthenticated, router, callbackUrlFromParams, session]);
 
@@ -68,13 +66,11 @@ function LoginPageContent() {
         redirect: false, 
         email, 
         password, 
-        callbackUrl: callbackUrlFromParams || '/' // Send to / and let middleware sort it out
+        callbackUrl: callbackUrlFromParams || undefined 
       });
 
       if (result?.error) {
         setError(result.error === "CredentialsSignin" ? "Invalid email or password." : result.error);
-      } else if (result?.ok && !result.error) {
-        // router.replace will be handled by useEffect based on session status change
       }
     } catch (e: any) {
       setError(e.message || 'Login failed. Please check your credentials.');
@@ -87,8 +83,7 @@ function LoginPageContent() {
     setIsSubmitting(true); 
     setError('');
     try {
-      // Send to / and let middleware sort it out
-      await signIn('google', { redirect: false, callbackUrl: callbackUrlFromParams || '/' });
+      await signIn('google', { redirect: false, callbackUrl: callbackUrlFromParams || undefined });
     } catch (e: any) { 
       setError(e.message || 'Google Sign-In failed. Please try again.');
       setIsSubmitting(false);

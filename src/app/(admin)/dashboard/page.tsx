@@ -9,24 +9,16 @@ import { Button } from '@/components/ui/button';
 import { UserTable } from './components/UserTable';
 import { AdminCampaignList } from './components/AdminCampaignList';
 import { FlaggedContentTable } from './components/FlaggedContentTable'; 
-import { AgentDebateDisplay } from './components/AgentDebateDisplay';
-import { BrandProfileDisplay } from './components/BrandProfileDisplay';
 import type { Campaign, ContentVersion, AgentInteraction, MultiFormatContent } from '@/types/content';
 import type { User as NextAuthUser } from 'next-auth';
-import { BarChart, BrainCircuit, LineChart as LucideLineChart, Users, FileText, Activity, Zap, Brain, Download, Info, PieChart, ListTree, XCircle, MessageSquare, Trophy, ShieldAlert as ShieldAlertIcon, BotMessageSquare, Edit, Lightbulb, Beaker, CheckCircle } from 'lucide-react';
+import { BarChart, BrainCircuit, LineChart as LucideLineChart, Users, FileText, Activity, Zap, Brain, Download, Info, PieChart, ListTree, XCircle, MessageSquare, Trophy, ShieldAlert as ShieldAlertIcon } from 'lucide-react';
 import { ResponsiveContainer, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, BarChart as RechartsBarChart, Line, LineChart as RechartsLineChart, Pie, Cell, PieChart as RechartsPieChart } from 'recharts';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2 } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
-import { Label } from '@/components/ui/label';
-import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
 import { format } from 'date-fns';
-import type { CampaignMemoryOutput } from '@/types/memory';
-import type { BrandAuditOutput } from '@/ai/flows/brand-audit-flow';
-import { Progress } from '@/components/ui/progress';
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 
 interface PlatformStats {
   totalUsers: number;
@@ -83,28 +75,6 @@ export default function AdminDashboardPage() {
   const [isLoadingLeaderboard, setIsLoadingLeaderboard] = useState(true);
 
   const [flaggedContentRefreshTrigger, setFlaggedContentRefreshTrigger] = useState(0);
-  const [isDebating, setIsDebating] = useState(false);
-
-  // State for Revise Content Dialog
-  const [isReviseDialogOpen, setIsReviseDialogOpen] = useState(false);
-  const [contentToRevise, setContentToRevise] = useState<{originalContent: string; versionInfo: string} | null>(null);
-  const [revisionInstructions, setRevisionInstructions] = useState('');
-  const [revisionAudience, setRevisionAudience] = useState('');
-  const [revisionTone, setRevisionTone] = useState('');
-  const [revisionResult, setRevisionResult] = useState<string | null>(null);
-  const [isRevising, setIsRevising] = useState(false);
-
-  // State for Campaign Memory
-  const [memory, setMemory] = useState<CampaignMemoryOutput | null>(null);
-  const [isRecallingMemory, setIsRecallingMemory] = useState(false);
-  const [memoryError, setMemoryError] = useState<string | null>(null);
-
-  // State for Brand Audit Dialog
-  const [isAuditDialogOpen, setIsAuditDialogOpen] = useState(false);
-  const [contentToAudit, setContentToAudit] = useState<{content: string; versionInfo: string} | null>(null);
-  const [auditResult, setAuditResult] = useState<BrandAuditOutput | null>(null);
-  const [isAuditing, setIsAuditing] = useState(false);
-
 
   const fetchAllCampaigns = useCallback(async (showToast = false) => {
     setIsLoadingCampaigns(true);
@@ -215,147 +185,13 @@ export default function AdminDashboardPage() {
       if (updatedCampaign) setSelectedCampaignForAdminView(updatedCampaign);
     }
   }, [fetchAllCampaigns, selectedCampaignForAdminView, fetchSingleCampaign]);
-
-  const handleRunDebate = async (campaign: Campaign) => {
-    setIsDebating(true);
-    toast({ title: "Creative War Room Initialized", description: "AI agents are collaborating. This may take a moment."});
-    try {
-      const debateResponse = await fetch('/api/agents/debate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ brief: campaign.brief, title: campaign.title })
-      });
-
-      if (!debateResponse.ok) {
-        const errorData = await debateResponse.json();
-        throw new Error(errorData.error || 'Failed to get debate from AI agents.');
-      }
-
-      const debateResult = await debateResponse.json();
-
-      const agentDebatesForDb: AgentInteraction[] = debateResult.debateLog.map((log: any) => ({
-          agent: log.agentRole,
-          agentName: log.agentName,
-          message: log.message,
-          timestamp: new Date()
-      }));
-
-      const updateResponse = await fetch(`/api/campaigns?id=${campaign.id}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ agentDebates: agentDebatesForDb, status: 'review' })
-      });
-      
-      if (!updateResponse.ok) {
-          const errorData = await updateResponse.json();
-          throw new Error(errorData.error || "Failed to save debate results to campaign.");
-      }
-
-      toast({ title: "Strategy Session Complete!", description: "Debate log has been saved to the campaign." });
-      const updatedCampaign = await fetchSingleCampaign(campaign.id);
-      if (updatedCampaign) {
-          setSelectedCampaignForAdminView(updatedCampaign);
-          setAllCampaigns(prev => prev.map(c => c.id === updatedCampaign.id ? updatedCampaign : c));
-      }
-
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred.';
-      toast({ title: "War Room Error", description: errorMessage, variant: 'destructive' });
-    } finally {
-      setIsDebating(false);
-    }
-  };
-
-  const handleOpenReviseDialog = (version: ContentVersion) => {
-    const originalContent = version.multiFormatContentSnapshot.blogPost || 
-                            Object.values(version.multiFormatContentSnapshot).find(c => !!c) || 
-                            '';
-    setContentToRevise({
-      originalContent,
-      versionInfo: `Version ${version.versionNumber} by ${version.actorName}`
-    });
-    setRevisionInstructions('');
-    setRevisionAudience('');
-    setRevisionTone('');
-    setRevisionResult(null);
-    setIsReviseDialogOpen(true);
-  };
-
-  const handleReviseContent = async () => {
-    if (!contentToRevise) return;
-    setIsRevising(true);
-    setRevisionResult(null);
-    try {
-      const response = await fetch('/api/content/revise', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({
-          originalContent: contentToRevise.originalContent,
-          revisionInstructions,
-          targetAudience: revisionAudience,
-          desiredTone: revisionTone,
-        })
-      });
-      const result = await response.json();
-      if (!response.ok) {
-        throw new Error(result.error || 'Failed to revise content.');
-      }
-      setRevisionResult(result.revisedContent);
-      toast({title: "Content Revised", description: "The AI has generated a revised version of your content."});
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : "An unknown error occurred.";
-      toast({title: "Revision Error", description: errorMessage, variant: "destructive"});
-    } finally {
-      setIsRevising(false);
-    }
-  };
-
-    const handleOpenAuditDialog = (version: ContentVersion) => {
-    const content = version.multiFormatContentSnapshot.blogPost || 
-                    Object.values(version.multiFormatContentSnapshot).find(c => !!c) || 
-                    '';
-    setContentToAudit({
-      content,
-      versionInfo: `Version ${version.versionNumber} by ${version.actorName}`
-    });
-    setAuditResult(null);
-    setIsAuditDialogOpen(true);
-  };
-
-  const handleRunAudit = async () => {
-    if (!contentToAudit || !selectedCampaignForAdminView?.brandProfile) return;
-    setIsAuditing(true);
-    setAuditResult(null);
-    try {
-      const response = await fetch('/api/brand/audit', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({
-          contentToCheck: contentToAudit.content,
-          brandProfile: selectedCampaignForAdminView.brandProfile,
-        })
-      });
-      const result = await response.json();
-      if (!response.ok) {
-        throw new Error(result.error || 'Failed to audit content.');
-      }
-      setAuditResult(result);
-      toast({title: "Audit Complete", description: "Brand alignment check has been performed."});
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : "An unknown error occurred.";
-      toast({title: "Audit Error", description: errorMessage, variant: "destructive"});
-    } finally {
-      setIsAuditing(false);
-    }
-  };
+  
 
   const handleAdminCampaignAction = useCallback(async (campaignId: string, action: 'view' | 'edit' | 'delete' | 'flag') => {
     if (action === 'view') {
         const campaignDetail = await fetchSingleCampaign(campaignId);
         if (campaignDetail) {
             setSelectedCampaignForAdminView(campaignDetail);
-            setMemory(null); // Reset memory when viewing a new campaign
-            setMemoryError(null);
             setActiveMainTab("campaign_detail_view"); 
             toast({title: "Campaign Loaded", description: `Viewing details for "${campaignDetail.title}"`});
         } else {
@@ -388,38 +224,8 @@ export default function AdminDashboardPage() {
     });
   };
 
-  const handleAnalyzeHistory = async () => {
-    if (!selectedCampaignForAdminView) return;
-    setIsRecallingMemory(true);
-    setMemory(null);
-    setMemoryError(null);
-    try {
-      const response = await fetch('/api/memory/recall', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          userId: selectedCampaignForAdminView.userId,
-          currentCampaignBrief: selectedCampaignForAdminView.brief
-        }),
-      });
-      const result = await response.json();
-      if (!response.ok) {
-        throw new Error(result.error || "Failed to analyze campaign history.");
-      }
-      setMemory(result);
-      toast({ title: "Analysis Complete", description: "AI has provided insights based on the user's campaign history." });
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : "An unknown error occurred.";
-      setMemoryError(errorMessage);
-      toast({ title: "Analysis Failed", description: errorMessage, variant: "destructive" });
-    } finally {
-      setIsRecallingMemory(false);
-    }
-  };
-
-  const handleBrandProfileUpdate = (updatedCampaign: Campaign) => {
-    setSelectedCampaignForAdminView(updatedCampaign);
-    setAllCampaigns(prev => prev.map(c => c.id === updatedCampaign.id ? updatedCampaign : c));
+  const formatTitle = (key: string) => {
+    return key.replace(/([A-Z])/g, ' $1').replace(/^./, (str) => str.toUpperCase());
   };
   
   return (
@@ -634,7 +440,7 @@ export default function AdminDashboardPage() {
          <TabsContent value="flagged_content" className="mt-6">
           <Card>
             <CardHeader>
-              <CardTitle className="font-headline text-xl flex items-center gap-2"><MessageSquareWarning className="h-5 w-5 text-destructive"/>Flagged Content Versions</CardTitle>
+              <CardTitle className="font-headline text-xl flex items-center gap-2"><MessageSquare className="h-5 w-5 text-destructive"/>Flagged Content Versions</CardTitle>
               <CardDescription>Review and manage all content versions that have been flagged for moderation.</CardDescription>
             </CardHeader>
             <CardContent>
@@ -688,131 +494,32 @@ export default function AdminDashboardPage() {
                     </Card>
 
                     <Card>
-                        <CardHeader>
-                          <CardTitle className="font-headline text-xl">Brand Profile</CardTitle>
-                          <CardDescription>This profile is used to audit content for brand alignment.</CardDescription>
-                        </CardHeader>
-                        <CardContent>
-                           <BrandProfileDisplay campaign={selectedCampaignForAdminView} onProfileUpdate={handleBrandProfileUpdate} />
-                        </CardContent>
-                    </Card>
-
-                    <Card>
-                        <CardHeader>
-                            <CardTitle className="font-headline text-xl">Creative Strategy War Room</CardTitle>
-                            <CardDescription>AI agents collaborate here to define the campaign strategy.</CardDescription>
-                        </CardHeader>
-                        <CardContent>
-                            {selectedCampaignForAdminView.agentDebates && selectedCampaignForAdminView.agentDebates.length > 0 ? (
-                                <AgentDebateDisplay debates={selectedCampaignForAdminView.agentDebates} />
-                            ) : (
-                                <div className="text-center py-6">
-                                    <p className="text-muted-foreground mb-4">No strategy session has been run for this campaign yet.</p>
-                                    <Button onClick={() => handleRunDebate(selectedCampaignForAdminView)} disabled={isDebating}>
-                                        {isDebating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <BrainCircuit className="mr-2 h-4 w-4"/>}
-                                        {isDebating ? 'Agents are Debating...' : 'Start Strategy Session'}
-                                    </Button>
-                                </div>
-                            )}
-                        </CardContent>
-                    </Card>
-
-                    <Card>
-                        <CardHeader>
-                            <CardTitle className="font-headline text-xl flex items-center gap-2"><Lightbulb className="h-5 w-5 text-yellow-400" />Campaign Memory Insights</CardTitle>
-                            <CardDescription>Analyze this user&apos;s past campaigns to get AI-powered suggestions for the current one.</CardDescription>
-                        </CardHeader>
-                        <CardContent>
-                            {!memory && !isRecallingMemory && !memoryError && (
-                                <div className="text-center py-4">
-                                     <p className="text-muted-foreground mb-4">Click the button to analyze historical data for this user.</p>
-                                     <Button onClick={handleAnalyzeHistory} disabled={isRecallingMemory}>
-                                        {isRecallingMemory ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Brain className="mr-2 h-4 w-4"/>}
-                                        Analyze User&apos;s Campaign History
-                                    </Button>
-                                </div>
-                            )}
-                            {isRecallingMemory && (
-                                <div className="flex justify-center items-center min-h-[100px]">
-                                    <Loader2 className="h-8 w-8 animate-spin text-primary" />
-                                    <span className="ml-2">AI is analyzing history...</span>
-                                </div>
-                            )}
-                            {memoryError && (
-                                <Alert variant="destructive">
-                                    <AlertTitle>Analysis Failed</AlertTitle>
-                                    <AlertDescription>{memoryError}</AlertDescription>
-                                </Alert>
-                            )}
-                            {memory && (
-                                <div className="space-y-4">
-                                    <div>
-                                        <h4 className="font-semibold">Insights</h4>
-                                        <ul className="list-disc pl-5 text-sm text-muted-foreground space-y-1 mt-1">
-                                            {memory.insights.map((insight, i) => <li key={`insight-${i}`}>{insight}</li>)}
-                                        </ul>
-                                    </div>
-                                    <div>
-                                        <h4 className="font-semibold">Suggestions</h4>
-                                        <ul className="list-disc pl-5 text-sm text-muted-foreground space-y-1 mt-1">
-                                            {memory.suggestions.map((suggestion, i) => <li key={`suggestion-${i}`}>{suggestion}</li>)}
-                                        </ul>
-                                    </div>
-                                    <p className="text-xs text-center text-muted-foreground pt-2">Confidence Score: {memory.confidenceScore}%</p>
-                                    <div className="text-center">
-                                      <Button variant="outline" size="sm" onClick={handleAnalyzeHistory} disabled={isRecallingMemory}>
-                                          {isRecallingMemory ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Brain className="mr-2 h-4 w-4"/>}
-                                          Re-analyze History
-                                      </Button>
-                                    </div>
-                                </div>
-                            )}
-                        </CardContent>
-                    </Card>
-
-
-                    <Card>
                          <CardHeader>
-                            <CardTitle>Content Versions</CardTitle>
-                            <CardDescription>View generated content versions and use tools to revise them.</CardDescription>
+                            <CardTitle>Content Versions (Read-Only)</CardTitle>
+                            <CardDescription>View generated content versions. Creative tools are available on the user dashboard.</CardDescription>
                         </CardHeader>
                         <CardContent className="space-y-4">
                              {selectedCampaignForAdminView.contentVersions && selectedCampaignForAdminView.contentVersions.length > 0 ? (
-                                selectedCampaignForAdminView.contentVersions.map((version) => (
-                                  <Card key={version.id} className="bg-muted/30">
-                                    <CardHeader>
-                                      <CardTitle className="text-base flex justify-between items-center gap-2">
-                                        <span>Version {version.versionNumber}</span>
-                                         <div className="flex gap-2">
-                                            <Button size="sm" variant="outline" onClick={() => handleOpenAuditDialog(version)} disabled={!selectedCampaignForAdminView.brandProfile}>
-                                                <Beaker className="mr-2 h-4 w-4" />
-                                                Audit
-                                            </Button>
-                                            <Button size="sm" variant="outline" onClick={() => handleOpenReviseDialog(version)}>
-                                                <Edit className="mr-2 h-4 w-4" />
-                                                Revise
-                                            </Button>
-                                        </div>
-                                      </CardTitle>
-                                      <CardDescription>
-                                        By: {version.actorName} on {format(new Date(version.timestamp), "MMM d, yyyy 'at' p")}
-                                      </CardDescription>
-                                    </CardHeader>
-                                    <CardContent>
-                                        <p className="font-medium text-sm mb-2">Change Summary: <span className="font-normal">{version.changeSummary}</span></p>
-                                        <div className="space-y-2">
-                                            {Object.entries(version.multiFormatContentSnapshot).map(([format, text]) =>
-                                                text ? (
-                                                    <details key={format}>
-                                                        <summary className="text-sm font-semibold cursor-pointer">{format.replace(/([A-Z])/g, ' $1').trim()}</summary>
-                                                        <pre className="mt-1 whitespace-pre-wrap text-xs p-2 border rounded bg-background max-h-48 overflow-y-auto">{text}</pre>
-                                                    </details>
-                                                ) : null
-                                            )}
-                                        </div>
-                                    </CardContent>
-                                  </Card>
-                                ))
+                                <Accordion type="single" collapsible className="w-full">
+                                {selectedCampaignForAdminView.contentVersions.map((version) => (
+                                    <AccordionItem value={`version-${version.versionNumber}`} key={version.id}>
+                                        <AccordionTrigger>Version {version.versionNumber} by {version.actorName} - {format(new Date(version.timestamp), "MMM d, p")}</AccordionTrigger>
+                                        <AccordionContent className="space-y-3">
+                                            <p className="font-medium text-sm">Change Summary: <span className="font-normal text-muted-foreground">{version.changeSummary}</span></p>
+                                            <div className="space-y-2">
+                                                {Object.entries(version.multiFormatContentSnapshot).map(([format, text]) =>
+                                                    text ? (
+                                                        <details key={format}>
+                                                            <summary className="text-sm font-semibold cursor-pointer">{formatTitle(format)}</summary>
+                                                            <pre className="mt-1 whitespace-pre-wrap text-xs p-2 border rounded bg-background max-h-48 overflow-y-auto">{text}</pre>
+                                                        </details>
+                                                    ) : null
+                                                )}
+                                            </div>
+                                        </AccordionContent>
+                                    </AccordionItem>
+                                ))}
+                                </Accordion>
                             ): <p className="text-sm text-muted-foreground text-center py-4">No content versions recorded for this campaign.</p>}
                         </CardContent>
                     </Card>
@@ -850,121 +557,6 @@ export default function AdminDashboardPage() {
         </TabsContent>
       </Tabs>
     </div>
-
-    {/* Revise Content Dialog */}
-    <Dialog open={isReviseDialogOpen} onOpenChange={setIsReviseDialogOpen}>
-      <DialogContent className="max-w-3xl">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2"><BotMessageSquare /> AI Content Revision</DialogTitle>
-          <DialogDescription>
-            Fine-tune content for a specific tone or audience. Original from: {contentToRevise?.versionInfo}
-          </DialogDescription>
-        </DialogHeader>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 py-4 max-h-[70vh] overflow-y-auto">
-            <div className="space-y-4">
-                <div className="space-y-2">
-                    <Label htmlFor="original-content">Original Content</Label>
-                    <Textarea id="original-content" value={contentToRevise?.originalContent || ''} readOnly rows={8} className="bg-muted/50" />
-                </div>
-                <div className="space-y-2">
-                    <Label htmlFor="revision-instructions">Revision Instructions</Label>
-                    <Textarea 
-                      id="revision-instructions"
-                      value={revisionInstructions}
-                      onChange={e => setRevisionInstructions(e.target.value)}
-                      placeholder="e.g., Make this more persuasive for Gen Z. Add more data points. Shorten the paragraphs."
-                      rows={4}
-                    />
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                        <Label htmlFor="revision-audience">Target Audience (Optional)</Label>
-                        <Input id="revision-audience" value={revisionAudience} onChange={e => setRevisionAudience(e.target.value)} placeholder="e.g., Tech enthusiasts"/>
-                    </div>
-                    <div className="space-y-2">
-                        <Label htmlFor="revision-tone">Desired Tone (Optional)</Label>
-                        <Input id="revision-tone" value={revisionTone} onChange={e => setRevisionTone(e.target.value)} placeholder="e.g., Playful, formal" />
-                    </div>
-                </div>
-                 <Button onClick={handleReviseContent} disabled={isRevising || !revisionInstructions}>
-                    {isRevising && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                    Revise with AI
-                </Button>
-            </div>
-            <div className="space-y-2">
-                 <Label htmlFor="revision-result">Revised Content</Label>
-                 {isRevising ? (
-                    <div className="flex flex-col items-center justify-center h-full border rounded-md bg-muted/50 p-4">
-                        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-                        <p className="mt-2 text-sm text-muted-foreground">AI is working its magic...</p>
-                    </div>
-                 ) : (
-                    <Textarea 
-                      id="revision-result" 
-                      value={revisionResult || 'AI revision will appear here...'} 
-                      readOnly 
-                      rows={15}
-                      className={revisionResult ? 'bg-green-50 dark:bg-green-900/20' : 'bg-muted/50'}
-                    />
-                 )}
-            </div>
-        </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={() => setIsReviseDialogOpen(false)}>Close</Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-
-    {/* Brand Audit Dialog */}
-    <Dialog open={isAuditDialogOpen} onOpenChange={setIsAuditDialogOpen}>
-      <DialogContent className="max-w-3xl">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2"><CheckCircle /> Brand Alignment Audit</DialogTitle>
-          <DialogDescription>
-            Auditing content from: {contentToAudit?.versionInfo}
-          </DialogDescription>
-        </DialogHeader>
-        <div className="py-4">
-          {!auditResult && !isAuditing && (
-            <div className="text-center space-y-4">
-                <p>Ready to check this content against the campaign&apos;s brand profile?</p>
-                <Button onClick={handleRunAudit}>
-                    <Beaker className="mr-2 h-4 w-4" /> Run Audit
-                </Button>
-            </div>
-          )}
-           {isAuditing ? (
-                <div className="flex flex-col items-center justify-center h-full min-h-[200px] border rounded-md bg-muted/50 p-4">
-                    <Loader2 className="h-8 w-8 animate-spin text-primary" />
-                    <p className="mt-2 text-sm text-muted-foreground">AI is auditing for brand alignment...</p>
-                </div>
-            ) : auditResult && (
-                <div className="space-y-4">
-                    <div className="text-center">
-                        <p className="text-sm text-muted-foreground">Alignment Score</p>
-                        <p className="text-5xl font-bold text-primary">{auditResult.alignmentScore}<span className="text-2xl text-muted-foreground">/100</span></p>
-                        <Progress value={auditResult.alignmentScore} className="w-1/2 mx-auto mt-2 h-2" />
-                    </div>
-                    <Card>
-                        <CardHeader><CardTitle className="text-base">Justification</CardTitle></CardHeader>
-                        <CardContent><p className="text-sm text-muted-foreground">{auditResult.justification}</p></CardContent>
-                    </Card>
-                    <Card>
-                        <CardHeader><CardTitle className="text-base">Suggestions for Improvement</CardTitle></CardHeader>
-                        <CardContent>
-                            <ul className="list-disc pl-5 space-y-2 text-sm text-muted-foreground">
-                                {auditResult.suggestions.map((suggestion, i) => <li key={`sugg-${i}`}>{suggestion}</li>)}
-                            </ul>
-                        </CardContent>
-                    </Card>
-                </div>
-            )}
-        </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={() => setIsAuditDialogOpen(false)}>Close</Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
     </>
   );
 }

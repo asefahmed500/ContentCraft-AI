@@ -20,23 +20,18 @@ function HomePageContent() {
 
   useEffect(() => {
     if (!isLoading && isAuthenticated) {
-      router.replace('/dashboard');
+       // Only redirect admins to their dashboard. Non-admins stay on the homepage.
+       if (session.user?.role === 'admin') {
+         router.replace('/admin/dashboard');
+       }
     }
-  }, [isAuthenticated, isLoading, router]);
+  }, [isAuthenticated, isLoading, router, session]);
 
-  if (isLoading) {
+  if (isLoading || (isAuthenticated && session?.user?.role === 'admin')) {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center bg-background">
         <Loader2 className="h-12 w-12 animate-spin text-primary" />
-      </div>
-    );
-  }
-
-  if (isAuthenticated) {
-    return (
-      <div className="flex min-h-screen flex-col items-center justify-center bg-background">
-        <Loader2 className="h-12 w-12 animate-spin text-primary" />
-        <p className="mt-4 text-muted-foreground">Redirecting to dashboard...</p>
+        <p className="mt-4 text-muted-foreground">Loading your workspace...</p>
       </div>
     );
   }
@@ -152,7 +147,6 @@ function HomePageContent() {
 }
 
 export default function HomePage() {
-  // SessionProvider is at the root
   return (
       <HomePageContent />
   );

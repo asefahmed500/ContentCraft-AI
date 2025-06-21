@@ -37,8 +37,8 @@ function SignUpPageContent() {
 
   useEffect(() => {
     if (!authLoading && isAuthenticated) {
-      // Middleware will handle redirection based on role
-      router.replace(session?.user?.role === 'admin' ? '/admin/dashboard' : '/');
+      const destination = session.user?.role === 'admin' ? '/admin/dashboard' : '/';
+      router.replace(destination);
     }
   }, [authLoading, isAuthenticated, router, session]);
 
@@ -97,12 +97,11 @@ function SignUpPageContent() {
     setIsGoogleSubmitting(true);
     setError('');
     try {
-      // Redirect to '/' and let middleware handle final destination
       await signIn('google', { callbackUrl: '/', redirect: false });
     } catch (e: any) {
       setError(e.message || 'Google Sign-Up failed. Please try again.');
     } finally {
-       // setIsGoogleSubmitting(false); // Let session status changes handle UI
+       // Let session status changes handle UI
     }
   };
   
