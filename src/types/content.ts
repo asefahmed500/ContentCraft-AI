@@ -1,5 +1,7 @@
 
 
+import type { BrandProfile } from './brand';
+
 
 export interface ContentPiece {
   id: string;
@@ -97,7 +99,8 @@ export interface Campaign {
   targetAudience?: string;
   tone?: string;
   contentGoals?: string[];
-  brandId?: string; // Link to a BrandDNA document (optional) - For future use
+  brandId?: string; // DEPRECATED in favor of embedded brandProfile. Link to a BrandDNA document (optional) - For future use
+  brandProfile?: BrandProfile; // Embedded Brand Profile object
   referenceMaterials?: Array<{ type: 'url' | 'fileId' | 'text'; value: string; name?: string }>; // For uploaded links or file references
   
   agentDebates: AgentInteraction[]; // Stores the history of agent interactions during the debate phase
@@ -158,5 +161,3 @@ export interface CampaignMemory {
   // other learned insights can be added here
   lastUpdatedAt?: Date;
 }
-
-

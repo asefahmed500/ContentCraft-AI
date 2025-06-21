@@ -1,7 +1,7 @@
 
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
-import { analyzeBrandDNA, type AnalyzeBrandDNAInput } from '@/ai/flows/brand-learning';
+import { analyzeBrandProfile, type AnalyzeBrandProfileInput } from '@/ai/flows/brand-learning';
 import { getToken } from 'next-auth/jwt';
 
 export async function POST(request: NextRequest) {
@@ -11,7 +11,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const body = await request.json() as AnalyzeBrandDNAInput;
+    const body = await request.json() as AnalyzeBrandProfileInput;
 
     if (!body.contentDataUri) {
       return NextResponse.json({ error: 'Missing required field: contentDataUri' }, { status: 400 });
@@ -23,12 +23,12 @@ export async function POST(request: NextRequest) {
     }
 
 
-    const result = await analyzeBrandDNA(body);
+    const result = await analyzeBrandProfile(body);
     return NextResponse.json(result, { status: 200 });
 
   } catch (error) {
     console.error("Brand Analyze API Error:", error);
     const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred.';
-    return NextResponse.json({ error: 'Failed to analyze brand DNA.', details: errorMessage }, { status: 500 });
+    return NextResponse.json({ error: 'Failed to analyze brand profile.', details: errorMessage }, { status: 500 });
   }
 }

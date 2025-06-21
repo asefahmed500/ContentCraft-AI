@@ -6,6 +6,7 @@ import { getToken } from 'next-auth/jwt';
 import { ObjectId } from 'mongodb';
 import type { Campaign, ContentVersion, AgentInteraction, ABTestInstance, ScheduledPost } from '@/types/content';
 import type { User as NextAuthUser } from 'next-auth';
+import type { BrandProfile } from '@/types/brand';
 
 interface SessionUser extends NextAuthUser {
   id?: string;
@@ -33,6 +34,7 @@ export const mapCampaignDocumentToCampaign = (campaignDoc: Omit<Campaign, 'id'> 
     tone: campaignDoc.tone,
     contentGoals: campaignDoc.contentGoals || [],
     brandId: campaignDoc.brandId,
+    brandProfile: campaignDoc.brandProfile, // Ensure this is mapped
     referenceMaterials: campaignDoc.referenceMaterials || [],
     agentDebates: (campaignDoc.agentDebates || []).map(ad => ({ ...ad, timestamp: ensureDate(ad.timestamp) || new Date() })),
     contentVersions: (campaignDoc.contentVersions || []).map(cv => ({
@@ -106,7 +108,7 @@ export async function POST(request: NextRequest) {
     const userId = token.id as string;
 
     const body = await request.json();
-    const { title, brief, targetAudience, tone, contentGoals, brandId, referenceMaterials, isPrivate, status } = body;
+    const { title, brief, targetAudience, tone, contentGoals, isPrivate, status } = body;
 
     if (!title || !brief) {
       return NextResponse.json({ error: 'Campaign title and brief (product/service description) are required' }, { status: 400 });
@@ -123,8 +125,8 @@ export async function POST(request: NextRequest) {
       targetAudience: targetAudience || undefined,
       tone: tone || undefined,
       contentGoals: contentGoals || [],
-      brandId: brandId || undefined, 
-      referenceMaterials: referenceMaterials || [],
+      brandProfile: undefined,
+      referenceMaterials: [],
       agentDebates: [],
       contentVersions: [],
       scheduledPosts: [],
@@ -185,8 +187,8 @@ export async function PUT(request: NextRequest) {
     if (Object.prototype.hasOwnProperty.call(body, 'contentGoals')) updateData.contentGoals = body.contentGoals === null ? [] : body.contentGoals;
     if (Object.prototype.hasOwnProperty.call(body, 'status')) updateData.status = body.status;
     if (Object.prototype.hasOwnProperty.call(body, 'referenceMaterials')) updateData.referenceMaterials = body.referenceMaterials === null ? [] : body.referenceMaterials;
-    if (Object.prototype.hasOwnProperty.call(body, 'brandId')) updateData.brandId = body.brandId === null ? undefined : body.brandId;
     if (Object.prototype.hasOwnProperty.call(body, 'isPrivate')) updateData.isPrivate = body.isPrivate ?? false;
+    if (Object.prototype.hasOwnProperty.call(body, 'brandProfile')) updateData.brandProfile = body.brandProfile === null ? undefined : body.brandProfile;
 
 
     if (Object.prototype.hasOwnProperty.call(body, 'contentVersions')) {
@@ -224,7 +226,11 @@ export async function PUT(request: NextRequest) {
     const db = client.db(process.env.MONGODB_DB_NAME);
     const campaignsCollection = db.collection<Omit<Campaign, 'id'>>('campaigns');
 
-    const query = { _id: new ObjectId(campaignId), userId: userId };
+    // Admins can update any campaign, editors can only update their own.
+    const query: { _id: ObjectId; userId?: string } = { _id: new ObjectId(campaignId) };
+    if (token.role !== 'admin') {
+      query.userId = userId;
+    }
     
     const result = await campaignsCollection.findOneAndUpdate(
       query,
@@ -294,4 +300,3 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json({ error: 'Failed to delete campaign', details: errorMessage }, { status: 500 });
   }
 }
-

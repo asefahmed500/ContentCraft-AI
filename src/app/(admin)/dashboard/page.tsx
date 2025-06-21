@@ -10,9 +10,10 @@ import { UserTable } from './components/UserTable';
 import { AdminCampaignList } from './components/AdminCampaignList';
 import { FlaggedContentTable } from './components/FlaggedContentTable'; 
 import { AgentDebateDisplay } from './components/AgentDebateDisplay';
+import { BrandProfileDisplay } from './components/BrandProfileDisplay';
 import type { Campaign, ContentVersion, AgentInteraction, MultiFormatContent } from '@/types/content';
 import type { User as NextAuthUser } from 'next-auth';
-import { BarChart, BrainCircuit, LineChart as LucideLineChart, Users, FileText, Activity, Zap, Brain, Download, Info, PieChart, ListTree, XCircle, MessageSquare, Trophy, ShieldAlert as ShieldAlertIcon, BotMessageSquare, Edit, Lightbulb } from 'lucide-react';
+import { BarChart, BrainCircuit, LineChart as LucideLineChart, Users, FileText, Activity, Zap, Brain, Download, Info, PieChart, ListTree, XCircle, MessageSquare, Trophy, ShieldAlert as ShieldAlertIcon, BotMessageSquare, Edit, Lightbulb, Beaker, CheckCircle } from 'lucide-react';
 import { ResponsiveContainer, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, BarChart as RechartsBarChart, Line, LineChart as RechartsLineChart, Pie, Cell, PieChart as RechartsPieChart } from 'recharts';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2 } from 'lucide-react';
@@ -22,8 +23,10 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import { format, formatDistanceToNow } from 'date-fns';
+import { format } from 'date-fns';
 import type { CampaignMemoryOutput } from '@/types/memory';
+import type { BrandAuditOutput } from '@/ai/flows/brand-audit-flow';
+import { Progress } from '@/components/ui/progress';
 
 interface PlatformStats {
   totalUsers: number;
@@ -80,7 +83,6 @@ export default function AdminDashboardPage() {
   const [isLoadingLeaderboard, setIsLoadingLeaderboard] = useState(true);
 
   const [flaggedContentRefreshTrigger, setFlaggedContentRefreshTrigger] = useState(0);
-
   const [isDebating, setIsDebating] = useState(false);
 
   // State for Revise Content Dialog
@@ -96,6 +98,12 @@ export default function AdminDashboardPage() {
   const [memory, setMemory] = useState<CampaignMemoryOutput | null>(null);
   const [isRecallingMemory, setIsRecallingMemory] = useState(false);
   const [memoryError, setMemoryError] = useState<string | null>(null);
+
+  // State for Brand Audit Dialog
+  const [isAuditDialogOpen, setIsAuditDialogOpen] = useState(false);
+  const [contentToAudit, setContentToAudit] = useState<{content: string; versionInfo: string} | null>(null);
+  const [auditResult, setAuditResult] = useState<BrandAuditOutput | null>(null);
+  const [isAuditing, setIsAuditing] = useState(false);
 
 
   const fetchAllCampaigns = useCallback(async (showToast = false) => {
@@ -165,7 +173,7 @@ export default function AdminDashboardPage() {
         toast({ title: "Error fetching leaderboard", description: errorMessage, variant: "destructive" });
         setLeaderboardUsers([]);
     } finally {
-        setIsLoadingLeaderboard(false);
+      setIsLoadingLeaderboard(false);
     }
   }, [toast]);
 
@@ -302,6 +310,45 @@ export default function AdminDashboardPage() {
     }
   };
 
+    const handleOpenAuditDialog = (version: ContentVersion) => {
+    const content = version.multiFormatContentSnapshot.blogPost || 
+                    Object.values(version.multiFormatContentSnapshot).find(c => !!c) || 
+                    '';
+    setContentToAudit({
+      content,
+      versionInfo: `Version ${version.versionNumber} by ${version.actorName}`
+    });
+    setAuditResult(null);
+    setIsAuditDialogOpen(true);
+  };
+
+  const handleRunAudit = async () => {
+    if (!contentToAudit || !selectedCampaignForAdminView?.brandProfile) return;
+    setIsAuditing(true);
+    setAuditResult(null);
+    try {
+      const response = await fetch('/api/brand/audit', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+          contentToCheck: contentToAudit.content,
+          brandProfile: selectedCampaignForAdminView.brandProfile,
+        })
+      });
+      const result = await response.json();
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to audit content.');
+      }
+      setAuditResult(result);
+      toast({title: "Audit Complete", description: "Brand alignment check has been performed."});
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : "An unknown error occurred.";
+      toast({title: "Audit Error", description: errorMessage, variant: "destructive"});
+    } finally {
+      setIsAuditing(false);
+    }
+  };
+
   const handleAdminCampaignAction = useCallback(async (campaignId: string, action: 'view' | 'edit' | 'delete' | 'flag') => {
     if (action === 'view') {
         const campaignDetail = await fetchSingleCampaign(campaignId);
@@ -368,6 +415,11 @@ export default function AdminDashboardPage() {
     } finally {
       setIsRecallingMemory(false);
     }
+  };
+
+  const handleBrandProfileUpdate = (updatedCampaign: Campaign) => {
+    setSelectedCampaignForAdminView(updatedCampaign);
+    setAllCampaigns(prev => prev.map(c => c.id === updatedCampaign.id ? updatedCampaign : c));
   };
   
   return (
@@ -637,6 +689,16 @@ export default function AdminDashboardPage() {
 
                     <Card>
                         <CardHeader>
+                          <CardTitle className="font-headline text-xl">Brand Profile</CardTitle>
+                          <CardDescription>This profile is used to audit content for brand alignment.</CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                           <BrandProfileDisplay campaign={selectedCampaignForAdminView} onProfileUpdate={handleBrandProfileUpdate} />
+                        </CardContent>
+                    </Card>
+
+                    <Card>
+                        <CardHeader>
                             <CardTitle className="font-headline text-xl">Creative Strategy War Room</CardTitle>
                             <CardDescription>AI agents collaborate here to define the campaign strategy.</CardDescription>
                         </CardHeader>
@@ -719,12 +781,18 @@ export default function AdminDashboardPage() {
                                 selectedCampaignForAdminView.contentVersions.map((version) => (
                                   <Card key={version.id} className="bg-muted/30">
                                     <CardHeader>
-                                      <CardTitle className="text-base flex justify-between items-center">
+                                      <CardTitle className="text-base flex justify-between items-center gap-2">
                                         <span>Version {version.versionNumber}</span>
-                                        <Button size="sm" variant="outline" onClick={() => handleOpenReviseDialog(version)}>
-                                            <Edit className="mr-2 h-4 w-4" />
-                                            Revise Content
-                                        </Button>
+                                         <div className="flex gap-2">
+                                            <Button size="sm" variant="outline" onClick={() => handleOpenAuditDialog(version)} disabled={!selectedCampaignForAdminView.brandProfile}>
+                                                <Beaker className="mr-2 h-4 w-4" />
+                                                Audit
+                                            </Button>
+                                            <Button size="sm" variant="outline" onClick={() => handleOpenReviseDialog(version)}>
+                                                <Edit className="mr-2 h-4 w-4" />
+                                                Revise
+                                            </Button>
+                                        </div>
                                       </CardTitle>
                                       <CardDescription>
                                         By: {version.actorName} on {format(new Date(version.timestamp), "MMM d, yyyy 'at' p")}
@@ -843,6 +911,57 @@ export default function AdminDashboardPage() {
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => setIsReviseDialogOpen(false)}>Close</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+
+    {/* Brand Audit Dialog */}
+    <Dialog open={isAuditDialogOpen} onOpenChange={setIsAuditDialogOpen}>
+      <DialogContent className="max-w-3xl">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2"><CheckCircle /> Brand Alignment Audit</DialogTitle>
+          <DialogDescription>
+            Auditing content from: {contentToAudit?.versionInfo}
+          </DialogDescription>
+        </DialogHeader>
+        <div className="py-4">
+          {!auditResult && !isAuditing && (
+            <div className="text-center space-y-4">
+                <p>Ready to check this content against the campaign&apos;s brand profile?</p>
+                <Button onClick={handleRunAudit}>
+                    <Beaker className="mr-2 h-4 w-4" /> Run Audit
+                </Button>
+            </div>
+          )}
+           {isAuditing ? (
+                <div className="flex flex-col items-center justify-center h-full min-h-[200px] border rounded-md bg-muted/50 p-4">
+                    <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                    <p className="mt-2 text-sm text-muted-foreground">AI is auditing for brand alignment...</p>
+                </div>
+            ) : auditResult && (
+                <div className="space-y-4">
+                    <div className="text-center">
+                        <p className="text-sm text-muted-foreground">Alignment Score</p>
+                        <p className="text-5xl font-bold text-primary">{auditResult.alignmentScore}<span className="text-2xl text-muted-foreground">/100</span></p>
+                        <Progress value={auditResult.alignmentScore} className="w-1/2 mx-auto mt-2 h-2" />
+                    </div>
+                    <Card>
+                        <CardHeader><CardTitle className="text-base">Justification</CardTitle></CardHeader>
+                        <CardContent><p className="text-sm text-muted-foreground">{auditResult.justification}</p></CardContent>
+                    </Card>
+                    <Card>
+                        <CardHeader><CardTitle className="text-base">Suggestions for Improvement</CardTitle></CardHeader>
+                        <CardContent>
+                            <ul className="list-disc pl-5 space-y-2 text-sm text-muted-foreground">
+                                {auditResult.suggestions.map((suggestion, i) => <li key={`sugg-${i}`}>{suggestion}</li>)}
+                            </ul>
+                        </CardContent>
+                    </Card>
+                </div>
+            )}
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => setIsAuditDialogOpen(false)}>Close</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
