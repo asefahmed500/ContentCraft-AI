@@ -14,7 +14,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Loader2, Beaker, FileText, Sparkles, ArrowLeft, Bot, MessageSquare, Microscope, FlaskConical, PencilRuler, SearchCheck, CheckCircle2, CalendarDays, Languages, Zap } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { analyzeBrandProfile } from '@/ai/flows/brand-learning';
-import { AgentDebateDisplay } from '@/app/(admin)/dashboard/components/AgentDebateDisplay';
+import { AgentDebateDisplay } from '@/components/AgentDebateDisplay';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { format } from 'date-fns';
 import { Separator } from '@/components/ui/separator';

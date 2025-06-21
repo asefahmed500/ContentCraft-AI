@@ -17,7 +17,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Loader2 } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
-import { AgentDebateDisplay } from './components/AgentDebateDisplay';
+import { AgentDebateDisplay } from '@/components/AgentDebateDisplay';
 
 interface PlatformStats {
   totalUsers: number;
