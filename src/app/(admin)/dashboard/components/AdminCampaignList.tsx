@@ -2,8 +2,8 @@
 "use client";
 
 import type { Campaign } from '@/types/content';
-import { useEffect, useState, useCallback } from 'react';
-import { CampaignCard } from '@/app/(app)/dashboard/components/CampaignCard'; 
+import { useEffect, useState } from 'react';
+import { AdminCampaignCard } from './AdminCampaignCard';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Info, ServerCrash, Trash2, Flag, Search as SearchIcon, Loader2 } from 'lucide-react';
@@ -215,15 +215,12 @@ export function AdminCampaignList({
 
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
         {filteredCampaigns.map((campaign) => (
-          <CampaignCard 
+          <AdminCampaignCard 
             key={campaign.id} 
             campaign={campaign} 
             onView={() => onCampaignAction(campaign.id, 'view')}
-            onEdit={() => onCampaignAction(campaign.id, 'edit')} // Admin edit is conceptual for now
             onDelete={() => handleDeletePrompt(campaign)}
             onFlag={() => handleFlagPrompt(campaign)}
-            canEditOrDelete={true} 
-            isAdminView={true}
           />
         ))}
       </div>
