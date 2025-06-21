@@ -17,11 +17,6 @@ import { useToast } from '@/hooks/use-toast';
 import { Loader2 } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-// Removed imports from (app) as the folder is deleted
-// import { MultiFormatPreview } from '@/app/(app)/dashboard/components/MultiFormatPreview';
-// import { AgentDebatePanel } from '@/app/(app)/dashboard/components/AgentDebatePanel';
-// import { ContentEvolutionTimeline } from '@/app/(app)/dashboard/components/ContentEvolutionTimeline';
-
 
 interface PlatformStats {
   totalUsers: number;

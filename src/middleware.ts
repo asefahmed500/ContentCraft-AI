@@ -11,19 +11,19 @@ export async function middleware(request: NextRequest) {
 
   // Handle authenticated but banned users first
   if (isAuthenticated && token.isBanned) {
-    // If a banned user tries to access any route or login/signup again
-    if (pathname.startsWith('/admin') || pathname.startsWith('/api') || pathname === '/login' || pathname === '/signup' || pathname === '/') {
-      // Allow access to /api/auth/signout for banned users
-      if (pathname.startsWith('/api/auth/signout')) {
-        return NextResponse.next();
-      }
-      const loginUrl = new URL('/login', request.url);
-      loginUrl.searchParams.set('error', 'AccountSuspended'); 
-      if (pathname !== '/login') { // Avoid redirect loop if already on login
-          return NextResponse.redirect(loginUrl);
-      }
+    // Allow access to /api/auth/signout for banned users
+    if (pathname.startsWith('/api/auth/signout')) {
+      return NextResponse.next();
     }
+    // For any other path, including login attempts, redirect to login with an error
+    const loginUrl = new URL('/login', request.url);
+    loginUrl.searchParams.set('error', 'This account has been suspended.'); 
+    if (pathname !== '/login') { // Avoid redirect loop if already on login page
+        return NextResponse.redirect(loginUrl);
+    }
+    return NextResponse.rewrite(loginUrl); // Show login page with error, but keep URL if user manually types it
   }
+
 
   // Admin route protection
   if (pathname.startsWith('/admin')) {
@@ -43,18 +43,18 @@ export async function middleware(request: NextRequest) {
   if ((pathname === '/login' || pathname === '/signup') && isAuthenticated && !token.isBanned) {
     const destinationUrl = token.role === 'admin' 
       ? new URL('/admin/dashboard', request.url) 
-      : new URL('/', request.url); // Non-admins to home page
+      : new URL('/', request.url); // Non-admins to home page, since their dashboard is removed
     return NextResponse.redirect(destinationUrl);
   }
   
   // If an authenticated non-admin user tries to access the root path, let them.
-  // If they try to access specific paths that were part of (app) and are now removed, they'll get 404.
+  // This middleware is now simpler as there's no /dashboard for non-admins to protect.
 
   return NextResponse.next();
 }
 
 export const config = {
-  // Apply middleware to admin routes, login, signup, and potentially API routes if needed for broader auth checks.
-  // Root path '/' is also included to handle redirects for authenticated users.
+  // Apply middleware to admin routes, login, signup, and API routes (excluding auth and public).
+  // The root path '/' is included to handle redirects for authenticated users away from the landing page.
   matcher: ['/admin/:path*', '/login', '/signup', '/api/((?!auth|public).*)', '/'],
 };
