@@ -289,7 +289,7 @@ export async function DELETE(request: NextRequest) {
     }
 
     const feedbackCollection = db.collection('feedback_logs');
-    await feedbackCollection.deleteMany({ campaignId: new ObjectId(campaignId), userId: new ObjectId(userId) });
+    await feedbackCollection.deleteMany({ campaignId: new ObjectId(campaignId) });
 
 
     return NextResponse.json({ message: 'Campaign and associated feedback deleted successfully' }, { status: 200 });

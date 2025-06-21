@@ -27,17 +27,15 @@ export async function POST(request: NextRequest) {
     if(!ObjectId.isValid(body.campaignId)) {
         return NextResponse.json({ error: 'Invalid campaignId format.' }, { status: 400 });
     }
-    // contentVersionId is optional, so no specific format check unless present
-    // if (body.contentVersionId && !ObjectId.isValid(body.contentVersionId)) {
-    //   return NextResponse.json({ error: 'Invalid contentVersionId format.' }, { status: 400 });
-    // }
+    
+    if (body.contentVersionId && !ObjectId.isValid(body.contentVersionId)) {
+      return NextResponse.json({ error: 'Invalid contentVersionId format.' }, { status: 400 });
+    }
 
 
-    const feedbackEntry: UserFeedback & { userId: ObjectId } = {
+    const feedbackEntry: UserFeedback = {
       ...body,
-      userId: new ObjectId(userId), 
-      campaignId: new ObjectId(body.campaignId) as any, // Cast to any because type expects string, but we store ObjectId
-      contentVersionId: body.contentVersionId ? new ObjectId(body.contentVersionId) as any : undefined,
+      userId: userId, 
       timestamp: new Date(),
     };
 
@@ -45,7 +43,12 @@ export async function POST(request: NextRequest) {
     const db: Db = client.db(process.env.MONGODB_DB_NAME || undefined);
     const feedbackCollection = db.collection('feedback_logs');
     
-    const result = await feedbackCollection.insertOne(feedbackEntry);
+    const result = await feedbackCollection.insertOne({
+        ...feedbackEntry,
+        userId: new ObjectId(userId), // Store as ObjectId
+        campaignId: new ObjectId(feedbackEntry.campaignId), // Store as ObjectId
+        contentVersionId: feedbackEntry.contentVersionId ? new ObjectId(feedbackEntry.contentVersionId) : undefined // Store as ObjectId if present
+    });
 
     if (!result.insertedId) {
         console.error("Failed to insert feedback into MongoDB:", feedbackEntry);
@@ -54,7 +57,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ 
         message: 'Feedback submitted successfully.', 
-        data: { ...feedbackEntry, _id: result.insertedId, userId: userId, campaignId: body.campaignId, contentVersionId: body.contentVersionId } 
+        feedbackId: result.insertedId.toString()
     }, { status: 200 });
 
   } catch (error) {

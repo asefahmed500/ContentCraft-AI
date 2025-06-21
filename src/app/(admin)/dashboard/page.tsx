@@ -217,7 +217,6 @@ export default function AdminDashboardPage() {
         if (campaignDetail) {
             setSelectedCampaignForAdminView(campaignDetail);
             setActiveMainTab("campaign_detail_view"); 
-            toast({title: "Campaign Loaded", description: `Viewing details for "${campaignDetail.title}"`});
         } else {
             toast({title: "Error", description: "Could not find campaign details.", variant: "destructive"});
         }

@@ -145,6 +145,7 @@ export interface ContentTemplate {
 }
 
 export interface UserFeedback {
+  userId: string;
   campaignId: string;
   contentVersionId?: string; // Optional: if feedback is tied to a specific version
   contentFormat: keyof MultiFormatContent | string; // e.g., 'blogPost', 'tweet'

@@ -1,4 +1,3 @@
-
 # ContentCraft AI 🚀
 
 ContentCraft AI is a revolutionary multi-agent content creation system designed to streamline and enhance your content strategy. Leveraging the power of AI, multiple specialized agents collaborate, debate, and generate compelling multi-format content campaigns tailored to your brand and objectives.
@@ -20,13 +19,15 @@ ContentCraft AI is a revolutionary multi-agent content creation system designed 
     *   **Audit**: Check how well the content aligns with your generated Brand Profile.
     *   **Translate**: Localize the content into different languages.
     *   **Optimize**: Improve the content for a specific goal like engagement or click-through-rate.
-*   **Gamification System**: Earn Creative XP for actions like providing feedback. Level up and track your progress in the site header.
+*   **Gamification System**: Earn Creative XP for actions like generating content, using AI tools, or providing feedback. Level up and track your progress in the site header.
+*   **Feedback Loop**: Provide direct feedback (👍/👎) on generated content to guide future AI improvements and earn XP.
 
 ### Admin Features
 *   **Comprehensive Admin Dashboard**: Centralized control panel at `/admin/dashboard` for platform oversight, including usage statistics and analytics charts.
 *   **AI-Powered Admin Agents**:
     *   **Smart Analytics Agent**: The dashboard overview includes an "AI-Powered Insights" section with natural language summaries of platform trends.
     *   **User Behavior Auditor**: Admins can perform an "AI Audit" on any user from the User Management table to get a risk score and behavioral analysis.
+    *   **Flagged Content Reviewer**: For any piece of content flagged for moderation, an AI agent can provide a recommendation (e.g., Keep, Delete) and justification.
 *   **User Management**: View all users, manage their roles (viewer, editor, admin), and ban/unban accounts.
 *   **Campaign Oversight**: View, search, and filter all campaigns created by any user. Admins can inspect full campaign details, flag campaigns for review, and delete any campaign.
 *   **Content Version Moderation**: Review all individually flagged content versions from across the platform in a dedicated "Flagged Content" table.
@@ -40,7 +41,7 @@ ContentCraft AI is a revolutionary multi-agent content creation system designed 
 *   **State Management**: React Context, `useState`, `useEffect`, NextAuth.js session
 *   **AI Integration**: Genkit, Google Gemini (via `@genkit-ai/googleai`)
 *   **Authentication**: NextAuth.js (with JWT sessions and MongoDB adapter)
-*   **Database**: MongoDB (via `mongodb` driver and `clientPromise`)
+*   **Database**: MongoDB (via official `mongodb` driver and `clientPromise`)
 *   **Charting**: Recharts (for admin analytics)
 *   **Styling**: Tailwind CSS, PostCSS
 *   **Deployment**: Firebase App Hosting (configured via `apphosting.yaml`)

@@ -15,7 +15,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, Beaker, FileText, Sparkles, ArrowLeft, Bot, MessageSquare, Microscope, FlaskConical, PencilRuler, SearchCheck, CheckCircle2, CalendarDays, Languages, Zap, Pencil, Save } from 'lucide-react';
+import { Loader2, Beaker, FileText, Sparkles, ArrowLeft, Bot, MessageSquare, Microscope, FlaskConical, PencilRuler, SearchCheck, CheckCircle2, CalendarDays, Languages, Zap, Pencil, Save, ThumbsUp, ThumbsDown } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { analyzeBrandProfile } from '@/ai/flows/brand-learning';
 import { AgentDebateDisplay } from '@/components/AgentDebateDisplay';
@@ -47,6 +47,10 @@ const textToDataUri = (text: string) => {
     return `data:text/plain;base64,${base64}`;
 }
 
+type SubmittedFeedback = {
+  [key: string]: 'up' | 'down'; // key is "versionId-format"
+};
+
 export function CampaignDetailClient({ initialCampaign, onBack, onCampaignUpdate }: CampaignDetailClientProps) {
   const { toast } = useToast();
   const { data: session, update: updateSession } = useSession();
@@ -61,6 +65,7 @@ export function CampaignDetailClient({ initialCampaign, onBack, onCampaignUpdate
   const [isDebating, setIsDebating] = useState(false);
   const [isGeneratingSchedule, setIsGeneratingSchedule] = useState(false);
   const [isGeneratingContent, setIsGeneratingContent] = useState(false);
+  const [feedbackLoading, setFeedbackLoading] = useState<string | null>(null);
 
   // Form for editing campaign
   const form = useForm<CampaignEditValues>({
@@ -75,6 +80,9 @@ export function CampaignDetailClient({ initialCampaign, onBack, onCampaignUpdate
 
   // Brand Analysis State
   const [referenceText, setReferenceText] = useState('');
+  
+  // Feedback state
+  const [submittedFeedback, setSubmittedFeedback] = useState<SubmittedFeedback>({});
 
   // Revise Content State
   const [isReviseDialogOpen, setIsReviseDialogOpen] = useState(false);
@@ -440,6 +448,36 @@ export function CampaignDetailClient({ initialCampaign, onBack, onCampaignUpdate
     });
   };
 
+  const handleFeedbackSubmit = async (version: ContentVersion, format: string, rating: 1 | -1) => {
+    const feedbackKey = `${version.id}-${format}`;
+    setFeedbackLoading(feedbackKey);
+    try {
+        const response = await fetch('/api/feedback', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                campaignId: campaign.id,
+                contentVersionId: version.id,
+                contentFormat: format,
+                rating: rating,
+            }),
+        });
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error || 'Failed to submit feedback.');
+
+        setSubmittedFeedback(prev => ({ ...prev, [feedbackKey]: rating === 1 ? 'up' : 'down' }));
+        toast({ title: "Feedback Submitted!", description: "Thank you for helping us improve." });
+        await awardXP(5, "providing feedback");
+
+    } catch (err) {
+        const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred.';
+        toast({ title: "Feedback Error", description: errorMessage, variant: "destructive" });
+    } finally {
+        setFeedbackLoading(null);
+    }
+  };
+
+
   const formatTitle = (key: string) => {
     return key.replace(/([A-Z])/g, ' $1').replace(/^./, (str) => str.toUpperCase());
   };
@@ -563,7 +601,31 @@ export function CampaignDetailClient({ initialCampaign, onBack, onCampaignUpdate
                                             {Object.entries(version.multiFormatContentSnapshot).map(([format, text]) => 
                                                 text ? (
                                                     <div key={format} className="p-3 border rounded-md bg-muted/50">
-                                                        <h4 className="font-semibold text-sm capitalize mb-2">{formatTitle(format)}</h4>
+                                                        <div className="flex justify-between items-center mb-2">
+                                                            <h4 className="font-semibold text-sm capitalize">{formatTitle(format)}</h4>
+                                                            <div className="flex items-center gap-1">
+                                                                <Button
+                                                                    size="icon"
+                                                                    variant="ghost"
+                                                                    className="h-7 w-7"
+                                                                    onClick={() => handleFeedbackSubmit(version, format, 1)}
+                                                                    disabled={feedbackLoading === `${version.id}-${format}` || submittedFeedback[`${version.id}-${format}`]}
+                                                                    title="Good content"
+                                                                >
+                                                                    <ThumbsUp className={`h-4 w-4 ${submittedFeedback[`${version.id}-${format}`] === 'up' ? 'text-primary fill-primary' : ''}`} />
+                                                                </Button>
+                                                                <Button
+                                                                    size="icon"
+                                                                    variant="ghost"
+                                                                    className="h-7 w-7"
+                                                                    onClick={() => handleFeedbackSubmit(version, format, -1)}
+                                                                    disabled={feedbackLoading === `${version.id}-${format}` || submittedFeedback[`${version.id}-${format}`]}
+                                                                    title="Needs improvement"
+                                                                >
+                                                                    <ThumbsDown className={`h-4 w-4 ${submittedFeedback[`${version.id}-${format}`] === 'down' ? 'text-destructive fill-destructive' : ''}`} />
+                                                                </Button>
+                                                            </div>
+                                                        </div>
                                                         <pre className="whitespace-pre-wrap text-xs p-2 border rounded bg-background max-h-40 overflow-y-auto">{text}</pre>
                                                         <div className="flex flex-wrap gap-2 mt-3">
                                                             <Button size="sm" variant="outline" onClick={() => handleOpenReviseDialog(text, format, version)}>
