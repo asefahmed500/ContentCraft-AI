@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button';
 import { UserTable } from './components/UserTable';
 import { AdminCampaignList } from './components/AdminCampaignList';
 import { FlaggedContentTable } from './components/FlaggedContentTable'; 
-import type { Campaign } from '@/types/content';
+import type { Campaign, ContentVersion } from '@/types/content';
 import type { User as NextAuthUser } from 'next-auth';
 import { BarChart, BrainCircuit, LineChart as LucideLineChart, Users, FileText, Activity, Zap, Brain, Download, Info, PieChart, ListTree, XCircle, MessageSquare, Trophy, ShieldAlert as ShieldAlertIcon, Lightbulb, ShieldQuestion, FileSearch } from 'lucide-react';
 import { ResponsiveContainer, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, BarChart as RechartsBarChart, Line, LineChart as RechartsLineChart, Pie, Cell, PieChart as RechartsPieChart } from 'recharts';
@@ -19,7 +19,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { AgentDebateDisplay } from '@/components/AgentDebateDisplay';
 import { Skeleton } from '@/components/ui/skeleton';
-import { format } from 'date-fns';
+import { format, subDays, startOfDay } from 'date-fns';
 import { useSession } from 'next-auth/react';
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Progress } from '@/components/ui/progress';
@@ -29,8 +29,8 @@ interface PlatformStats {
   totalCampaigns: number;
   activeUsersToday: number; 
   campaignsCreatedToday: number; 
-  aiFlowsExecuted?: number; 
-  feedbackItemsSubmitted?: number;
+  aiFlowsExecuted: number; 
+  feedbackItemsSubmitted: number;
 }
 
 interface PlatformInsights {
@@ -54,23 +54,17 @@ interface QualityAuditResult {
   recommendation: 'Looks Good' | 'Suggest Improvement' | 'Recommend Archiving' | 'Incomplete';
 }
 
-const mockWeeklyActivityData = [
-  { date: 'Mon', users: Math.floor(Math.random() * 20) + 5, campaigns: Math.floor(Math.random() * 10) + 2, flows: Math.floor(Math.random() * 50) + 20 },
-  { date: 'Tue', users: Math.floor(Math.random() * 20) + 7, campaigns: Math.floor(Math.random() * 10) + 3, flows: Math.floor(Math.random() * 50) + 25 },
-  { date: 'Wed', users: Math.floor(Math.random() * 20) + 10, campaigns: Math.floor(Math.random() * 10) + 5, flows: Math.floor(Math.random() * 50) + 30 },
-  { date: 'Thu', users: Math.floor(Math.random() * 20) + 12, campaigns: Math.floor(Math.random() * 10) + 4, flows: Math.floor(Math.random() * 50) + 35 },
-  { date: 'Fri', users: Math.floor(Math.random() * 20) + 15, campaigns: Math.floor(Math.random() * 10) + 6, flows: Math.floor(Math.random() * 50) + 40 },
-  { date: 'Sat', users: Math.floor(Math.random() * 20) + 8, campaigns: Math.floor(Math.random() * 10) + 3, flows: Math.floor(Math.random() * 50) + 22 },
-  { date: 'Sun', users: Math.floor(Math.random() * 20) + 6, campaigns: Math.floor(Math.random() * 10) + 2, flows: Math.floor(Math.random() * 50) + 18 },
-];
+interface WeeklyActivityData {
+    date: string;
+    users: number;
+    campaigns: number;
+}
 
-const mockTopContentFormatsData = [
-    { name: 'Blog Post', value: 400 + Math.floor(Math.random() * 100) },
-    { name: 'Tweet', value: 300 + Math.floor(Math.random() * 80) },
-    { name: 'LinkedIn Article', value: 200 + Math.floor(Math.random() * 60) },
-    { name: 'Instagram Post', value: 250 + Math.floor(Math.random() * 70) },
-    { name: 'TikTok Script', value: 150 + Math.floor(Math.random() * 50) },
-];
+interface ContentFormatData {
+    name: string;
+    value: number;
+}
+
 const PIE_CHART_COLORS = ['hsl(var(--primary))', 'hsl(var(--accent))', 'hsl(var(--chart-3))', 'hsl(var(--chart-4))', 'hsl(var(--chart-5))'];
 
 export default function AdminDashboardPage() {
@@ -95,6 +89,11 @@ export default function AdminDashboardPage() {
   const [insights, setInsights] = useState<PlatformInsights | null>(null);
   const [isLoadingInsights, setIsLoadingInsights] = useState(true);
 
+  // Chart data states
+  const [weeklyActivityData, setWeeklyActivityData] = useState<WeeklyActivityData[]>([]);
+  const [topContentFormatsData, setTopContentFormatsData] = useState<ContentFormatData[]>([]);
+
+
   // New states for AI agent features
   const [isAuditQualityOpen, setIsAuditQualityOpen] = useState(false);
   const [isAuditingQuality, setIsAuditingQuality] = useState(false);
@@ -105,100 +104,92 @@ export default function AdminDashboardPage() {
   const [dataSummary, setDataSummary] = useState<string | null>(null);
   const [exportDataType, setExportDataType] = useState<string>('');
 
+  const generateChartData = useCallback((users: AdminUser[], campaigns: Campaign[]) => {
+    // Generate Weekly Activity Data
+    const weeklyData: WeeklyActivityData[] = [];
+    const today = startOfDay(new Date());
+    for (let i = 6; i >= 0; i--) {
+        const day = subDays(today, i);
+        const dayStr = format(day, "MMM d");
+        const nextDay = subDays(today, i - 1);
+        
+        const usersOnDay = users.filter(u => 
+            u.createdAt && new Date(u.createdAt) >= day && new Date(u.createdAt) < nextDay
+        ).length;
+        const campaignsOnDay = campaigns.filter(c => 
+            c.createdAt && new Date(c.createdAt) >= day && new Date(c.createdAt) < nextDay
+        ).length;
 
-  const fetchAllCampaigns = useCallback(async (showToast = false) => {
-    setIsLoadingCampaigns(true);
-    setCampaignFetchError(null);
-    try {
-      const response = await fetch('/api/admin/campaigns'); 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || `Failed to fetch campaigns: ${response.statusText}`);
-      }
-      const data: Campaign[] = await response.json(); 
-      setAllCampaigns(data); 
-      if (showToast) toast({title: "Campaigns Refreshed", description: "Admin campaign list has been updated."});
-    } catch (err) {
-      console.error("AdminCampaignList fetch error:", err);
-      const errorMessage = err instanceof Error ? err.message : "An unknown error occurred.";
-      setCampaignFetchError(errorMessage);
-      toast({ title: "Error fetching campaigns", description: errorMessage, variant: "destructive" });
-    } finally {
-      setIsLoadingCampaigns(false);
+        weeklyData.push({ date: dayStr, users: usersOnDay, campaigns: campaignsOnDay });
     }
-  }, [toast]);
+    setWeeklyActivityData(weeklyData);
 
+    // Generate Top Content Formats Data
+    const formatCounts: Record<string, number> = {};
+    campaigns.forEach(c => {
+        c.contentVersions.forEach(v => {
+            Object.keys(v.multiFormatContentSnapshot).forEach(formatKey => {
+                if (v.multiFormatContentSnapshot[formatKey as keyof typeof v.multiFormatContentSnapshot]) {
+                    formatCounts[formatKey] = (formatCounts[formatKey] || 0) + 1;
+                }
+            });
+        });
+    });
 
-  const fetchStatsAndInsights = useCallback(async () => {
+    const formatData = Object.entries(formatCounts)
+        .map(([name, value]) => ({ name: name.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase()), value }))
+        .sort((a, b) => b.value - a.value)
+        .slice(0, 5);
+    setTopContentFormatsData(formatData);
+  }, []);
+
+  const fetchAllData = useCallback(async () => {
+    setIsLoadingCampaigns(true);
+    setIsLoadingLeaderboard(true);
     setIsLoadingStats(true);
     setIsLoadingInsights(true);
     try {
-      const usersPromise = fetch('/api/admin/users');
-      const insightsPromise = fetch('/api/admin/insights');
-      
-      const [usersResponse, insightsResponse] = await Promise.all([usersPromise, insightsPromise]);
+        const campaignsPromise = fetch('/api/admin/campaigns');
+        const usersPromise = fetch('/api/admin/users');
+        const insightsPromise = fetch('/api/admin/insights');
 
-      if (!usersResponse.ok) throw new Error("Failed to fetch users for stats");
-      const usersData = await usersResponse.json();
-      
-      if (!insightsResponse.ok) throw new Error("Failed to fetch AI insights");
-      const insightsData = await insightsResponse.json();
-      setInsights(insightsData);
-      
-      setStats({
-        totalUsers: usersData.length,
-        totalCampaigns: allCampaigns.length, 
-        activeUsersToday: Math.floor(Math.random() * usersData.length / 2) + 1, 
-        campaignsCreatedToday: Math.floor(Math.random() * Math.min(5, allCampaigns.length)) + 1, 
-        aiFlowsExecuted: Math.floor(Math.random() * 500) + 200,
-        feedbackItemsSubmitted: Math.floor(Math.random() * 50) + 10,
-      });
+        const [campaignsResponse, usersResponse, insightsResponse] = await Promise.all([
+            campaignsPromise, usersPromise, insightsPromise
+        ]);
 
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : "Unknown error fetching stats/insights";
-      toast({ title: "Error loading dashboard data", description: errorMessage, variant: "destructive" });
-      setStats({ totalUsers: 0, totalCampaigns: 0, activeUsersToday: 0, campaignsCreatedToday: 0, aiFlowsExecuted: 0, feedbackItemsSubmitted: 0 });
-      setInsights(null);
+        if (!campaignsResponse.ok) throw new Error("Failed to fetch campaigns");
+        const campaignsData: Campaign[] = await campaignsResponse.json();
+        setAllCampaigns(campaignsData);
+
+        if (!usersResponse.ok) throw new Error("Failed to fetch users");
+        const usersData: AdminUser[] = await usersResponse.json();
+        const usersWithDates = usersData.map(u => ({ ...u, createdAt: u.createdAt ? new Date(u.createdAt) : undefined }));
+        const sortedUsers = usersWithDates.map(u => ({...u, totalXP: u.totalXP || 0, level: u.level || 1})).sort((a, b) => (b.totalXP!) - (a.totalXP!));
+        setLeaderboardUsers(sortedUsers.slice(0, 10));
+
+        if (!insightsResponse.ok) throw new Error("Failed to fetch AI insights");
+        const insightsData = await insightsResponse.json();
+        setInsights(insightsData.insights);
+        setStats(insightsData.stats);
+
+        generateChartData(usersWithDates, campaignsData);
+
+    } catch (err) {
+        console.error("Admin dashboard fetch error:", err);
+        const errorMessage = err instanceof Error ? err.message : "An unknown error occurred.";
+        setCampaignFetchError(errorMessage);
+        toast({ title: "Error fetching dashboard data", description: errorMessage, variant: "destructive" });
     } finally {
-      setIsLoadingStats(false);
-      setIsLoadingInsights(false);
+        setIsLoadingCampaigns(false);
+        setIsLoadingLeaderboard(false);
+        setIsLoadingStats(false);
+        setIsLoadingInsights(false);
     }
-  }, [toast, allCampaigns]); 
-
-  const fetchLeaderboardData = useCallback(async () => {
-    setIsLoadingLeaderboard(true);
-    try {
-        const response = await fetch('/api/admin/users');
-        if (!response.ok) {
-            const errorData = await response.json();
-            throw new Error(errorData.error || "Failed to fetch users for leaderboard");
-        }
-        const users: AdminUser[] = await response.json();
-        const sortedUsers = users
-            .map(u => ({...u, totalXP: u.totalXP || 0, level: u.level || 1})) 
-            .sort((a, b) => (b.totalXP!) - (a.totalXP!))
-            .slice(0, 10); 
-        setLeaderboardUsers(sortedUsers);
-    } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : "An unknown error occurred";
-        toast({ title: "Error fetching leaderboard", description: errorMessage, variant: "destructive" });
-        setLeaderboardUsers([]);
-    } finally {
-      setIsLoadingLeaderboard(false);
-    }
-  }, [toast]);
-
+  }, [toast, generateChartData]);
 
   useEffect(() => {
-    fetchAllCampaigns();
-    fetchLeaderboardData();
-  }, [fetchAllCampaigns, fetchLeaderboardData]);
-
-  useEffect(() => {
-    if (!isLoadingCampaigns) { 
-        fetchStatsAndInsights();
-    }
-  }, [allCampaigns, isLoadingCampaigns, fetchStatsAndInsights]);
+    fetchAllData();
+  }, [fetchAllData]);
 
   const fetchSingleCampaign = useCallback(async (campaignId: string): Promise<Campaign | null> => {
     setIsFetchingCampaignDetail(true);
@@ -220,13 +211,13 @@ export default function AdminDashboardPage() {
 
   const handleRefreshFlaggedContent = useCallback(async () => {
     setFlaggedContentRefreshTrigger(prev => prev + 1);
-    await fetchAllCampaigns(false);
+    await fetchAllData();
     if (selectedCampaignForAdminView) {
       const updatedCampaign = await fetchSingleCampaign(selectedCampaignForAdminView.id);
       if (updatedCampaign) setSelectedCampaignForAdminView(updatedCampaign);
     }
     updateSession();
-  }, [fetchAllCampaigns, selectedCampaignForAdminView, fetchSingleCampaign, updateSession]);
+  }, [fetchAllData, selectedCampaignForAdminView, fetchSingleCampaign, updateSession]);
   
 
   const handleAdminCampaignAction = useCallback(async (campaignId: string, action: 'view' | 'edit' | 'delete' | 'flag') => {
@@ -241,13 +232,13 @@ export default function AdminDashboardPage() {
     } else if (action === 'edit') {
         toast({title: "Edit Action (Admin)", description: `Admin edit for campaign ${campaignId} is conceptual. Campaign details can be viewed.`, variant: "default"});
     } else if (action === 'flag') { 
-        await fetchAllCampaigns(true); 
+        await fetchAllData();
         if (selectedCampaignForAdminView && selectedCampaignForAdminView.id === campaignId) {
             const updatedCampaign = await fetchSingleCampaign(campaignId); 
             if (updatedCampaign) setSelectedCampaignForAdminView(updatedCampaign);
         }
     }
-  }, [toast, fetchAllCampaigns, selectedCampaignForAdminView, fetchSingleCampaign]); 
+  }, [toast, fetchAllData, selectedCampaignForAdminView, fetchSingleCampaign]); 
   
   const handleAdminCampaignDeleted = (deletedCampaignId: string) => {
     setAllCampaigns(prev => prev.filter(c => c.id !== deletedCampaignId));
@@ -364,9 +355,9 @@ export default function AdminDashboardPage() {
             </div>
             
             {isLoadingStats || !stats ? (
-                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
                     {[...Array(6)].map((_, i) => (
-                         <Card key={i}><CardHeader><CardTitle className="text-sm font-medium">Loading Stats...</CardTitle></CardHeader><CardContent><Loader2 className="h-6 w-6 animate-spin"/></CardContent></Card>
+                         <Card key={i}><CardHeader><Skeleton className="h-4 w-2/3" /></CardHeader><CardContent><Skeleton className="h-8 w-1/3" /></CardContent></Card>
                     ))}
                 </div>
             ) : (
@@ -393,22 +384,22 @@ export default function AdminDashboardPage() {
                   </Card>
                   <Card className="xl:col-span-1">
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                      <CardTitle className="text-sm font-medium">Active Users (Today)</CardTitle>
+                      <CardTitle className="text-sm font-medium">New Users (24h)</CardTitle>
                       <Activity className="h-4 w-4 text-muted-foreground" />
                     </CardHeader>
                     <CardContent>
-                      <div className="text-2xl font-bold">{stats.activeUsersToday}</div>
-                      <p className="text-xs text-muted-foreground">Mocked data</p>
+                      <div className="text-2xl font-bold">+{stats.activeUsersToday}</div>
+                      <p className="text-xs text-muted-foreground">Live data</p>
                     </CardContent>
                   </Card>
                   <Card className="xl:col-span-1">
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                      <CardTitle className="text-sm font-medium">New Campaigns (Today)</CardTitle>
+                      <CardTitle className="text-sm font-medium">New Campaigns (24h)</CardTitle>
                       <Zap className="h-4 w-4 text-muted-foreground" />
                     </CardHeader>
                     <CardContent>
                       <div className="text-2xl font-bold">+{stats.campaignsCreatedToday}</div>
-                      <p className="text-xs text-muted-foreground">Mocked data</p>
+                      <p className="text-xs text-muted-foreground">Live data</p>
                     </CardContent>
                   </Card>
                    <Card className="xl:col-span-1">
@@ -437,46 +428,48 @@ export default function AdminDashboardPage() {
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 <Card className="lg:col-span-2">
                     <CardHeader>
-                        <CardTitle className="font-headline flex items-center gap-2 text-xl"><LucideLineChart className="h-5 w-5 text-primary"/>Weekly Platform Activity (Mock)</CardTitle>
-                        <CardDescription>Overview of user, campaign, and AI flow trends this week.</CardDescription>
+                        <CardTitle className="font-headline flex items-center gap-2 text-xl"><LucideLineChart className="h-5 w-5 text-primary"/>Weekly Activity</CardTitle>
+                        <CardDescription>New users and campaigns created over the last 7 days.</CardDescription>
                     </CardHeader>
                     <CardContent className="h-[350px]">
                         <ResponsiveContainer width="100%" height="100%">
-                            <RechartsLineChart data={mockWeeklyActivityData}>
+                            <RechartsLineChart data={weeklyActivityData}>
                                 <CartesianGrid strokeDasharray="3 3" />
                                 <XAxis dataKey="date" stroke="hsl(var(--muted-foreground))" fontSize={12} />
-                                <YAxis yAxisId="left" stroke="hsl(var(--primary))" fontSize={12} />
-                                <YAxis yAxisId="right" orientation="right" stroke="hsl(var(--accent))" fontSize={12} />
+                                <YAxis yAxisId="left" stroke="hsl(var(--primary))" fontSize={12} allowDecimals={false}/>
                                 <Tooltip
                                     contentStyle={{ backgroundColor: 'hsl(var(--background))', border: '1px solid hsl(var(--border))', borderRadius: 'var(--radius)'}}
                                     itemStyle={{ color: 'hsl(var(--foreground))' }}
                                     cursor={{fill: 'hsl(var(--muted))', fillOpacity: 0.3}}
                                 />
                                 <Legend wrapperStyle={{paddingTop: '20px'}} />
-                                <Line yAxisId="left" type="monotone" dataKey="users" name="Active Users" stroke="hsl(var(--primary))" strokeWidth={2} dot={{ r: 4, fill: "hsl(var(--primary))" }} activeDot={{ r: 6 }} />
-                                <Line yAxisId="left" type="monotone" dataKey="campaigns" name="Campaigns Created" stroke="hsl(var(--chart-4))" strokeWidth={2} dot={{ r: 4, fill: "hsl(var(--chart-4))" }} activeDot={{ r: 6 }} />
-                                <Line yAxisId="right" type="monotone" dataKey="flows" name="AI Flows" stroke="hsl(var(--accent))" strokeWidth={2} dot={{ r: 4, fill: "hsl(var(--accent))" }} activeDot={{ r: 6 }} />
+                                <Line yAxisId="left" type="monotone" dataKey="users" name="New Users" stroke="hsl(var(--primary))" strokeWidth={2} dot={{ r: 4, fill: "hsl(var(--primary))" }} activeDot={{ r: 6 }} />
+                                <Line yAxisId="left" type="monotone" dataKey="campaigns" name="New Campaigns" stroke="hsl(var(--accent))" strokeWidth={2} dot={{ r: 4, fill: "hsl(var(--accent))" }} activeDot={{ r: 6 }} />
                             </RechartsLineChart>
                         </ResponsiveContainer>
                     </CardContent>
                 </Card>
                 <Card>
                     <CardHeader>
-                        <CardTitle className="font-headline flex items-center gap-2 text-xl"><PieChart className="h-5 w-5 text-primary"/>Top Content Formats (Mock)</CardTitle>
-                        <CardDescription>Distribution of generated content formats.</CardDescription>
+                        <CardTitle className="font-headline flex items-center gap-2 text-xl"><PieChart className="h-5 w-5 text-primary"/>Top Content Formats</CardTitle>
+                        <CardDescription>Distribution of all generated content formats.</CardDescription>
                     </CardHeader>
                     <CardContent className="h-[350px]">
-                        <ResponsiveContainer width="100%" height="100%">
-                            <RechartsPieChart>
-                                <Pie data={mockTopContentFormatsData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={100} labelLine={false} label={({ name, percent }) => `${name} (${(percent * 100).toFixed(0)}%)`}>
-                                    {mockTopContentFormatsData.map((entry, index) => (
-                                        <Cell key={`cell-${index}`} fill={PIE_CHART_COLORS[index % PIE_CHART_COLORS.length]} />
-                                    ))}
-                                </Pie>
-                                <Tooltip contentStyle={{ backgroundColor: 'hsl(var(--background))', border: '1px solid hsl(var(--border))', borderRadius: 'var(--radius)'}}/>
-                                <Legend wrapperStyle={{paddingTop: '20px'}}/>
-                            </RechartsPieChart>
-                        </ResponsiveContainer>
+                        {topContentFormatsData.length > 0 ? (
+                            <ResponsiveContainer width="100%" height="100%">
+                                <RechartsPieChart>
+                                    <Pie data={topContentFormatsData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={100} labelLine={false} label={({ name, percent }) => `${name} (${(percent * 100).toFixed(0)}%)`}>
+                                        {topContentFormatsData.map((entry, index) => (
+                                            <Cell key={`cell-${index}`} fill={PIE_CHART_COLORS[index % PIE_CHART_COLORS.length]} />
+                                        ))}
+                                    </Pie>
+                                    <Tooltip contentStyle={{ backgroundColor: 'hsl(var(--background))', border: '1px solid hsl(var(--border))', borderRadius: 'var(--radius)'}}/>
+                                    <Legend wrapperStyle={{paddingTop: '20px'}}/>
+                                </RechartsPieChart>
+                            </ResponsiveContainer>
+                        ) : (
+                            <div className="flex items-center justify-center h-full text-muted-foreground">No content generated yet.</div>
+                        )}
                     </CardContent>
                 </Card>
             </div>

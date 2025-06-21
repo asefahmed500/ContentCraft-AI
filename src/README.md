@@ -23,7 +23,7 @@ ContentCraft AI is a revolutionary multi-agent content creation system designed 
 *   **Persistent Feedback Loop**: Provide direct feedback (👍/👎) on generated content to guide future AI improvements and earn XP. The system prevents duplicate feedback submissions.
 
 ### Admin Features
-*   **Comprehensive Admin Dashboard**: Centralized control panel at `/admin/dashboard` for platform oversight, including usage statistics and analytics charts.
+*   **Comprehensive Admin Dashboard**: Centralized control panel at `/admin/dashboard` for platform oversight, including live usage statistics and analytics charts.
 *   **AI-Powered Admin Agents**:
     *   **Smart Analytics Agent**: The dashboard overview includes an "AI-Powered Insights" section with natural language summaries of platform trends.
     *   **User Behavior Auditor**: Admins can perform an "AI Audit" on any user from the User Management table to get a risk score and behavioral analysis.

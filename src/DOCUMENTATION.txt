@@ -124,7 +124,7 @@ ContentCraft AI is a Next.js web application designed as a multi-agent AI conten
         *   Admins can preview flagged content and unflag it.
 
     *   **Platform Analytics (Admin View)**:
-        *   Displays key metrics and charts for platform activity.
+        *   Displays key metrics and charts for platform activity, powered by live database queries.
 
     *   **Data Export (Conceptual)**:
         *   Placeholder buttons on the admin dashboard simulate CSV export for platform data, enhanced with an AI-generated summary.
