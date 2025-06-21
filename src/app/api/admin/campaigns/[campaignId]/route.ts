@@ -31,11 +31,10 @@ export async function DELETE(request: NextRequest, { params }: { params: { campa
       return NextResponse.json({ error: 'Campaign not found or already deleted.' }, { status: 404 });
     }
 
-    // Optional: Delete associated feedback. Consider if this is desired.
-    // For now, feedback might be orphaned or kept for historical data.
-    // await feedbackCollection.deleteMany({ campaignId: new ObjectId(campaignId) });
+    // Also delete associated feedback to prevent orphaned data.
+    await feedbackCollection.deleteMany({ campaignId: new ObjectId(campaignId) });
 
-    return NextResponse.json({ message: 'Campaign deleted successfully by admin.' }, { status: 200 });
+    return NextResponse.json({ message: 'Campaign and associated feedback deleted successfully by admin.' }, { status: 200 });
 
   } catch (error) {
     console.error("Admin Delete Campaign API Error:", error);
