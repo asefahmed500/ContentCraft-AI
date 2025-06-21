@@ -12,7 +12,7 @@ import { FlaggedContentTable } from './components/FlaggedContentTable';
 import { AgentDebateDisplay } from './components/AgentDebateDisplay';
 import type { Campaign, ContentVersion, AgentInteraction, MultiFormatContent } from '@/types/content';
 import type { User as NextAuthUser } from 'next-auth';
-import { BarChart, BrainCircuit, LineChart as LucideLineChart, Users, FileText, Activity, Zap, Brain, Download, Info, PieChart, ListTree, XCircle, MessageSquare, Trophy, ShieldAlert as ShieldAlertIcon, BotMessageSquare, Edit } from 'lucide-react';
+import { BarChart, BrainCircuit, LineChart as LucideLineChart, Users, FileText, Activity, Zap, Brain, Download, Info, PieChart, ListTree, XCircle, MessageSquare, Trophy, ShieldAlert as ShieldAlertIcon, BotMessageSquare, Edit, Lightbulb } from 'lucide-react';
 import { ResponsiveContainer, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, BarChart as RechartsBarChart, Line, LineChart as RechartsLineChart, Pie, Cell, PieChart as RechartsPieChart } from 'recharts';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2 } from 'lucide-react';
@@ -23,6 +23,7 @@ import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { format, formatDistanceToNow } from 'date-fns';
+import type { CampaignMemoryOutput } from '@/types/memory';
 
 interface PlatformStats {
   totalUsers: number;
@@ -90,6 +91,11 @@ export default function AdminDashboardPage() {
   const [revisionTone, setRevisionTone] = useState('');
   const [revisionResult, setRevisionResult] = useState<string | null>(null);
   const [isRevising, setIsRevising] = useState(false);
+
+  // State for Campaign Memory
+  const [memory, setMemory] = useState<CampaignMemoryOutput | null>(null);
+  const [isRecallingMemory, setIsRecallingMemory] = useState(false);
+  const [memoryError, setMemoryError] = useState<string | null>(null);
 
 
   const fetchAllCampaigns = useCallback(async (showToast = false) => {
@@ -301,6 +307,8 @@ export default function AdminDashboardPage() {
         const campaignDetail = await fetchSingleCampaign(campaignId);
         if (campaignDetail) {
             setSelectedCampaignForAdminView(campaignDetail);
+            setMemory(null); // Reset memory when viewing a new campaign
+            setMemoryError(null);
             setActiveMainTab("campaign_detail_view"); 
             toast({title: "Campaign Loaded", description: `Viewing details for "${campaignDetail.title}"`});
         } else {
@@ -331,6 +339,35 @@ export default function AdminDashboardPage() {
         description: `This feature is conceptual. In a real application, this would trigger a CSV download of all ${dataType.toLowerCase()}.`,
         duration: 5000,
     });
+  };
+
+  const handleAnalyzeHistory = async () => {
+    if (!selectedCampaignForAdminView) return;
+    setIsRecallingMemory(true);
+    setMemory(null);
+    setMemoryError(null);
+    try {
+      const response = await fetch('/api/memory/recall', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          userId: selectedCampaignForAdminView.userId,
+          currentCampaignBrief: selectedCampaignForAdminView.brief
+        }),
+      });
+      const result = await response.json();
+      if (!response.ok) {
+        throw new Error(result.error || "Failed to analyze campaign history.");
+      }
+      setMemory(result);
+      toast({ title: "Analysis Complete", description: "AI has provided insights based on the user's campaign history." });
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : "An unknown error occurred.";
+      setMemoryError(errorMessage);
+      toast({ title: "Analysis Failed", description: errorMessage, variant: "destructive" });
+    } finally {
+      setIsRecallingMemory(false);
+    }
   };
   
   return (
@@ -617,6 +654,60 @@ export default function AdminDashboardPage() {
                             )}
                         </CardContent>
                     </Card>
+
+                    <Card>
+                        <CardHeader>
+                            <CardTitle className="font-headline text-xl flex items-center gap-2"><Lightbulb className="h-5 w-5 text-yellow-400" />Campaign Memory Insights</CardTitle>
+                            <CardDescription>Analyze this user&apos;s past campaigns to get AI-powered suggestions for the current one.</CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                            {!memory && !isRecallingMemory && !memoryError && (
+                                <div className="text-center py-4">
+                                     <p className="text-muted-foreground mb-4">Click the button to analyze historical data for this user.</p>
+                                     <Button onClick={handleAnalyzeHistory} disabled={isRecallingMemory}>
+                                        {isRecallingMemory ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Brain className="mr-2 h-4 w-4"/>}
+                                        Analyze User&apos;s Campaign History
+                                    </Button>
+                                </div>
+                            )}
+                            {isRecallingMemory && (
+                                <div className="flex justify-center items-center min-h-[100px]">
+                                    <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                                    <span className="ml-2">AI is analyzing history...</span>
+                                </div>
+                            )}
+                            {memoryError && (
+                                <Alert variant="destructive">
+                                    <AlertTitle>Analysis Failed</AlertTitle>
+                                    <AlertDescription>{memoryError}</AlertDescription>
+                                </Alert>
+                            )}
+                            {memory && (
+                                <div className="space-y-4">
+                                    <div>
+                                        <h4 className="font-semibold">Insights</h4>
+                                        <ul className="list-disc pl-5 text-sm text-muted-foreground space-y-1 mt-1">
+                                            {memory.insights.map((insight, i) => <li key={`insight-${i}`}>{insight}</li>)}
+                                        </ul>
+                                    </div>
+                                    <div>
+                                        <h4 className="font-semibold">Suggestions</h4>
+                                        <ul className="list-disc pl-5 text-sm text-muted-foreground space-y-1 mt-1">
+                                            {memory.suggestions.map((suggestion, i) => <li key={`suggestion-${i}`}>{suggestion}</li>)}
+                                        </ul>
+                                    </div>
+                                    <p className="text-xs text-center text-muted-foreground pt-2">Confidence Score: {memory.confidenceScore}%</p>
+                                    <div className="text-center">
+                                      <Button variant="outline" size="sm" onClick={handleAnalyzeHistory} disabled={isRecallingMemory}>
+                                          {isRecallingMemory ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Brain className="mr-2 h-4 w-4"/>}
+                                          Re-analyze History
+                                      </Button>
+                                    </div>
+                                </div>
+                            )}
+                        </CardContent>
+                    </Card>
+
 
                     <Card>
                          <CardHeader>
