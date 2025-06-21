@@ -8,7 +8,7 @@ import { Separator } from '@/components/ui/separator';
 import { Button } from '@/components/ui/button';
 import { UserTable } from './components/UserTable';
 import { AdminCampaignList } from './components/AdminCampaignList';
-import { FlaggedContentTable } from './components/FlaggedContentTable'; 
+import { FlaggedContentTable } from './components/FlaggedContentTable';
 import type { Campaign, ContentVersion } from '@/types/content';
 import type { User as NextAuthUser } from 'next-auth';
 import { BarChart, BrainCircuit, LineChart as LucideLineChart, Users, FileText, Activity, Zap, Brain, Download, Info, PieChart, ListTree, XCircle, MessageSquare, Trophy, ShieldAlert as ShieldAlertIcon, Lightbulb, ShieldQuestion, FileSearch } from 'lucide-react';
@@ -27,9 +27,9 @@ import { Progress } from '@/components/ui/progress';
 interface PlatformStats {
   totalUsers: number;
   totalCampaigns: number;
-  activeUsersToday: number; 
-  campaignsCreatedToday: number; 
-  aiFlowsExecuted: number; 
+  activeUsersToday: number;
+  campaignsCreatedToday: number;
+  aiFlowsExecuted: number;
   feedbackItemsSubmitted: number;
 }
 
@@ -154,7 +154,7 @@ export default function AdminDashboardPage() {
         const insightsPromise = fetch('/api/admin/insights');
 
         const [campaignsResponse, usersResponse, insightsResponse] = await Promise.all([
-            campaignsPromise, usersPromise, insightsPromise
+            campaignsPromise, usersPromise, insightsResponse
         ]);
 
         if (!campaignsResponse.ok) throw new Error("Failed to fetch campaigns");
