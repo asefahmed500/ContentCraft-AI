@@ -24,6 +24,7 @@ import { format } from 'date-fns';
 import { Separator } from '@/components/ui/separator';
 import { ContentCalendarDisplay } from './ContentCalendarDisplay';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { useSession } from 'next-auth/react';
 
 interface CampaignDetailClientProps {
   initialCampaign: Campaign;
@@ -48,6 +49,7 @@ const textToDataUri = (text: string) => {
 
 export function CampaignDetailClient({ initialCampaign, onBack, onCampaignUpdate }: CampaignDetailClientProps) {
   const { toast } = useToast();
+  const { data: session, update: updateSession } = useSession();
   const [campaign, setCampaign] = useState<Campaign>(initialCampaign);
   const [isPending, startTransition] = useTransition();
 
@@ -98,6 +100,49 @@ export function CampaignDetailClient({ initialCampaign, onBack, onCampaignUpdate
   const [optimizationGoal, setOptimizationGoal] = useState('Improve user engagement');
   const [optimizationResult, setOptimizationResult] = useState<{ predictedPerformance: { score: number, justification: string }, optimizedContent: string, explanation: string } | null>(null);
 
+  const awardXP = async (xp: number, action: string) => {
+    try {
+        const response = await fetch('/api/user/update-xp', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ xpGained: xp }),
+        });
+        const result = await response.json();
+        if (!response.ok) {
+            console.error("Failed to award XP:", result.error || 'Unknown error');
+            return;
+        }
+
+        await updateSession({
+            user: {
+                ...session?.user,
+                totalXP: result.totalXP,
+                level: result.level,
+                badges: result.badges,
+            }
+        });
+        
+        toast({
+            title: `+${xp} XP!`,
+            description: `For ${action}.`,
+        });
+
+        if (result.leveledUp && result.gainedBadges.length > 0) {
+            toast({
+                title: `Level Up! You've reached Level ${result.level}!`,
+                description: `New badge unlocked: ${result.gainedBadges.join(', ')}`,
+            });
+        } else if (result.leveledUp) {
+            toast({
+                title: `Level Up!`,
+                description: `You've reached Level ${result.level}!`,
+            });
+        }
+    } catch (err) {
+        console.error("XP Awarding Error:", err);
+    }
+  };
+
 
   const handleUpdateCampaign = async (updatedData: Partial<Campaign>) => {
     try {
@@ -144,6 +189,7 @@ export function CampaignDetailClient({ initialCampaign, onBack, onCampaignUpdate
         await handleUpdateCampaign({ brandProfile });
 
         toast({ title: "Brand Profile Generated", description: "The brand profile has been analyzed and saved." });
+        await awardXP(25, "generating a Brand Profile");
         setIsAnalyzeDialogOpen(false);
         setReferenceText('');
       } catch (err) {
@@ -169,6 +215,7 @@ export function CampaignDetailClient({ initialCampaign, onBack, onCampaignUpdate
         const updatedCampaign = await handleUpdateCampaign({}); // Send empty update to just refetch
         if (updatedCampaign) {
           toast({ title: "War Room Concluded!", description: "The strategy session is complete and has been saved." });
+          await awardXP(50, "completing a Strategy Session");
         }
      } catch (err) {
         const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred.';
@@ -194,6 +241,7 @@ export function CampaignDetailClient({ initialCampaign, onBack, onCampaignUpdate
       onCampaignUpdate(newlyUpdatedCampaign);
 
       toast({ title: "Content Schedule Generated!", description: "Your 7-day content plan is ready." });
+      await awardXP(30, "generating a Content Schedule");
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred.';
       toast({ title: "Schedule Generation Error", description: errorMessage, variant: "destructive" });
@@ -216,6 +264,7 @@ export function CampaignDetailClient({ initialCampaign, onBack, onCampaignUpdate
         setCampaign(result as Campaign);
         onCampaignUpdate(result as Campaign);
         toast({ title: "Content Generated!", description: "Your first content version is ready for review." });
+        await awardXP(40, "generating initial content");
     } catch (err) {
         const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred.';
         toast({ title: "Generation Failed", description: errorMessage, variant: "destructive" });
@@ -241,12 +290,14 @@ export function CampaignDetailClient({ initialCampaign, onBack, onCampaignUpdate
             changeSummary,
             multiFormatContentSnapshot: newSnapshot,
             isFlagged: false,
+            adminModerationNotes: '',
         };
 
         const updatedCampaign = await handleUpdateCampaign({ contentVersions: [...campaign.contentVersions, newVersion as ContentVersion] });
 
         if (updatedCampaign) {
             toast({ title: "New Version Saved!", description: `Version ${newVersion.versionNumber} has been added to the campaign.` });
+            await awardXP(15, "saving a new version");
             // Close all dialogs
             setIsReviseDialogOpen(false);
             setIsTranslateDialogOpen(false);
@@ -283,6 +334,7 @@ export function CampaignDetailClient({ initialCampaign, onBack, onCampaignUpdate
             if (!response.ok) throw new Error(result.error || 'Failed to revise content.');
             setRevisedContent(result.revisedContent);
             toast({ title: "Content Revised", description: "The AI has provided a revision below." });
+            await awardXP(10, "revising content");
         } catch (err) {
             const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred.';
             toast({ title: "Revision Failed", description: errorMessage, variant: "destructive" });
@@ -309,6 +361,7 @@ export function CampaignDetailClient({ initialCampaign, onBack, onCampaignUpdate
         if (!response.ok) throw new Error(result.error || 'Failed to run brand audit.');
         setAuditResult(result);
         toast({ title: "Audit Complete", description: "Brand alignment results are shown below." });
+        await awardXP(10, "auditing content");
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred.';
         toast({ title: "Audit Failed", description: errorMessage, variant: "destructive" });
@@ -344,6 +397,7 @@ export function CampaignDetailClient({ initialCampaign, onBack, onCampaignUpdate
             if (!response.ok) throw new Error(result.error || 'Failed to translate content.');
             setTranslatedContent(result.translatedContent);
             toast({ title: "Translation Complete", description: `Content translated to ${targetLanguage}.` });
+            await awardXP(10, "translating content");
         } catch (err) {
             const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred.';
             toast({ title: "Translation Failed", description: errorMessage, variant: "destructive" });
@@ -379,6 +433,7 @@ export function CampaignDetailClient({ initialCampaign, onBack, onCampaignUpdate
             if (!response.ok) throw new Error(result.error || 'Failed to optimize content.');
             setOptimizationResult(result);
             toast({ title: "Optimization Complete", description: "The AI has provided an optimized version below." });
+            await awardXP(10, "optimizing content");
         } catch (err) {
             const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred.';
             toast({ title: "Optimization Failed", description: errorMessage, variant: "destructive" });
@@ -512,16 +567,16 @@ export function CampaignDetailClient({ initialCampaign, onBack, onCampaignUpdate
                                                         <h4 className="font-semibold text-sm capitalize mb-2">{formatTitle(format)}</h4>
                                                         <pre className="whitespace-pre-wrap text-xs p-2 border rounded bg-background max-h-40 overflow-y-auto">{text}</pre>
                                                         <div className="flex flex-wrap gap-2 mt-3">
-                                                            <Button size="xs" variant="outline" onClick={() => handleOpenReviseDialog(text, format, version)}>
+                                                            <Button size="sm" variant="outline" onClick={() => handleOpenReviseDialog(text, format, version)}>
                                                                 <Sparkles className="mr-1 h-3 w-3"/> Revise
                                                             </Button>
-                                                            <Button size="xs" variant="outline" onClick={() => handleOpenAuditDialog(text)} disabled={!campaign.brandProfile}>
+                                                            <Button size="sm" variant="outline" onClick={() => handleOpenAuditDialog(text)} disabled={!campaign.brandProfile}>
                                                                 <SearchCheck className="mr-1 h-3 w-3"/> Audit
                                                             </Button>
-                                                            <Button size="xs" variant="outline" onClick={() => handleOpenTranslateDialog(text, format, version)}>
+                                                            <Button size="sm" variant="outline" onClick={() => handleOpenTranslateDialog(text, format, version)}>
                                                                 <Languages className="mr-1 h-3 w-3"/> Translate
                                                             </Button>
-                                                            <Button size="xs" variant="outline" onClick={() => handleOpenOptimizeDialog(text, format, version)}>
+                                                            <Button size="sm" variant="outline" onClick={() => handleOpenOptimizeDialog(text, format, version)}>
                                                                 <Zap className="mr-1 h-3 w-3"/> Optimize
                                                             </Button>
                                                         </div>
@@ -656,7 +711,7 @@ export function CampaignDetailClient({ initialCampaign, onBack, onCampaignUpdate
             </div>
             <DialogFooter>
                  {revisedContent && contentToRevise && (
-                    <Button onClick={() => handleSaveAsNewVersion(revisedContent, contentToRevise.contentType, contentToRevise.version.versionNumber, `Revised "${contentToRevise.contentType}" with new instructions.`, "User Revision")} disabled={isPending} variant="secondary">
+                    <Button onClick={() => handleSaveAsNewVersion(revisedContent, contentToRevise.contentType, contentToRevise.version, `Revised "${contentToRevise.contentType}" with new instructions.`, "User Revision")} disabled={isPending} variant="secondary">
                         <Save className="mr-2 h-4 w-4" /> Save as New Version
                     </Button>
                 )}
@@ -738,7 +793,7 @@ export function CampaignDetailClient({ initialCampaign, onBack, onCampaignUpdate
             </div>
             <DialogFooter>
                 {translatedContent && contentToTranslate && (
-                    <Button onClick={() => handleSaveAsNewVersion(translatedContent, contentToTranslate.contentType, contentToTranslate.version.versionNumber, `Translated "${contentToTranslate.contentType}" to ${targetLanguage}.`, "Localization AI")} disabled={isPending} variant="secondary">
+                    <Button onClick={() => handleSaveAsNewVersion(translatedContent, contentToTranslate.contentType, contentToTranslate.version, `Translated "${contentToTranslate.contentType}" to ${targetLanguage}.`, "Localization AI")} disabled={isPending} variant="secondary">
                         <Save className="mr-2 h-4 w-4" /> Save as New Version
                     </Button>
                 )}
@@ -821,7 +876,7 @@ export function CampaignDetailClient({ initialCampaign, onBack, onCampaignUpdate
             </div>
             <DialogFooter>
                  {optimizationResult && contentToOptimize && (
-                    <Button onClick={() => handleSaveAsNewVersion(optimizationResult.optimizedContent, contentToOptimize.contentType, contentToOptimize.version.versionNumber, `Optimized "${contentToOptimize.contentType}" for ${optimizationGoal}.`, "Performance AI")} disabled={isPending} variant="secondary">
+                    <Button onClick={() => handleSaveAsNewVersion(optimizationResult.optimizedContent, contentToOptimize.contentType, contentToOptimize.version, `Optimized "${contentToOptimize.contentType}" for ${optimizationGoal}.`, "Performance AI")} disabled={isPending} variant="secondary">
                         <Save className="mr-2 h-4 w-4" /> Save as New Version
                     </Button>
                 )}
