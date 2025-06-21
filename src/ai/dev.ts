@@ -15,3 +15,5 @@ import '@/ai/flows/optimize-content-flow.ts';
 import '@/ai/flows/admin/platform-insights.ts';
 import '@/ai/flows/admin/user-audit.ts';
 import '@/ai/flows/admin/flag-review.ts';
+import '@/ai/flows/admin/campaign-quality-audit.ts';
+import '@/ai/flows/admin/data-summarizer.ts';

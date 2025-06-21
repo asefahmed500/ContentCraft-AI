@@ -11,7 +11,7 @@ import { AdminCampaignList } from './components/AdminCampaignList';
 import { FlaggedContentTable } from './components/FlaggedContentTable'; 
 import type { Campaign } from '@/types/content';
 import type { User as NextAuthUser } from 'next-auth';
-import { BarChart, BrainCircuit, LineChart as LucideLineChart, Users, FileText, Activity, Zap, Brain, Download, Info, PieChart, ListTree, XCircle, MessageSquare, Trophy, ShieldAlert as ShieldAlertIcon, Lightbulb } from 'lucide-react';
+import { BarChart, BrainCircuit, LineChart as LucideLineChart, Users, FileText, Activity, Zap, Brain, Download, Info, PieChart, ListTree, XCircle, MessageSquare, Trophy, ShieldAlert as ShieldAlertIcon, Lightbulb, ShieldQuestion, FileSearch } from 'lucide-react';
 import { ResponsiveContainer, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, BarChart as RechartsBarChart, Line, LineChart as RechartsLineChart, Pie, Cell, PieChart as RechartsPieChart } from 'recharts';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2 } from 'lucide-react';
@@ -21,6 +21,8 @@ import { AgentDebateDisplay } from '@/components/AgentDebateDisplay';
 import { Skeleton } from '@/components/ui/skeleton';
 import { format } from 'date-fns';
 import { useSession } from 'next-auth/react';
+import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Progress } from '@/components/ui/progress';
 
 interface PlatformStats {
   totalUsers: number;
@@ -44,6 +46,12 @@ interface AdminUser extends NextAuthUser {
   isBanned?: boolean;
   createdAt?: Date | string;
   updatedAt?: Date | string;
+}
+
+interface QualityAuditResult {
+  qualityScore: number;
+  justification: string;
+  recommendation: 'Looks Good' | 'Suggest Improvement' | 'Recommend Archiving' | 'Incomplete';
 }
 
 const mockWeeklyActivityData = [
@@ -86,6 +94,17 @@ export default function AdminDashboardPage() {
 
   const [insights, setInsights] = useState<PlatformInsights | null>(null);
   const [isLoadingInsights, setIsLoadingInsights] = useState(true);
+
+  // New states for AI agent features
+  const [isAuditQualityOpen, setIsAuditQualityOpen] = useState(false);
+  const [isAuditingQuality, setIsAuditingQuality] = useState(false);
+  const [qualityAuditResult, setQualityAuditResult] = useState<QualityAuditResult | null>(null);
+
+  const [isDataSummaryOpen, setIsDataSummaryOpen] = useState(false);
+  const [isSummarizingData, setIsSummarizingData] = useState(false);
+  const [dataSummary, setDataSummary] = useState<string | null>(null);
+  const [exportDataType, setExportDataType] = useState<string>('');
+
 
   const fetchAllCampaigns = useCallback(async (showToast = false) => {
     setIsLoadingCampaigns(true);
@@ -206,7 +225,6 @@ export default function AdminDashboardPage() {
       const updatedCampaign = await fetchSingleCampaign(selectedCampaignForAdminView.id);
       if (updatedCampaign) setSelectedCampaignForAdminView(updatedCampaign);
     }
-    // Also refresh session in case an admin's role was changed by another admin
     updateSession();
   }, [fetchAllCampaigns, selectedCampaignForAdminView, fetchSingleCampaign, updateSession]);
   
@@ -239,18 +257,64 @@ export default function AdminDashboardPage() {
     }
   };
 
-  const handleDownloadPlaceholder = (dataType: string) => {
+  const handleRunQualityAudit = async () => {
+    if (!selectedCampaignForAdminView) return;
+    setIsAuditingQuality(true);
+    setQualityAuditResult(null);
+    setIsAuditQualityOpen(true);
+    try {
+        const response = await fetch(`/api/admin/campaigns/${selectedCampaignForAdminView.id}/quality-audit`, { method: 'POST' });
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error || 'Failed to run campaign quality audit.');
+        setQualityAuditResult(result);
+    } catch (err) {
+        toast({title: "Audit Failed", description: (err as Error).message, variant: "destructive"});
+    } finally {
+        setIsAuditingQuality(false);
+    }
+  };
+
+  const handleDataExport = async (type: string) => {
+    setExportDataType(type);
+    setDataSummary(null);
+    setIsSummarizingData(true);
+    setIsDataSummaryOpen(true);
+    try {
+        const response = await fetch('/api/admin/data/summarize', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ dataType: type })
+        });
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error || 'Failed to generate data summary.');
+        setDataSummary(result.summary);
+    } catch (err) {
+        toast({title: "Summary Failed", description: (err as Error).message, variant: "destructive"});
+    } finally {
+        setIsSummarizingData(false);
+    }
+  };
+
+  const confirmDownloadPlaceholder = () => {
     toast({
-        title: `Download ${dataType} (Placeholder)`,
-        description: `This feature is conceptual. In a real application, this would trigger a CSV download of all ${dataType.toLowerCase()}.`,
+        title: `Download ${exportDataType} (Placeholder)`,
+        description: `This feature is conceptual. In a real application, this would trigger a CSV download.`,
         duration: 5000,
     });
+    setIsDataSummaryOpen(false);
   };
+
 
   const formatTitle = (key: string) => {
     return key.replace(/([A-Z])/g, ' $1').replace(/^./, (str) => str.toUpperCase());
   };
   
+  const getQualityColor = (score: number) => {
+    if (score < 40) return 'text-destructive';
+    if (score < 80) return 'text-orange-500';
+    return 'text-green-500';
+  };
+
   return (
     <>
     <div className="space-y-8">
@@ -543,14 +607,28 @@ export default function AdminDashboardPage() {
                         </CardContent>
                     </Card>
 
-                    <Card>
-                        <CardHeader>
-                            <CardTitle className="text-base">Creative War Room (Read-Only)</CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                             <AgentDebateDisplay debates={selectedCampaignForAdminView.agentDebates} />
-                        </CardContent>
-                    </Card>
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                        <Card>
+                            <CardHeader>
+                                <CardTitle className="text-base">Creative War Room (Read-Only)</CardTitle>
+                            </CardHeader>
+                            <CardContent>
+                                <AgentDebateDisplay debates={selectedCampaignForAdminView.agentDebates} />
+                            </CardContent>
+                        </Card>
+                         <Card>
+                            <CardHeader>
+                                <CardTitle className="text-base flex items-center gap-2"><FileSearch className="h-5 w-5 text-primary" />AI Campaign Quality Auditor</CardTitle>
+                                <CardDescription>Run an AI agent to assess campaign health and completeness.</CardDescription>
+                            </CardHeader>
+                            <CardContent className="text-center">
+                                 <Button onClick={handleRunQualityAudit} disabled={isAuditingQuality}>
+                                    {isAuditingQuality ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <ShieldQuestion className="mr-2 h-4 w-4" />}
+                                    {isAuditingQuality ? 'Auditing...' : 'Run Quality Audit'}
+                                </Button>
+                            </CardContent>
+                        </Card>
+                    </div>
 
 
                     <Card>
@@ -590,26 +668,26 @@ export default function AdminDashboardPage() {
          <TabsContent value="data_export" className="mt-6">
           <Card>
             <CardHeader>
-              <CardTitle className="font-headline text-xl flex items-center gap-2"><Download className="h-5 w-5 text-primary"/>Data Export (Conceptual)</CardTitle>
-              <CardDescription>Download platform data for backup or external analysis. These are placeholder buttons.</CardDescription>
+              <CardTitle className="font-headline text-xl flex items-center gap-2"><Download className="h-5 w-5 text-primary"/>Smart Data Export</CardTitle>
+              <CardDescription>Generate an AI summary before downloading platform data for backup or external analysis.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
                 <Alert>
                     <ListTree className="h-5 w-5" />
-                    <AlertTitle>Conceptual Feature</AlertTitle>
+                    <AlertTitle>Smart Export Feature</AlertTitle>
                     <AlertDescription>
-                        The following buttons simulate data export functionality. In a production environment, these would trigger server-side processes to generate and download CSV files.
+                        Click a button to generate an AI summary of the data. The download itself remains a conceptual feature.
                     </AlertDescription>
                 </Alert>
                 <div className="flex flex-col sm:flex-row gap-4">
-                    <Button variant="outline" onClick={() => handleDownloadPlaceholder("All Campaigns")} className="w-full sm:w-auto">
-                        <Download className="mr-2 h-4 w-4"/>Download All Campaigns as CSV
+                    <Button variant="outline" onClick={() => handleDataExport("Campaigns")} className="w-full sm:w-auto">
+                        <Brain className="mr-2 h-4 w-4"/>Summarize & Export Campaigns
                     </Button>
-                    <Button variant="outline" onClick={() => handleDownloadPlaceholder("Feedback Logs")} className="w-full sm:w-auto">
-                        <Download className="mr-2 h-4 w-4"/>Download Feedback Logs as CSV
+                    <Button variant="outline" onClick={() => handleDataExport("Feedback Logs")} className="w-full sm:w-auto">
+                        <Brain className="mr-2 h-4 w-4"/>Summarize & Export Feedback
                     </Button>
-                     <Button variant="outline" onClick={() => handleDownloadPlaceholder("User Data")} className="w-full sm:w-auto">
-                        <Download className="mr-2 h-4 w-4"/>Download User Data as CSV
+                     <Button variant="outline" onClick={() => handleDataExport("Users")} className="w-full sm:w-auto">
+                        <Brain className="mr-2 h-4 w-4"/>Summarize & Export Users
                     </Button>
                 </div>
             </CardContent>
@@ -617,6 +695,89 @@ export default function AdminDashboardPage() {
         </TabsContent>
       </Tabs>
     </div>
+
+    {/* AI Agent Dialogs */}
+    <Dialog open={isAuditQualityOpen} onOpenChange={setIsAuditQualityOpen}>
+        <DialogContent className="max-w-lg">
+            <DialogHeader>
+                <DialogTitle className="flex items-center gap-2"><FileSearch />AI Campaign Quality Audit</DialogTitle>
+                <DialogDescription>
+                    Analysis of campaign &quot;{selectedCampaignForAdminView?.title}&quot;.
+                </DialogDescription>
+            </DialogHeader>
+            <div className="py-4">
+            {isAuditingQuality ? (
+              <div className="flex flex-col items-center justify-center h-32 gap-2">
+                <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                <p>Running quality audit...</p>
+              </div>
+            ) : qualityAuditResult ? (
+              <div className="space-y-4">
+                <Card>
+                  <CardHeader className="text-center">
+                    <CardDescription>Overall Quality Score</CardDescription>
+                    <CardTitle className={`text-5xl ${getQualityColor(qualityAuditResult.qualityScore)}`}>
+                      {qualityAuditResult.qualityScore}
+                      <span className="text-3xl text-muted-foreground">/100</span>
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <Progress value={qualityAuditResult.qualityScore} className="h-2" />
+                  </CardContent>
+                </Card>
+                 <Card>
+                    <CardHeader>
+                      <CardTitle className="text-base">AI Recommendation: <span className="text-primary">{qualityAuditResult.recommendation}</span></CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <p className="text-sm text-muted-foreground">{qualityAuditResult.justification}</p>
+                    </CardContent>
+                  </Card>
+              </div>
+            ) : (
+              <p>No audit results available.</p>
+            )}
+          </div>
+            <DialogFooter>
+                <DialogClose asChild><Button variant="outline">Close</Button></DialogClose>
+                 <Button onClick={handleRunQualityAudit} disabled={isAuditingQuality}>
+                    {isAuditingQuality ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <ShieldQuestion className="mr-2 h-4 w-4"/>}
+                    Re-run Audit
+                </Button>
+            </DialogFooter>
+        </DialogContent>
+    </Dialog>
+
+    <Dialog open={isDataSummaryOpen} onOpenChange={setIsDataSummaryOpen}>
+        <DialogContent className="max-w-lg">
+            <DialogHeader>
+                <DialogTitle className="flex items-center gap-2"><BrainCircuit />AI Data Summary for {exportDataType}</DialogTitle>
+                <DialogDescription>
+                    An AI-generated summary of the data you are about to export.
+                </DialogDescription>
+            </DialogHeader>
+            <div className="py-4 min-h-[12rem] flex items-center justify-center">
+            {isSummarizingData ? (
+                <div className="flex flex-col items-center justify-center h-32 gap-2">
+                    <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                    <p>Generating summary...</p>
+                </div>
+            ) : dataSummary ? (
+                <p className="text-sm text-muted-foreground bg-muted/50 p-4 rounded-md border">{dataSummary}</p>
+            ) : (
+                <p className="text-destructive">Could not generate a summary for this data.</p>
+            )}
+            </div>
+            <DialogFooter>
+                <DialogClose asChild><Button variant="outline">Cancel</Button></DialogClose>
+                <Button onClick={confirmDownloadPlaceholder} disabled={isSummarizingData || !dataSummary}>
+                    <Download className="mr-2 h-4 w-4" />
+                    Confirm Download (Conceptual)
+                </Button>
+            </DialogFooter>
+        </DialogContent>
+    </Dialog>
+
     </>
   );
 }
