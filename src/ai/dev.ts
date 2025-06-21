@@ -9,4 +9,4 @@ import '@/ai/flows/translate-content-flow.ts';
 import '@/ai/flows/campaign-memory-flow.ts';
 import '@/ai/flows/brand-audit-flow.ts';
 import '@/ai/flows/content-strategy-flow.ts';
-import '@/ai/flows/translate-content-flow.ts';
+import '@/ai/flows/optimize-content-flow.ts';

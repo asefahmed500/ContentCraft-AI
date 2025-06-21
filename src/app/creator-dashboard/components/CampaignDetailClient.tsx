@@ -11,7 +11,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, Beaker, FileText, Sparkles, ArrowLeft, Bot, MessageSquare, Microscope, FlaskConical, PencilRuler, SearchCheck, CheckCircle2, CalendarDays, Languages } from 'lucide-react';
+import { Loader2, Beaker, FileText, Sparkles, ArrowLeft, Bot, MessageSquare, Microscope, FlaskConical, PencilRuler, SearchCheck, CheckCircle2, CalendarDays, Languages, Zap } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { analyzeBrandProfile } from '@/ai/flows/brand-learning';
 import { AgentDebateDisplay } from '@/app/(admin)/dashboard/components/AgentDebateDisplay';
@@ -19,6 +19,8 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/
 import { format } from 'date-fns';
 import { Separator } from '@/components/ui/separator';
 import { ContentCalendarDisplay } from './ContentCalendarDisplay';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+
 
 interface CampaignDetailClientProps {
   initialCampaign: Campaign;
@@ -64,6 +66,12 @@ export function CampaignDetailClient({ initialCampaign, onBack, onCampaignUpdate
   const [targetLanguage, setTargetLanguage] = useState('');
   const [toneDescription, setToneDescription] = useState('');
   const [translatedContent, setTranslatedContent] = useState<string | null>(null);
+
+  // Optimize Content State
+  const [isOptimizeDialogOpen, setIsOptimizeDialogOpen] = useState(false);
+  const [contentToOptimize, setContentToOptimize] = useState<{ originalContent: string; contentType: string } | null>(null);
+  const [optimizationGoal, setOptimizationGoal] = useState('Improve user engagement');
+  const [optimizationResult, setOptimizationResult] = useState<{ predictedPerformance: { score: number, justification: string }, optimizedContent: string, explanation: string } | null>(null);
 
 
   const handleUpdateCampaign = async (updatedData: Partial<Campaign>) => {
@@ -256,6 +264,40 @@ export function CampaignDetailClient({ initialCampaign, onBack, onCampaignUpdate
     });
   };
 
+  const handleOpenOptimizeDialog = (originalContent: string, contentType: string) => {
+    setContentToOptimize({ originalContent, contentType });
+    setOptimizationGoal('Improve user engagement');
+    setOptimizationResult(null);
+    setIsOptimizeDialogOpen(true);
+  };
+  
+  const handleOptimizeContent = async () => {
+    if (!contentToOptimize || !optimizationGoal.trim()) {
+        toast({ title: "Input Required", description: "Please select an optimization goal.", variant: "destructive" });
+        return;
+    }
+    startTransition(async () => {
+        try {
+            const response = await fetch('/api/content/optimize', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    ...contentToOptimize,
+                    optimizationGoal,
+                    campaignId: campaign.id,
+                }),
+            });
+            const result = await response.json();
+            if (!response.ok) throw new Error(result.error || 'Failed to optimize content.');
+            setOptimizationResult(result);
+            toast({ title: "Optimization Complete", description: "The AI has provided an optimized version below." });
+        } catch (err) {
+            const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred.';
+            toast({ title: "Optimization Failed", description: errorMessage, variant: "destructive" });
+        }
+    });
+  };
+
   const formatTitle = (key: string) => {
     return key.replace(/([A-Z])/g, ' $1').replace(/^./, (str) => str.toUpperCase());
   };
@@ -371,7 +413,7 @@ export function CampaignDetailClient({ initialCampaign, onBack, onCampaignUpdate
                                                     <div key={format} className="p-3 border rounded-md bg-muted/50">
                                                         <h4 className="font-semibold text-sm capitalize mb-2">{formatTitle(format)}</h4>
                                                         <pre className="whitespace-pre-wrap text-xs p-2 border rounded bg-background max-h-40 overflow-y-auto">{text}</pre>
-                                                        <div className="flex gap-2 mt-3">
+                                                        <div className="flex flex-wrap gap-2 mt-3">
                                                             <Button size="xs" variant="outline" onClick={() => handleOpenReviseDialog(text, format)}>
                                                                 <Sparkles className="mr-1 h-3 w-3"/> Revise
                                                             </Button>
@@ -380,6 +422,9 @@ export function CampaignDetailClient({ initialCampaign, onBack, onCampaignUpdate
                                                             </Button>
                                                             <Button size="xs" variant="outline" onClick={() => handleOpenTranslateDialog(text, format)}>
                                                                 <Languages className="mr-1 h-3 w-3"/> Translate
+                                                            </Button>
+                                                            <Button size="xs" variant="outline" onClick={() => handleOpenOptimizeDialog(text, format)}>
+                                                                <Zap className="mr-1 h-3 w-3"/> Optimize
                                                             </Button>
                                                         </div>
                                                     </div>
@@ -533,6 +578,83 @@ export function CampaignDetailClient({ initialCampaign, onBack, onCampaignUpdate
         </DialogContent>
       </Dialog>
 
+      <Dialog open={isOptimizeDialogOpen} onOpenChange={setIsOptimizeDialogOpen}>
+        <DialogContent className="sm:max-w-3xl">
+            <DialogHeader>
+                <DialogTitle>Optimize Content Performance</DialogTitle>
+                <DialogDescription>
+                    Select a goal and the AI will analyze and rewrite the content to improve its performance.
+                </DialogDescription>
+            </DialogHeader>
+            <div className="py-4 space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <Label>Original Content ({contentToOptimize?.contentType})</Label>
+                        <Textarea readOnly value={contentToOptimize?.originalContent} rows={8} className="text-xs mt-1"/>
+                    </div>
+                    <div>
+                        <Label>Optimized Content</Label>
+                        <Textarea readOnly value={optimizationResult?.optimizedContent ?? "AI optimization will appear here..."} rows={8} className="text-xs mt-1"/>
+                    </div>
+                </div>
+
+                <div className="space-y-2">
+                    <Label htmlFor="optimization-goal">Optimization Goal</Label>
+                     <Select value={optimizationGoal} onValueChange={setOptimizationGoal}>
+                        <SelectTrigger id="optimization-goal">
+                            <SelectValue placeholder="Select a goal..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="Improve user engagement">Improve User Engagement</SelectItem>
+                            <SelectItem value="Increase click-through rate">Increase Click-Through Rate (CTR)</SelectItem>
+                            <SelectItem value="Boost conversion rate">Boost Conversion Rate</SelectItem>
+                            <SelectItem value="Enhance readability">Enhance Readability</SelectItem>
+                            <SelectItem value="Strengthen call-to-action">Strengthen Call-to-Action (CTA)</SelectItem>
+                        </SelectContent>
+                    </Select>
+                </div>
+                
+                {isPending && (
+                  <div className="flex justify-center items-center p-4">
+                    <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                    <span>Optimizing...</span>
+                  </div>
+                )}
+
+                {optimizationResult && !isPending && (
+                    <div className="space-y-4 pt-4 border-t">
+                       <h4 className="font-semibold text-md">Optimization Analysis</h4>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-center">
+                             <Card>
+                                <CardHeader className="pb-2">
+                                    <CardDescription>Original Score</CardDescription>
+                                    <CardTitle className="text-4xl text-primary">{optimizationResult.predictedPerformance.score}</CardTitle>
+                                </CardHeader>
+                                <CardContent>
+                                    <p className="text-xs text-muted-foreground">{optimizationResult.predictedPerformance.justification}</p>
+                                </CardContent>
+                            </Card>
+                            <Card className="md:col-span-2">
+                                <CardHeader className="pb-2">
+                                    <CardDescription>What Changed & Why</CardDescription>
+                                </CardHeader>
+                                 <CardContent>
+                                    <p className="text-sm text-muted-foreground text-left">{optimizationResult.explanation}</p>
+                                </CardContent>
+                            </Card>
+                        </div>
+                    </div>
+                )}
+            </div>
+            <DialogFooter>
+                <DialogClose asChild><Button variant="outline">Close</Button></DialogClose>
+                <Button onClick={handleOptimizeContent} disabled={isPending}>
+                    {isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Zap className="mr-2 h-4 w-4"/>}
+                    {optimizationResult ? 'Re-run Optimization' : 'Run Optimization'}
+                </Button>
+            </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
