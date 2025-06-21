@@ -20,6 +20,7 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/
 import { AgentDebateDisplay } from '@/components/AgentDebateDisplay';
 import { Skeleton } from '@/components/ui/skeleton';
 import { format } from 'date-fns';
+import { useSession } from 'next-auth/react';
 
 interface PlatformStats {
   totalUsers: number;
@@ -65,6 +66,7 @@ const mockTopContentFormatsData = [
 const PIE_CHART_COLORS = ['hsl(var(--primary))', 'hsl(var(--accent))', 'hsl(var(--chart-3))', 'hsl(var(--chart-4))', 'hsl(var(--chart-5))'];
 
 export default function AdminDashboardPage() {
+  const { data: session, update: updateSession } = useSession();
   const [stats, setStats] = useState<PlatformStats | null>(null);
   const [isLoadingStats, setIsLoadingStats] = useState(true);
   const { toast } = useToast();
@@ -204,7 +206,9 @@ export default function AdminDashboardPage() {
       const updatedCampaign = await fetchSingleCampaign(selectedCampaignForAdminView.id);
       if (updatedCampaign) setSelectedCampaignForAdminView(updatedCampaign);
     }
-  }, [fetchAllCampaigns, selectedCampaignForAdminView, fetchSingleCampaign]);
+    // Also refresh session in case an admin's role was changed by another admin
+    updateSession();
+  }, [fetchAllCampaigns, selectedCampaignForAdminView, fetchSingleCampaign, updateSession]);
   
 
   const handleAdminCampaignAction = useCallback(async (campaignId: string, action: 'view' | 'edit' | 'delete' | 'flag') => {
@@ -487,7 +491,7 @@ export default function AdminDashboardPage() {
          <TabsContent value="flagged_content" className="mt-6">
           <Card>
             <CardHeader>
-              <CardTitle className="font-headline text-xl flex items-center gap-2"><MessageSquare className="h-5 w-5 text-destructive"/>Flagged Content Versions</CardTitle>
+              <CardTitle className="font-headline text-xl flex items-center gap-2"><MessageSquareWarning className="h-5 w-5 text-destructive"/>Flagged Content Versions</CardTitle>
               <CardDescription>Review and manage all content versions that have been flagged for moderation.</CardDescription>
             </CardHeader>
             <CardContent>

@@ -14,3 +14,4 @@ import '@/ai/flows/optimize-content-flow.ts';
 // Admin Flows
 import '@/ai/flows/admin/platform-insights.ts';
 import '@/ai/flows/admin/user-audit.ts';
+import '@/ai/flows/admin/flag-review.ts';

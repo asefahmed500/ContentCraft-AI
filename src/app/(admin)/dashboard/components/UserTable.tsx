@@ -48,7 +48,7 @@ interface UserAuditResult {
 }
 
 export function UserTable() {
-  const { data: session } = useSession(); // Get current admin's session
+  const { data: session, update: updateSession } = useSession(); // Get current admin's session
   const [allUsers, setAllUsers] = useState<AdminUser[]>([]);
   const [filteredUsers, setFilteredUsers] = useState<AdminUser[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -118,6 +118,10 @@ export function UserTable() {
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || "Failed to update user");
       toast({ title: "User Updated", description: `User ${result.user?.name || userId} has been updated.` });
+      // If the current admin is the one being updated, refresh the session
+      if (session?.user?.id === userId) {
+        await updateSession();
+      }
       fetchUsers(); 
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : "An unknown error occurred";
@@ -330,7 +334,7 @@ export function UserTable() {
             )}
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setIsAuditOpen(false)}>Close</Button>
+            <DialogClose asChild><Button variant="outline" onClick={() => setIsAuditOpen(false)}>Close</Button></DialogClose>
             <Button onClick={runUserAudit} disabled={isAuditing}>
               {isAuditing && <Loader2 className="mr-2 h-4 w-4 animate-spin"/>}
               Re-run Audit

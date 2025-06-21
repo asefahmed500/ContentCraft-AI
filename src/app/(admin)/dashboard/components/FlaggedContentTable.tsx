@@ -14,17 +14,25 @@ import {
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Eye, ShieldAlert, MessageSquareWarning, AlertTriangle, SearchX } from 'lucide-react';
+import { Loader2, Eye, ShieldAlert, MessageSquareWarning, AlertTriangle, SearchX, ShieldCheck } from 'lucide-react';
 import { formatDistanceToNow, format } from 'date-fns';
 import { Badge } from '@/components/ui/badge';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose } from '@/components/ui/dialog';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Alert, AlertTitle } from '@/components/ui/alert';
+import { Card, CardContent, CardDescription } from '@/components/ui/card';
+import { Progress } from '@/components/ui/progress';
 
 interface FlaggedContentTableProps {
   onViewCampaign: (campaignId: string) => void;
   onRefreshNeeded: () => void; // To trigger a refresh of the flagged content list
+}
+
+interface AiReviewResult {
+    recommendation: 'Keep As Is' | 'Suggest User Revision' | 'Delete Immediately';
+    justification: string;
+    confidenceScore: number;
 }
 
 export function FlaggedContentTable({ onViewCampaign, onRefreshNeeded }: FlaggedContentTableProps) {
@@ -37,7 +45,13 @@ export function FlaggedContentTable({ onViewCampaign, onRefreshNeeded }: Flagged
   const [selectedContentForPreview, setSelectedContentForPreview] = useState<MultiFormatContent | null>(null);
   const [previewTitle, setPreviewTitle] = useState('');
   
-  const [isUnflagging, setIsUnflagging] = useState<string | null>(null); // Stores versionId being unflagged
+  const [isUnflagging, setIsUnflagging] = useState<string | null>(null);
+
+  // State for AI Review Dialog
+  const [isReviewOpen, setIsReviewOpen] = useState(false);
+  const [selectedItemForReview, setSelectedItemForReview] = useState<FlaggedContentVersionItem | null>(null);
+  const [reviewResult, setReviewResult] = useState<AiReviewResult | null>(null);
+  const [isReviewing, setIsReviewing] = useState(false);
 
   const fetchFlaggedContent = useCallback(async () => {
     setIsLoading(true);
@@ -69,7 +83,6 @@ export function FlaggedContentTable({ onViewCampaign, onRefreshNeeded }: Flagged
       const response = await fetch(`/api/admin/campaigns/${item.campaignId}/versions/${item.versionId}/flag`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        // Explicitly clear notes when unflagging
         body: JSON.stringify({ isFlagged: false, adminModerationNotes: '' }) 
       });
       const result = await response.json();
@@ -92,6 +105,41 @@ export function FlaggedContentTable({ onViewCampaign, onRefreshNeeded }: Flagged
     setPreviewTitle(`Preview: ${item.campaignTitle} - V${item.versionNumber} (${item.actorName})`);
     setIsPreviewOpen(true);
   };
+
+  const handleOpenAiReview = (item: FlaggedContentVersionItem) => {
+    setSelectedItemForReview(item);
+    setReviewResult(null); // Clear previous results
+    setIsReviewOpen(true);
+  };
+  
+  const runAiReview = useCallback(async () => {
+    if (!selectedItemForReview) return;
+    setIsReviewing(true);
+    try {
+      const response = await fetch('/api/admin/content/review', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          campaignId: selectedItemForReview.campaignId,
+          versionId: selectedItemForReview.versionId,
+        }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || 'Failed to run AI review.');
+      setReviewResult(result);
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : "An unknown error occurred";
+      toast({ title: "AI Review Failed", description: errorMessage, variant: "destructive" });
+    } finally {
+      setIsReviewing(false);
+    }
+  }, [selectedItemForReview, toast]);
+
+  useEffect(() => {
+    if (isReviewOpen && selectedItemForReview) {
+      runAiReview();
+    }
+  }, [isReviewOpen, selectedItemForReview, runAiReview]);
 
 
   if (isLoading) {
@@ -121,6 +169,12 @@ export function FlaggedContentTable({ onViewCampaign, onRefreshNeeded }: Flagged
         <p className="text-sm">All clear for now! Check back later or review campaigns to flag content.</p>
       </div>
     );
+  }
+  
+  const getRecommendationColor = (recommendation: AiReviewResult['recommendation']) => {
+    if (recommendation === 'Delete Immediately') return 'text-destructive';
+    if (recommendation === 'Suggest User Revision') return 'text-orange-500';
+    return 'text-green-500';
   }
 
   return (
@@ -178,8 +232,8 @@ export function FlaggedContentTable({ onViewCampaign, onRefreshNeeded }: Flagged
                     </Tooltip>
                 </TableCell>
                 <TableCell className="text-right space-x-2">
-                  <Button variant="outline" size="sm" onClick={() => handlePreviewContent(item)}>
-                    <Eye className="mr-1 h-3.5 w-3.5" /> Preview
+                  <Button variant="outline" size="sm" onClick={() => handleOpenAiReview(item)}>
+                    <ShieldCheck className="mr-1 h-3.5 w-3.5" /> AI Review
                   </Button>
                   <Button 
                     variant="destructive" 
@@ -197,6 +251,68 @@ export function FlaggedContentTable({ onViewCampaign, onRefreshNeeded }: Flagged
         </Table>
       </div>
 
+      <Dialog open={isReviewOpen} onOpenChange={setIsReviewOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <ShieldCheck /> AI Content Review
+            </DialogTitle>
+            <DialogDescription>
+              AI analysis of flagged content version {selectedItemForReview?.versionNumber} from campaign &quot;{selectedItemForReview?.campaignTitle}&quot;.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            {isReviewing ? (
+              <div className="flex flex-col items-center justify-center h-48 gap-2">
+                <Loader2 className="h-10 w-10 animate-spin text-primary" />
+                <p>Running AI review...</p>
+              </div>
+            ) : reviewResult ? (
+              <div className="space-y-4">
+                 <Card>
+                  <CardHeader className="text-center">
+                    <CardDescription>AI Recommendation</CardDescription>
+                    <CardTitle className={`text-2xl ${getRecommendationColor(reviewResult.recommendation)}`}>
+                      {reviewResult.recommendation}
+                    </CardTitle>
+                  </CardHeader>
+                </Card>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <Card className="md:col-span-2">
+                    <CardHeader>
+                      <CardTitle className="text-base">Justification</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <p className="text-sm text-muted-foreground">{reviewResult.justification}</p>
+                    </CardContent>
+                  </Card>
+                  <Card>
+                    <CardHeader className="text-center">
+                      <CardDescription>Confidence</CardDescription>
+                       <CardTitle className="text-4xl text-primary">
+                        {reviewResult.confidenceScore}<span className="text-2xl text-muted-foreground">/100</span>
+                      </CardTitle>
+                    </CardHeader>
+                     <CardContent>
+                       <Progress value={reviewResult.confidenceScore} className="h-2" />
+                    </CardContent>
+                  </Card>
+                </div>
+              </div>
+            ) : (
+              <p>No review results available.</p>
+            )}
+          </div>
+          <DialogFooter>
+            <DialogClose asChild><Button variant="outline">Close</Button></DialogClose>
+            <Button onClick={runAiReview} disabled={isReviewing}>
+              {isReviewing && <Loader2 className="mr-2 h-4 w-4 animate-spin"/>}
+              Re-run Review
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      
       <Dialog open={isPreviewOpen} onOpenChange={setIsPreviewOpen}>
         <DialogContent className="max-w-3xl">
           <DialogHeader>
@@ -227,4 +343,3 @@ export function FlaggedContentTable({ onViewCampaign, onRefreshNeeded }: Flagged
     </TooltipProvider>
   );
 }
-

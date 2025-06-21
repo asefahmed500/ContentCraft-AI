@@ -1,4 +1,3 @@
-
 # ContentCraft AI 🚀
 
 ContentCraft AI is a revolutionary multi-agent content creation system designed to streamline and enhance your content strategy. Leveraging the power of AI, multiple specialized agents collaborate, debate, and generate compelling multi-format content campaigns tailored to your brand and objectives.
@@ -27,6 +26,7 @@ ContentCraft AI is a revolutionary multi-agent content creation system designed 
 *   **AI-Powered Admin Agents**:
     *   **Smart Analytics Agent**: The dashboard overview includes an "AI-Powered Insights" section with natural language summaries of platform trends.
     *   **User Behavior Auditor**: Admins can perform an "AI Audit" on any user from the User Management table to get a risk score and behavioral analysis.
+    *   **Flagged Content Reviewer**: For any piece of content flagged for moderation, an AI agent can provide a recommendation (e.g., Keep, Delete) and justification.
 *   **User Management**: View all users, manage their roles (viewer, editor, admin), and ban/unban accounts.
 *   **Campaign Oversight**: View, search, and filter all campaigns created by any user. Admins can inspect full campaign details, flag campaigns for review, and delete any campaign.
 *   **Content Version Moderation**: Review all individually flagged content versions from across the platform in a dedicated "Flagged Content" table.

@@ -123,6 +123,7 @@ export const authOptions: NextAuthOptions = {
       
       const updates: Partial<AdapterUser & MyAppUser> = {};
       let needsDbUpdate = false;
+      const isNewUser = !dbUser;
 
       if (dbUser) {
         user.id = dbUser._id.toString(); 
@@ -149,24 +150,32 @@ export const authOptions: NextAuthOptions = {
       } else {
           (user as MyAppUser).emailVerified = null;
       }
-
-      if (typeof (dbUser?.role) === 'undefined') { updates.role = defaultGamificationAndStatus.role; (user as MyAppUser).role = defaultGamificationAndStatus.role; needsDbUpdate = true; } 
-      else { (user as MyAppUser).role = dbUser.role; }
-      if (typeof (dbUser?.totalXP) === 'undefined') { updates.totalXP = defaultGamificationAndStatus.totalXP; (user as MyAppUser).totalXP = defaultGamificationAndStatus.totalXP; needsDbUpdate = true; } 
-      else { (user as MyAppUser).totalXP = dbUser.totalXP; }
-      if (typeof (dbUser?.level) === 'undefined') { updates.level = defaultGamificationAndStatus.level; (user as MyAppUser).level = defaultGamificationAndStatus.level; needsDbUpdate = true; } 
-      else { (user as MyAppUser).level = dbUser.level; }
-      if (typeof (dbUser?.badges) === 'undefined') { updates.badges = defaultGamificationAndStatus.badges; (user as MyAppUser).badges = defaultGamificationAndStatus.badges; needsDbUpdate = true; } 
-      else { (user as MyAppUser).badges = dbUser.badges; }
-      if (typeof (dbUser?.isBanned) === 'undefined') { updates.isBanned = defaultGamificationAndStatus.isBanned; (user as MyAppUser).isBanned = defaultGamificationAndStatus.isBanned; needsDbUpdate = true; }
-      else { (user as MyAppUser).isBanned = dbUser.isBanned; }
-
-      if (needsDbUpdate && dbUser) { 
+      
+      if (isNewUser) {
+        Object.assign(updates, defaultGamificationAndStatus);
+        Object.assign(user, defaultGamificationAndStatus);
+        needsDbUpdate = true;
+      } else {
+         if (typeof (dbUser?.role) === 'undefined') { updates.role = defaultGamificationAndStatus.role; (user as MyAppUser).role = defaultGamificationAndStatus.role; needsDbUpdate = true; } 
+        else { (user as MyAppUser).role = dbUser.role; }
+        if (typeof (dbUser?.totalXP) === 'undefined') { updates.totalXP = defaultGamificationAndStatus.totalXP; (user as MyAppUser).totalXP = defaultGamificationAndStatus.totalXP; needsDbUpdate = true; } 
+        else { (user as MyAppUser).totalXP = dbUser.totalXP; }
+        if (typeof (dbUser?.level) === 'undefined') { updates.level = defaultGamificationAndStatus.level; (user as MyAppUser).level = defaultGamificationAndStatus.level; needsDbUpdate = true; } 
+        else { (user as MyAppUser).level = dbUser.level; }
+        if (typeof (dbUser?.badges) === 'undefined') { updates.badges = defaultGamificationAndStatus.badges; (user as MyAppUser).badges = defaultGamificationAndStatus.badges; needsDbUpdate = true; } 
+        else { (user as MyAppUser).badges = dbUser.badges; }
+        if (typeof (dbUser?.isBanned) === 'undefined') { updates.isBanned = defaultGamificationAndStatus.isBanned; (user as MyAppUser).isBanned = defaultGamificationAndStatus.isBanned; needsDbUpdate = true; }
+        else { (user as MyAppUser).isBanned = dbUser.isBanned; }
+      }
+      
+      if (needsDbUpdate && user.id) { 
         updates.updatedAt = new Date();
-        await usersCollection.updateOne({ _id: dbUser._id }, { $set: updates });
-      } else if (needsDbUpdate && !dbUser && user.id) { 
-        updates.updatedAt = new Date();
-        await usersCollection.updateOne({ _id: new ObjectId(user.id) }, { $set: updates });
+        const finalUpdates = { $set: updates };
+        if (isNewUser) {
+            // For new users created by the adapter, we also set createdAt
+            (finalUpdates as any).$setOnInsert = { createdAt: new Date() };
+        }
+        await usersCollection.updateOne({ _id: new ObjectId(user.id) }, finalUpdates, { upsert: true });
       }
       
       if ((user as MyAppUser).isBanned) { 
@@ -188,13 +197,22 @@ export const authOptions: NextAuthOptions = {
         token.isBanned = typedUser.isBanned ?? defaultGamificationAndStatus.isBanned;
       }
 
+      // If user's role is updated by an admin, we need to refresh the token
       if (trigger === "update" && sessionUpdate?.user) {
-        const updateData = sessionUpdate.user as Partial<MyAppUser>;
-        if (updateData.name !== undefined) token.name = updateData.name;
-        if (updateData.image !== undefined) token.picture = updateData.image;
-        if (updateData.totalXP !== undefined) token.totalXP = updateData.totalXP;
-        if (updateData.level !== undefined) token.level = updateData.level;
-        if (updateData.badges !== undefined) token.badges = updateData.badges;
+        const client: MongoClient = await clientPromise;
+        const db: Db = client.db(getDbName());
+        const usersCollection = db.collection<AdapterUser & Partial<MyAppUser>>("users");
+        const dbUser = await usersCollection.findOne({ _id: new ObjectId(token.id as string) });
+
+        if (dbUser) {
+            token.name = dbUser.name;
+            token.picture = dbUser.image;
+            token.role = dbUser.role ?? defaultGamificationAndStatus.role;
+            token.totalXP = dbUser.totalXP ?? defaultGamificationAndStatus.totalXP;
+            token.level = dbUser.level ?? defaultGamificationAndStatus.level;
+            token.badges = dbUser.badges ?? defaultGamificationAndStatus.badges;
+            token.isBanned = dbUser.isBanned ?? defaultGamificationAndStatus.isBanned;
+        }
       }
       return token;
     },
