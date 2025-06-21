@@ -11,7 +11,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, Beaker, FileText, Sparkles, ArrowLeft, Bot, MessageSquare, Microscope, FlaskConical, PencilRuler, SearchCheck, CheckCircle2, CalendarDays } from 'lucide-react';
+import { Loader2, Beaker, FileText, Sparkles, ArrowLeft, Bot, MessageSquare, Microscope, FlaskConical, PencilRuler, SearchCheck, CheckCircle2, CalendarDays, Languages } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { analyzeBrandProfile } from '@/ai/flows/brand-learning';
 import { AgentDebateDisplay } from '@/app/(admin)/dashboard/components/AgentDebateDisplay';
@@ -57,6 +57,13 @@ export function CampaignDetailClient({ initialCampaign, onBack, onCampaignUpdate
   const [isAuditDialogOpen, setIsAuditDialogOpen] = useState(false);
   const [auditResult, setAuditResult] = useState<{ alignmentScore: number; justification: string; suggestions: string[] } | null>(null);
   const [contentToAudit, setContentToAudit] = useState<string>('');
+  
+  // Translate Content State
+  const [isTranslateDialogOpen, setIsTranslateDialogOpen] = useState(false);
+  const [contentToTranslate, setContentToTranslate] = useState<{ originalContent: string; contentType: string } | null>(null);
+  const [targetLanguage, setTargetLanguage] = useState('');
+  const [toneDescription, setToneDescription] = useState('');
+  const [translatedContent, setTranslatedContent] = useState<string | null>(null);
 
 
   const handleUpdateCampaign = async (updatedData: Partial<Campaign>) => {
@@ -213,6 +220,41 @@ export function CampaignDetailClient({ initialCampaign, onBack, onCampaignUpdate
       }
     });
   };
+  
+  const handleOpenTranslateDialog = (originalContent: string, contentType: string) => {
+    setContentToTranslate({ originalContent, contentType });
+    setTargetLanguage('');
+    setToneDescription('');
+    setTranslatedContent(null);
+    setIsTranslateDialogOpen(true);
+  };
+
+  const handleTranslateContent = async () => {
+    if (!contentToTranslate || !targetLanguage.trim()) {
+        toast({ title: "Input Required", description: "Please enter a target language.", variant: "destructive" });
+        return;
+    }
+    startTransition(async () => {
+        try {
+            const response = await fetch('/api/content/translate', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    originalContent: contentToTranslate.originalContent,
+                    targetLanguage: targetLanguage,
+                    toneDescription: toneDescription,
+                }),
+            });
+            const result = await response.json();
+            if (!response.ok) throw new Error(result.error || 'Failed to translate content.');
+            setTranslatedContent(result.translatedContent);
+            toast({ title: "Translation Complete", description: `Content translated to ${targetLanguage}.` });
+        } catch (err) {
+            const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred.';
+            toast({ title: "Translation Failed", description: errorMessage, variant: "destructive" });
+        }
+    });
+  };
 
   const formatTitle = (key: string) => {
     return key.replace(/([A-Z])/g, ' $1').replace(/^./, (str) => str.toUpperCase());
@@ -336,6 +378,9 @@ export function CampaignDetailClient({ initialCampaign, onBack, onCampaignUpdate
                                                             <Button size="xs" variant="outline" onClick={() => handleOpenAuditDialog(text)} disabled={!campaign.brandProfile}>
                                                                 <SearchCheck className="mr-1 h-3 w-3"/> Audit
                                                             </Button>
+                                                            <Button size="xs" variant="outline" onClick={() => handleOpenTranslateDialog(text, format)}>
+                                                                <Languages className="mr-1 h-3 w-3"/> Translate
+                                                            </Button>
                                                         </div>
                                                     </div>
                                                 ) : null
@@ -450,7 +495,43 @@ export function CampaignDetailClient({ initialCampaign, onBack, onCampaignUpdate
               </Button>
             </DialogFooter>
           </DialogContent>
-        </Dialog>
+      </Dialog>
+      
+      <Dialog open={isTranslateDialogOpen} onOpenChange={setIsTranslateDialogOpen}>
+        <DialogContent className="sm:max-w-2xl">
+            <DialogHeader>
+                <DialogTitle>Translate Content</DialogTitle>
+                <DialogDescription>Translate content to a different language. The original is on the left, the translation will appear on the right.</DialogDescription>
+            </DialogHeader>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 py-4">
+                <div className="space-y-2">
+                    <Label>Original Content ({contentToTranslate?.contentType})</Label>
+                    <Textarea readOnly value={contentToTranslate?.originalContent} rows={8} className="text-xs"/>
+                </div>
+                 <div className="space-y-2">
+                    <Label>Translated Content</Label>
+                    <Textarea readOnly value={translatedContent ?? "AI translation will appear here..."} rows={8} className="text-xs"/>
+                </div>
+            </div>
+             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                    <Label htmlFor="target-language">Target Language</Label>
+                    <Input id="target-language" value={targetLanguage} onChange={(e) => setTargetLanguage(e.target.value)} placeholder="e.g., Spanish, Japanese, Bengali"/>
+                </div>
+                <div className="space-y-2">
+                    <Label htmlFor="tone-description">Tone Description (Optional)</Label>
+                    <Input id="tone-description" value={toneDescription} onChange={(e) => setToneDescription(e.target.value)} placeholder="e.g., Formal and respectful"/>
+                </div>
+            </div>
+            <DialogFooter>
+                <DialogClose asChild><Button variant="outline">Close</Button></DialogClose>
+                <Button onClick={handleTranslateContent} disabled={isPending}>
+                    {isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Languages className="mr-2 h-4 w-4"/>}
+                    {isPending ? 'Translating...' : 'Run Translation'}
+                </Button>
+            </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
     </div>
   );

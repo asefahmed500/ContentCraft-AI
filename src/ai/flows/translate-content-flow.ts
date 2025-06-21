@@ -34,7 +34,7 @@ const prompt = ai.definePrompt({
   name: 'translateContentPrompt',
   input: {schema: TranslateContentInputSchema},
   output: {schema: TranslateContentOutputSchema},
-  prompt: `You are an expert multilingual translator. Your task is to translate the provided original content into the specified target language.
+  prompt: `You are an expert multilingual translator specializing in localization. Your task is to translate the provided original content into the specified target language, paying close attention to cultural nuances and tone.
 
 Original Content:
 ---
@@ -49,12 +49,13 @@ Original Language: {{{originalLanguage}}}
 
 {{#if toneDescription}}
 Desired Tone for Translation: {{{toneDescription}}}
-Please make sure the translation accurately reflects this tone.
+Please make sure the translation accurately reflects this tone and is culturally appropriate for speakers of the target language.
 {{else}}
-Please infer the tone from the original content and maintain it as closely as possible in the translation.
+Please infer the tone from the original content and maintain it as closely as possible in the translation, adapting for cultural context.
 {{/if}}
 
-Provide only the translated content. If there are any specific challenges or nuances in the translation (e.g., cultural adaptations made, difficulties matching tone perfectly, phrases without direct equivalents), please include them in the 'warnings' field of the output.
+Provide only the translated content in the 'translatedContent' field. 
+If there are any specific challenges or nuances in the translation (e.g., cultural adaptations made, difficulties matching tone perfectly, phrases without direct equivalents), please include them in the 'warnings' field of the output.
 If you automatically detected the original language because it wasn't provided, include it in the 'detectedOriginalLanguage' field.
 
 Ensure the translation is natural, fluent, and accurate for a native speaker of the target language.
@@ -77,4 +78,3 @@ const translateContentFlow = ai.defineFlow(
     return output!;
   }
 );
-
