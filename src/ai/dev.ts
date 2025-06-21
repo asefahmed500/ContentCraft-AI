@@ -10,3 +10,7 @@ import '@/ai/flows/campaign-memory-flow.ts';
 import '@/ai/flows/brand-audit-flow.ts';
 import '@/ai/flows/content-strategy-flow.ts';
 import '@/ai/flows/optimize-content-flow.ts';
+
+// Admin Flows
+import '@/ai/flows/admin/platform-insights.ts';
+import '@/ai/flows/admin/user-audit.ts';

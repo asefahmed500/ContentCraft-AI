@@ -24,9 +24,12 @@ import {
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, MoreHorizontal, UserX, UserCheck, ShieldAlert, Edit, Search as SearchIcon } from 'lucide-react';
-import { format } from 'date-fns';
-import { useSession } from 'next-auth/react'; // Import useSession
+import { Loader2, MoreHorizontal, UserX, UserCheck, ShieldAlert, Edit, Search as SearchIcon, ShieldQuestion } from 'lucide-react';
+import { format, formatDistanceToNowStrict } from 'date-fns';
+import { useSession } from 'next-auth/react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose } from '@/components/ui/dialog';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Progress } from '@/components/ui/progress';
 
 interface AdminUser extends NextAuthUser {
   id: string;
@@ -38,6 +41,12 @@ interface AdminUser extends NextAuthUser {
   updatedAt?: Date | string; 
 }
 
+interface UserAuditResult {
+  riskScore: number;
+  justification: string;
+  recommendation: 'No action needed' | 'Monitor user activity' | 'Recommend role review' | 'Flag for immediate review';
+}
+
 export function UserTable() {
   const { data: session } = useSession(); // Get current admin's session
   const [allUsers, setAllUsers] = useState<AdminUser[]>([]);
@@ -46,6 +55,12 @@ export function UserTable() {
   const [updatingUserId, setUpdatingUserId] = useState<string | null>(null);
   const { toast } = useToast();
   const [searchTerm, setSearchTerm] = useState('');
+
+  // State for Audit Dialog
+  const [isAuditOpen, setIsAuditOpen] = useState(false);
+  const [selectedUserForAudit, setSelectedUserForAudit] = useState<AdminUser | null>(null);
+  const [auditResult, setAuditResult] = useState<UserAuditResult | null>(null);
+  const [isAuditing, setIsAuditing] = useState(false);
 
   const fetchUsers = useCallback(async () => {
     setIsLoading(true);
@@ -88,7 +103,6 @@ export function UserTable() {
   const handleUpdateUser = async (userId: string, updates: { role?: AdminUser['role'], isBanned?: boolean }) => {
     setUpdatingUserId(userId);
 
-    // Prevent admin from changing their own role to non-admin or banning themselves
     if (session?.user?.id === userId && (updates.role && updates.role !== 'admin' || updates.isBanned === true)) {
         toast({ title: "Action Not Allowed", description: "You cannot change your own role to non-admin or ban yourself.", variant: "destructive" });
         setUpdatingUserId(null);
@@ -102,9 +116,7 @@ export function UserTable() {
         body: JSON.stringify(updates),
       });
       const result = await response.json();
-      if (!response.ok) {
-        throw new Error(result.error || "Failed to update user");
-      }
+      if (!response.ok) throw new Error(result.error || "Failed to update user");
       toast({ title: "User Updated", description: `User ${result.user?.name || userId} has been updated.` });
       fetchUsers(); 
     } catch (error) {
@@ -115,9 +127,44 @@ export function UserTable() {
     }
   };
 
+  const handleOpenAuditDialog = (user: AdminUser) => {
+    setSelectedUserForAudit(user);
+    setAuditResult(null); // Clear previous results
+    setIsAuditOpen(true);
+  };
+  
+  const runUserAudit = useCallback(async () => {
+    if (!selectedUserForAudit) return;
+    setIsAuditing(true);
+    try {
+      const response = await fetch(`/api/admin/users/${selectedUserForAudit.id}/audit`, { method: 'POST' });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || "Failed to run user audit.");
+      setAuditResult(result);
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : "An unknown error occurred";
+      toast({ title: "Audit Failed", description: errorMessage, variant: "destructive" });
+    } finally {
+      setIsAuditing(false);
+    }
+  }, [selectedUserForAudit, toast]);
+
+  useEffect(() => {
+    if (isAuditOpen && selectedUserForAudit) {
+      runUserAudit();
+    }
+  }, [isAuditOpen, selectedUserForAudit, runUserAudit]);
+
+
   if (isLoading && filteredUsers.length === 0) {
     return <div className="flex justify-center items-center min-h-[200px]"><Loader2 className="h-8 w-8 animate-spin text-primary" /> <span className="ml-2">Loading users...</span></div>;
   }
+
+  const getRiskColor = (score: number) => {
+    if (score > 70) return 'text-destructive';
+    if (score > 30) return 'text-orange-500';
+    return 'text-green-500';
+  };
 
   return (
     <div className="space-y-4">
@@ -176,7 +223,7 @@ export function UserTable() {
                         {user.isBanned ? "Banned" : "Active"}
                     </Badge>
                     </TableCell>
-                    <TableCell>{user.createdAt ? format(new Date(user.createdAt), 'MMM d, yyyy') : 'N/A'}</TableCell>
+                    <TableCell>{user.createdAt ? formatDistanceToNowStrict(new Date(user.createdAt), {addSuffix: true}) : 'N/A'}</TableCell>
                     <TableCell className="text-right">
                     {updatingUserId === user.id ? (
                         <Loader2 className="h-4 w-4 animate-spin" />
@@ -191,7 +238,10 @@ export function UserTable() {
                         <DropdownMenuContent align="end">
                             <DropdownMenuLabel>Actions</DropdownMenuLabel>
                             <DropdownMenuItem onSelect={() => alert("View user profile/details - This is a conceptual action. User details are visible in the table.")}>
-                            <Edit className="mr-2 h-4 w-4" /> View Details
+                              <Edit className="mr-2 h-4 w-4" /> View Details
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onSelect={() => handleOpenAuditDialog(user)}>
+                              <ShieldQuestion className="mr-2 h-4 w-4 text-blue-500" /> AI Audit User
                             </DropdownMenuItem>
                             <DropdownMenuSeparator />
                             {user.isBanned ? (
@@ -227,6 +277,67 @@ export function UserTable() {
             </Table>
         </div>
       )}
+
+      <Dialog open={isAuditOpen} onOpenChange={setIsAuditOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2"><ShieldQuestion/> AI User Audit: {selectedUserForAudit?.name}</DialogTitle>
+            <DialogDescription>
+              Analyzing user activity for suspicious patterns.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            {isAuditing ? (
+              <div className="flex flex-col items-center justify-center h-48 gap-2">
+                <Loader2 className="h-10 w-10 animate-spin text-primary" />
+                <p>Running audit...</p>
+              </div>
+            ) : auditResult ? (
+              <div className="space-y-4">
+                <Card>
+                  <CardHeader className="text-center">
+                    <CardDescription>Overall Risk Score</CardDescription>
+                    <CardTitle className={`text-5xl ${getRiskColor(auditResult.riskScore)}`}>
+                      {auditResult.riskScore}
+                      <span className="text-3xl text-muted-foreground">/100</span>
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <Progress value={auditResult.riskScore} className="h-2" />
+                  </CardContent>
+                </Card>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-base">Justification</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <p className="text-sm text-muted-foreground">{auditResult.justification}</p>
+                    </CardContent>
+                  </Card>
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-base">AI Recommendation</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <p className="text-sm font-semibold">{auditResult.recommendation}</p>
+                    </CardContent>
+                  </Card>
+                </div>
+              </div>
+            ) : (
+              <p>No audit results available.</p>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsAuditOpen(false)}>Close</Button>
+            <Button onClick={runUserAudit} disabled={isAuditing}>
+              {isAuditing && <Loader2 className="mr-2 h-4 w-4 animate-spin"/>}
+              Re-run Audit
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

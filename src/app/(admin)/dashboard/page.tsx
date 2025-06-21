@@ -9,15 +9,16 @@ import { Button } from '@/components/ui/button';
 import { UserTable } from './components/UserTable';
 import { AdminCampaignList } from './components/AdminCampaignList';
 import { FlaggedContentTable } from './components/FlaggedContentTable'; 
-import type { Campaign, ContentVersion, AgentInteraction, MultiFormatContent } from '@/types/content';
+import type { Campaign } from '@/types/content';
 import type { User as NextAuthUser } from 'next-auth';
-import { BarChart, BrainCircuit, LineChart as LucideLineChart, Users, FileText, Activity, Zap, Brain, Download, Info, PieChart, ListTree, XCircle, MessageSquare, Trophy, ShieldAlert as ShieldAlertIcon } from 'lucide-react';
+import { BarChart, BrainCircuit, LineChart as LucideLineChart, Users, FileText, Activity, Zap, Brain, Download, Info, PieChart, ListTree, XCircle, MessageSquare, Trophy, ShieldAlert as ShieldAlertIcon, Lightbulb } from 'lucide-react';
 import { ResponsiveContainer, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, BarChart as RechartsBarChart, Line, LineChart as RechartsLineChart, Pie, Cell, PieChart as RechartsPieChart } from 'recharts';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2 } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { AgentDebateDisplay } from '@/components/AgentDebateDisplay';
+import { Skeleton } from '@/components/ui/skeleton';
 
 interface PlatformStats {
   totalUsers: number;
@@ -26,6 +27,11 @@ interface PlatformStats {
   campaignsCreatedToday: number; 
   aiFlowsExecuted?: number; 
   feedbackItemsSubmitted?: number;
+}
+
+interface PlatformInsights {
+    summary: string;
+    keyObservations: string[];
 }
 
 interface AdminUser extends NextAuthUser {
@@ -75,6 +81,9 @@ export default function AdminDashboardPage() {
 
   const [flaggedContentRefreshTrigger, setFlaggedContentRefreshTrigger] = useState(0);
 
+  const [insights, setInsights] = useState<PlatformInsights | null>(null);
+  const [isLoadingInsights, setIsLoadingInsights] = useState(true);
+
   const fetchAllCampaigns = useCallback(async (showToast = false) => {
     setIsLoadingCampaigns(true);
     setCampaignFetchError(null);
@@ -98,12 +107,22 @@ export default function AdminDashboardPage() {
   }, [toast]);
 
 
-  const fetchStats = useCallback(async () => {
+  const fetchStatsAndInsights = useCallback(async () => {
     setIsLoadingStats(true);
+    setIsLoadingInsights(true);
     try {
-      const usersResponse = await fetch('/api/admin/users');
+      // Parallel fetches for users and insights
+      const usersPromise = fetch('/api/admin/users');
+      const insightsPromise = fetch('/api/admin/insights');
+      
+      const [usersResponse, insightsResponse] = await Promise.all([usersPromise, insightsPromise]);
+
       if (!usersResponse.ok) throw new Error("Failed to fetch users for stats");
       const usersData = await usersResponse.json();
+      
+      if (!insightsResponse.ok) throw new Error("Failed to fetch AI insights");
+      const insightsData = await insightsResponse.json();
+      setInsights(insightsData);
       
       setStats({
         totalUsers: usersData.length,
@@ -115,11 +134,13 @@ export default function AdminDashboardPage() {
       });
 
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : "Unknown error fetching stats";
-      toast({ title: "Error loading stats", description: errorMessage, variant: "destructive" });
+      const errorMessage = error instanceof Error ? error.message : "Unknown error fetching stats/insights";
+      toast({ title: "Error loading dashboard data", description: errorMessage, variant: "destructive" });
       setStats({ totalUsers: 0, totalCampaigns: 0, activeUsersToday: 0, campaignsCreatedToday: 0, aiFlowsExecuted: 0, feedbackItemsSubmitted: 0 });
+      setInsights(null);
     } finally {
       setIsLoadingStats(false);
+      setIsLoadingInsights(false);
     }
   }, [toast, allCampaigns]); 
 
@@ -154,9 +175,9 @@ export default function AdminDashboardPage() {
 
   useEffect(() => {
     if (!isLoadingCampaigns) { 
-        fetchStats();
+        fetchStatsAndInsights();
     }
-  }, [allCampaigns, isLoadingCampaigns, fetchStats]);
+  }, [allCampaigns, isLoadingCampaigns, fetchStatsAndInsights]);
 
   const fetchSingleCampaign = useCallback(async (campaignId: string): Promise<Campaign | null> => {
     setIsFetchingCampaignDetail(true);
@@ -248,6 +269,33 @@ export default function AdminDashboardPage() {
         </TabsList>
 
         <TabsContent value="overview" className="mt-6 space-y-6">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <Card className="lg:col-span-3">
+                    <CardHeader>
+                        <CardTitle className="font-headline flex items-center gap-2 text-xl"><Lightbulb className="h-5 w-5 text-primary"/>AI-Powered Insights</CardTitle>
+                        <CardDescription>Smart Analytics Agent analyzing platform data.</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        {isLoadingInsights ? (
+                             <div className="space-y-3">
+                                <Skeleton className="h-5 w-3/4" />
+                                <Skeleton className="h-4 w-full" />
+                                <Skeleton className="h-4 w-5/6" />
+                             </div>
+                        ) : insights ? (
+                            <div>
+                                <p className="font-semibold mb-2">{insights.summary}</p>
+                                <ul className="list-disc list-inside text-sm text-muted-foreground space-y-1">
+                                    {insights.keyObservations.map((obs, i) => <li key={i}>{obs}</li>)}
+                                </ul>
+                            </div>
+                        ) : (
+                            <p className="text-muted-foreground">Could not generate AI insights.</p>
+                        )}
+                    </CardContent>
+                </Card>
+            </div>
+            
             {isLoadingStats || !stats ? (
                 <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
                     {[...Array(6)].map((_, i) => (

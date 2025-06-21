@@ -100,6 +100,10 @@ ContentCraft AI is a Next.js web application designed as a multi-agent AI conten
         *   Centralized control panel for administrators at `/admin/dashboard`.
         *   Displays summary statistics, charts for platform activity, and an XP leaderboard.
 
+    *   **AI-Powered Admin Agents**:
+        *   **Smart Analytics Agent**: Generates natural language summaries of platform trends visible on the dashboard overview.
+        *   **User Behavior Auditor**: An "AI Audit User" action is available for each user in the User Management table, providing a risk score and justification based on their activity.
+
     *   **User Management (Roles & Banning)**:
         *   Admins can view all users, change their roles (viewer, editor, admin), and ban/unban users.
 
@@ -146,7 +150,7 @@ ContentCraft AI is a Next.js web application designed as a multi-agent AI conten
 -----------------
 *   **Genkit**: Primary framework for AI flows (`src/ai/`).
 *   **Google Gemini**: Main LLM for all AI tasks.
-*   **Key Flows**:
+*   **Key User-Facing Flows**:
     *   `brand-learning.ts`: Analyzes text to create a `BrandProfile`.
     *   `agent-debate.ts`: Simulates the Creative War Room.
     *   `content-generation.ts`: Generates multi-format content.
@@ -155,6 +159,9 @@ ContentCraft AI is a Next.js web application designed as a multi-agent AI conten
     *   `brand-audit-flow.ts`: Audits content against a brand profile.
     *   `translate-content-flow.ts`: Translates content.
     *   `optimize-content-flow.ts`: Improves content for a performance goal.
+*   **Key Admin-Facing Flows**:
+    *   `platform-insights.ts`: Generates natural language summaries of platform statistics.
+    *   `user-audit.ts`: Assesses a user's activity for potential risk.
 
 -----------------
 6. Setup & Configuration
