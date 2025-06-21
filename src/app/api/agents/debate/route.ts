@@ -5,6 +5,7 @@ import { getToken } from 'next-auth/jwt';
 import clientPromise from '@/lib/mongodb';
 import { MongoClient, Db, ObjectId } from 'mongodb';
 import type { Campaign } from '@/types/content';
+import { mapCampaignDocumentToCampaign } from '@/app/api/campaigns/route';
 
 
 interface DebateApiInput {
@@ -71,8 +72,10 @@ export async function POST(request: NextRequest) {
     if (!updatedResult.value) {
         return NextResponse.json({ error: 'Failed to save debate results to campaign.' }, { status: 500 });
     }
+    
+    const updatedCampaign = mapCampaignDocumentToCampaign({ ...updatedResult.value, _id: updatedResult.value._id! });
 
-    return NextResponse.json(result, { status: 200 });
+    return NextResponse.json(updatedCampaign, { status: 200 });
 
   } catch (error) {
     console.error("Agent Debate API Error:", error);

@@ -207,16 +207,15 @@ export function CampaignDetailClient({ initialCampaign, onBack, onCampaignUpdate
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ campaignId: campaign.id }),
         });
-        const result = await response.json();
+        const updatedCampaign = await response.json();
         if (!response.ok) {
-            throw new Error(result.error || 'Failed to run the war room.');
+            throw new Error(updatedCampaign.error || 'Failed to run the war room.');
         }
 
-        const updatedCampaign = await handleUpdateCampaign({}); // Send empty update to just refetch
-        if (updatedCampaign) {
-          toast({ title: "War Room Concluded!", description: "The strategy session is complete and has been saved." });
-          await awardXP(50, "completing a Strategy Session");
-        }
+        setCampaign(updatedCampaign as Campaign);
+        onCampaignUpdate(updatedCampaign as Campaign);
+        toast({ title: "War Room Concluded!", description: "The strategy session is complete and has been saved." });
+        await awardXP(50, "completing a Strategy Session");
      } catch (err) {
         const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred.';
         toast({ title: "War Room Error", description: errorMessage, variant: "destructive" });

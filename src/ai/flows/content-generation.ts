@@ -37,23 +37,27 @@ const prompt = ai.definePrompt({
   name: 'generateContentPrompt',
   input: {schema: GenerateContentInputSchema},
   output: {schema: GenerateContentOutputSchema},
-  prompt: `You are a content creation expert. Generate content in multiple formats based on the input content and brand voice provided.
+  prompt: `You are an expert content creation agent. Your task is to generate content in multiple formats based on the provided creative brief and brand voice.
 
-Input Content: {{{inputContent}}}
-Brand Voice: {{{brandVoice}}}
-
-Output the content in the following formats:
-- blogPost: A blog post based on the input content.
-- tweet: A tweet based on the input content.
-- linkedInArticle: A LinkedIn article based on the input content.
-- instagramPost: An Instagram post based on the input content.
-- tiktokScript: A TikTok script based on the input content.
-- emailCampaign: An email campaign based on the input content.
-- adsCopy: Ads copy based on the input content.
+**Creative Brief / Input Content:**
+{{{inputContent}}}
 
 {{#if brandVoice}}
-Ensure that the generated content aligns with the specified brand voice.
-{{/if}}`,
+**Brand Voice to adhere to:**
+{{{brandVoice}}}
+{{/if}}
+
+**Your Task:**
+Generate content for each of the following formats, ensuring it is tailored for the platform and aligns with the brief and brand voice.
+
+- blogPost: A comprehensive blog post.
+- tweet: A short, engaging tweet with relevant hashtags.
+- linkedInArticle: A professional article suitable for LinkedIn.
+- instagramPost: A compelling caption for an Instagram post.
+- tiktokScript: A short video script for a TikTok video.
+- emailCampaign: A marketing email to a customer list.
+- adsCopy: A short, punchy copy for online advertisements.
+`,
 });
 
 const generateContentFlow = ai.defineFlow(
