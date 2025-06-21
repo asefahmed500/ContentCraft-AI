@@ -1,4 +1,5 @@
-// This file is deprecated and part of a conflicting route.
-// It has been intentionally cleared to resolve a Next.js build error.
-// The active user dashboard is located at /creator-dashboard.
-// This file can be safely deleted.
+// This file is part of a deprecated route and has been intentionally
+// modified to resolve a Next.js build error regarding "parallel pages".
+// The active user dashboard is now located at /creator-dashboard.
+// This file can be safely deleted in the future.
+export {};

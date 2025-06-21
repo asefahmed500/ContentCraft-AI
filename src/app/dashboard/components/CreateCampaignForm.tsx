@@ -1,4 +1,5 @@
-// This component is deprecated and part of a conflicting route.
-// It has been intentionally cleared to resolve a Next.js build error.
-// The active component is in /creator-dashboard/components.
-// This file can be safely deleted.
+// This component is part of a deprecated route and has been intentionally
+// modified to resolve a Next.js build error. The active components are
+// now located in /creator-dashboard/components.
+// This file can be safely deleted in the future.
+export {};
