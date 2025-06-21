@@ -1,30 +1,26 @@
 
 "use client";
 
-import type { Campaign, ContentVersion, AgentInteraction, MultiFormatContent, ScheduledPost } from '@/types/content';
-import type { BrandProfile } from '@/types/brand';
+import type { Campaign, ContentVersion } from '@/types/content';
 import { useState, useTransition, useEffect, useCallback } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose } from '@/components/ui/dialog';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, Beaker, FileText, Sparkles, ArrowLeft, Bot, MessageSquare, Microscope, FlaskConical, PencilRuler, SearchCheck, CheckCircle2, CalendarDays, Languages, Zap, Pencil, Save, ThumbsUp, ThumbsDown } from 'lucide-react';
-import { Badge } from '@/components/ui/badge';
+import { Loader2, Sparkles, ArrowLeft, Save, Languages, Zap } from 'lucide-react';
 import { analyzeBrandProfile } from '@/ai/flows/brand-learning';
-import { AgentDebateDisplay } from '@/components/AgentDebateDisplay';
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import { format } from 'date-fns';
-import { Separator } from '@/components/ui/separator';
-import { ContentCalendarDisplay } from './ContentCalendarDisplay';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useSession } from 'next-auth/react';
+
+import { CampaignHeader } from './CampaignHeader';
+import { CampaignTools } from './CampaignTools';
+import { ContentVersionsDisplay } from './ContentVersionsDisplay';
 
 interface CampaignDetailClientProps {
   initialCampaign: Campaign;
@@ -40,14 +36,12 @@ const campaignEditSchema = z.object({
 });
 type CampaignEditValues = z.infer<typeof campaignEditSchema>;
 
-
-// Helper to convert base64 to data URI
 const textToDataUri = (text: string) => {
     const base64 = btoa(unescape(encodeURIComponent(text)));
     return `data:text/plain;base64,${base64}`;
 }
 
-type SubmittedFeedback = {
+export type SubmittedFeedback = {
   [key: string]: 'up' | 'down'; // key is "versionId-format"
 };
 
@@ -65,7 +59,6 @@ export function CampaignDetailClient({ initialCampaign, onBack, onCampaignUpdate
   const [isDebating, setIsDebating] = useState(false);
   const [isGeneratingSchedule, setIsGeneratingSchedule] = useState(false);
   const [isGeneratingContent, setIsGeneratingContent] = useState(false);
-  const [feedbackLoading, setFeedbackLoading] = useState<string | null>(null);
 
   // Form for editing campaign
   const form = useForm<CampaignEditValues>({
@@ -83,6 +76,28 @@ export function CampaignDetailClient({ initialCampaign, onBack, onCampaignUpdate
   
   // Feedback state
   const [submittedFeedback, setSubmittedFeedback] = useState<SubmittedFeedback>({});
+
+  // Tool Dialog States
+  const [isReviseDialogOpen, setIsReviseDialogOpen] = useState(false);
+  const [contentToRevise, setContentToRevise] = useState<{ originalContent: string; contentType: string; version: ContentVersion } | null>(null);
+  const [revisionInstructions, setRevisionInstructions] = useState('');
+  const [revisedContent, setRevisedContent] = useState<string | null>(null);
+
+  const [isAuditDialogOpen, setIsAuditDialogOpen] = useState(false);
+  const [auditResult, setAuditResult] = useState<{ alignmentScore: number; justification: string; suggestions: string[] } | null>(null);
+  const [contentToAudit, setContentToAudit] = useState<string>('');
+  
+  const [isTranslateDialogOpen, setIsTranslateDialogOpen] = useState(false);
+  const [contentToTranslate, setContentToTranslate] = useState<{ originalContent: string; contentType: string; version: ContentVersion } | null>(null);
+  const [targetLanguage, setTargetLanguage] = useState('');
+  const [toneDescription, setToneDescription] = useState('');
+  const [translatedContent, setTranslatedContent] = useState<string | null>(null);
+
+  const [isOptimizeDialogOpen, setIsOptimizeDialogOpen] = useState(false);
+  const [contentToOptimize, setContentToOptimize] = useState<{ originalContent: string; contentType: string; version: ContentVersion } | null>(null);
+  const [optimizationGoal, setOptimizationGoal] = useState('Improve user engagement');
+  const [optimizationResult, setOptimizationResult] = useState<{ predictedPerformance: { score: number, justification: string }, optimizedContent: string, explanation: string } | null>(null);
+
 
   const fetchFeedbackHistory = useCallback(async () => {
     try {
@@ -105,30 +120,6 @@ export function CampaignDetailClient({ initialCampaign, onBack, onCampaignUpdate
     fetchFeedbackHistory();
   }, [fetchFeedbackHistory]);
 
-
-  // Revise Content State
-  const [isReviseDialogOpen, setIsReviseDialogOpen] = useState(false);
-  const [contentToRevise, setContentToRevise] = useState<{ originalContent: string; contentType: string; version: ContentVersion } | null>(null);
-  const [revisionInstructions, setRevisionInstructions] = useState('');
-  const [revisedContent, setRevisedContent] = useState<string | null>(null);
-
-  // Brand Audit State
-  const [isAuditDialogOpen, setIsAuditDialogOpen] = useState(false);
-  const [auditResult, setAuditResult] = useState<{ alignmentScore: number; justification: string; suggestions: string[] } | null>(null);
-  const [contentToAudit, setContentToAudit] = useState<string>('');
-  
-  // Translate Content State
-  const [isTranslateDialogOpen, setIsTranslateDialogOpen] = useState(false);
-  const [contentToTranslate, setContentToTranslate] = useState<{ originalContent: string; contentType: string; version: ContentVersion } | null>(null);
-  const [targetLanguage, setTargetLanguage] = useState('');
-  const [toneDescription, setToneDescription] = useState('');
-  const [translatedContent, setTranslatedContent] = useState<string | null>(null);
-
-  // Optimize Content State
-  const [isOptimizeDialogOpen, setIsOptimizeDialogOpen] = useState(false);
-  const [contentToOptimize, setContentToOptimize] = useState<{ originalContent: string; contentType: string; version: ContentVersion } | null>(null);
-  const [optimizationGoal, setOptimizationGoal] = useState('Improve user engagement');
-  const [optimizationResult, setOptimizationResult] = useState<{ predictedPerformance: { score: number, justification: string }, optimizedContent: string, explanation: string } | null>(null);
 
   const awardXP = async (xp: number, action: string) => {
     try {
@@ -335,13 +326,6 @@ export function CampaignDetailClient({ initialCampaign, onBack, onCampaignUpdate
     });
   };
 
-  const handleOpenReviseDialog = (originalContent: string, contentType: string, version: ContentVersion) => {
-    setContentToRevise({ originalContent, contentType, version });
-    setRevisionInstructions('');
-    setRevisedContent(null);
-    setIsReviseDialogOpen(true);
-  };
-  
   const handleReviseContent = async () => {
     if (!contentToRevise || !revisionInstructions.trim()) {
         toast({ title: "Input Required", description: "Please provide revision instructions.", variant: "destructive" });
@@ -370,13 +354,7 @@ export function CampaignDetailClient({ initialCampaign, onBack, onCampaignUpdate
         }
     });
   };
-
-  const handleOpenAuditDialog = (content: string) => {
-    setContentToAudit(content);
-    setAuditResult(null);
-    setIsAuditDialogOpen(true);
-  };
-
+  
   const handleRunAudit = async () => {
     if (!contentToAudit) return;
     startTransition(async () => {
@@ -396,14 +374,6 @@ export function CampaignDetailClient({ initialCampaign, onBack, onCampaignUpdate
         toast({ title: "Audit Failed", description: errorMessage, variant: "destructive" });
       }
     });
-  };
-  
-  const handleOpenTranslateDialog = (originalContent: string, contentType: string, version: ContentVersion) => {
-    setContentToTranslate({ originalContent, contentType, version });
-    setTargetLanguage('');
-    setToneDescription('');
-    setTranslatedContent(null);
-    setIsTranslateDialogOpen(true);
   };
 
   const handleTranslateContent = async () => {
@@ -432,13 +402,6 @@ export function CampaignDetailClient({ initialCampaign, onBack, onCampaignUpdate
             toast({ title: "Translation Failed", description: errorMessage, variant: "destructive" });
         }
     });
-  };
-
-  const handleOpenOptimizeDialog = (originalContent: string, contentType: string, version: ContentVersion) => {
-    setContentToOptimize({ originalContent, contentType, version });
-    setOptimizationGoal('Improve user engagement');
-    setOptimizationResult(null);
-    setIsOptimizeDialogOpen(true);
   };
   
   const handleOptimizeContent = async () => {
@@ -470,222 +433,56 @@ export function CampaignDetailClient({ initialCampaign, onBack, onCampaignUpdate
     });
   };
 
-  const handleFeedbackSubmit = async (version: ContentVersion, format: string, rating: 1 | -1) => {
-    const feedbackKey = `${version.id}-${format}`;
-    setFeedbackLoading(feedbackKey);
-    try {
-        const response = await fetch('/api/feedback', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({
-                campaignId: campaign.id,
-                contentVersionId: version.id,
-                contentFormat: format,
-                rating: rating,
-            }),
-        });
-        const result = await response.json();
-        if (!response.ok) {
-            throw new Error(result.error || 'Failed to submit feedback.');
-        }
-
-        setSubmittedFeedback(prev => ({ ...prev, [feedbackKey]: rating === 1 ? 'up' : 'down' }));
-        toast({ title: "Feedback Submitted!", description: "Thank you for helping us improve." });
-        await awardXP(5, "providing feedback");
-
-    } catch (err) {
-        const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred.';
-        // If the error is a conflict (already submitted), just update the UI state silently
-        if (errorMessage.includes('already submitted')) {
-            setSubmittedFeedback(prev => ({...prev, [feedbackKey]: 'down' })); // Assume it exists
-        } else {
-            toast({ title: "Feedback Error", description: errorMessage, variant: "destructive" });
-        }
-    } finally {
-        setFeedbackLoading(null);
-    }
-  };
-
-
-  const formatTitle = (key: string) => {
-    return key.replace(/([A-Z])/g, ' $1').replace(/^./, (str) => str.toUpperCase());
-  };
-
   return (
     <div className="space-y-6">
       <Button onClick={onBack} variant="outline" size="sm">
         <ArrowLeft className="mr-2 h-4 w-4" /> Back to Campaign List
       </Button>
 
-      <Card>
-        <CardHeader>
-          <div className="flex justify-between items-start">
-            <div>
-              <CardTitle className="font-headline text-2xl">{campaign.title}</CardTitle>
-              <CardDescription>
-                Status: <Badge variant="secondary">{campaign.status}</Badge> | Last Updated: {format(new Date(campaign.updatedAt), "MMM d, yyyy, p")}
-              </CardDescription>
-            </div>
-            <Button variant="outline" size="sm" onClick={() => setIsEditDialogOpen(true)}>
-                <Pencil className="mr-2 h-4 w-4" /> Edit Campaign
-            </Button>
-          </div>
-        </CardHeader>
-        <CardContent>
-            <p><span className="font-semibold">Brief:</span> {campaign.brief}</p>
-        </CardContent>
-      </Card>
+      <CampaignHeader campaign={campaign} onEditClick={() => setIsEditDialogOpen(true)} />
       
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Left Column: Tools & Actions */}
-        <div className="lg:col-span-1 space-y-6">
-           <Card>
-            <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-lg"><FlaskConical className="h-5 w-5 text-primary"/> Brand Profile</CardTitle>
-                <CardDescription>The analyzed brand identity for this campaign.</CardDescription>
-            </CardHeader>
-            <CardContent>
-                 {!campaign.brandProfile ? (
-                    <div className="text-center py-4">
-                        <p className="text-muted-foreground mb-4 text-sm">No brand profile generated yet.</p>
-                        <Button onClick={() => setIsAnalyzeDialogOpen(true)} size="sm">
-                            <Beaker className="mr-2 h-4 w-4" /> Analyze Brand Profile
-                        </Button>
-                    </div>
-                 ) : (
-                    <div className="text-sm space-y-2">
-                        <p><strong>Tone:</strong> <Badge variant="outline">{campaign.brandProfile.voiceProfile.tone}</Badge></p>
-                        <p><strong>Values:</strong> {campaign.brandProfile.voiceProfile.values.join(', ')}</p>
-                    </div>
-                 )}
-            </CardContent>
-           </Card>
-
-           <Card>
-            <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-lg"><Bot className="h-5 w-5 text-primary"/> Creative War Room</CardTitle>
-                <CardDescription>AI agents collaborate on the strategy.</CardDescription>
-            </CardHeader>
-            <CardContent>
-                {campaign.agentDebates.length === 0 ? (
-                    <div className="text-center py-4">
-                         <p className="text-muted-foreground mb-4 text-sm">The debate has not started.</p>
-                         <Button onClick={handleRunWarRoom} disabled={isDebating} size="sm">
-                             {isDebating ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <MessageSquare className="mr-2 h-4 w-4" />}
-                             {isDebating ? 'Debating...' : 'Start Strategy Session'}
-                         </Button>
-                    </div>
-                ) : (
-                    <AgentDebateDisplay debates={campaign.agentDebates} />
-                )}
-            </CardContent>
-           </Card>
-
-           <Card>
-             <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-lg"><CalendarDays className="h-5 w-5 text-primary"/> Content Calendar</CardTitle>
-                <CardDescription>Generate a strategic content schedule.</CardDescription>
-              </CardHeader>
-              <CardContent>
-                {(!campaign.scheduledPosts || campaign.scheduledPosts.length === 0) ? (
-                  <div className="text-center py-4">
-                    <p className="text-muted-foreground mb-4 text-sm">No content schedule has been generated yet.</p>
-                    <Button onClick={handleGenerateSchedule} disabled={isGeneratingSchedule} size="sm">
-                      {isGeneratingSchedule ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Sparkles className="mr-2 h-4 w-4" />}
-                      {isGeneratingSchedule ? 'Generating...' : 'Generate Schedule'}
-                    </Button>
-                  </div>
-                ) : (
-                  <ContentCalendarDisplay schedule={campaign.scheduledPosts} />
-                )}
-              </CardContent>
-           </Card>
-        </div>
-
-        {/* Right Column: Content Versions */}
+        <CampaignTools
+            campaign={campaign}
+            isDebating={isDebating}
+            isGeneratingSchedule={isGeneratingSchedule}
+            onRunWarRoom={handleRunWarRoom}
+            onGenerateSchedule={handleGenerateSchedule}
+            onAnalyzeBrandClick={() => setIsAnalyzeDialogOpen(true)}
+        />
         <div className="lg:col-span-2">
-            <Card>
-                <CardHeader>
-                    <CardTitle className="flex items-center gap-2 text-lg"><PencilRuler className="h-5 w-5 text-primary"/> Content Versions</CardTitle>
-                    <CardDescription>Generated content based on the campaign brief and strategy debate. Use the tools to refine it.</CardDescription>
-                </CardHeader>
-                <CardContent>
-                    {campaign.contentVersions.length === 0 ? (
-                        <div className="text-center py-8">
-                            <p className="text-muted-foreground mb-4">No content has been generated yet.</p>
-                            <Button onClick={handleGenerateInitialContent} disabled={isGeneratingContent}>
-                                {isGeneratingContent ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Sparkles className="mr-2 h-4 w-4" />}
-                                {isGeneratingContent ? "Generating..." : "Generate Initial Content"}
-                            </Button>
-                        </div>
-                    ) : (
-                        <Accordion type="single" collapsible className="w-full" defaultValue={`v-${campaign.contentVersions[campaign.contentVersions.length - 1].versionNumber}`}>
-                            {campaign.contentVersions.map((version) => (
-                                <AccordionItem value={`v-${version.versionNumber}`} key={version.id}>
-                                    <AccordionTrigger>Version {version.versionNumber} by {version.actorName}</AccordionTrigger>
-                                    <AccordionContent className="space-y-4">
-                                        <p className="text-sm text-muted-foreground">{version.changeSummary}</p>
-                                        <Separator/>
-                                        <div className="space-y-3">
-                                            {Object.entries(version.multiFormatContentSnapshot).map(([format, text]) => 
-                                                text ? (
-                                                    <div key={format} className="p-3 border rounded-md bg-muted/50">
-                                                        <div className="flex justify-between items-center mb-2">
-                                                            <h4 className="font-semibold text-sm capitalize">{formatTitle(format)}</h4>
-                                                            <div className="flex items-center gap-1">
-                                                                <Button
-                                                                    size="icon"
-                                                                    variant="ghost"
-                                                                    className="h-7 w-7"
-                                                                    onClick={() => handleFeedbackSubmit(version, format, 1)}
-                                                                    disabled={feedbackLoading === `${version.id}-${format}` || !!submittedFeedback[`${version.id}-${format}`]}
-                                                                    title="Good content"
-                                                                >
-                                                                    <ThumbsUp className={`h-4 w-4 ${submittedFeedback[`${version.id}-${format}`] === 'up' ? 'text-primary fill-primary' : ''}`} />
-                                                                </Button>
-                                                                <Button
-                                                                    size="icon"
-                                                                    variant="ghost"
-                                                                    className="h-7 w-7"
-                                                                    onClick={() => handleFeedbackSubmit(version, format, -1)}
-                                                                    disabled={feedbackLoading === `${version.id}-${format}` || !!submittedFeedback[`${version.id}-${format}`]}
-                                                                    title="Needs improvement"
-                                                                >
-                                                                    <ThumbsDown className={`h-4 w-4 ${submittedFeedback[`${version.id}-${format}`] === 'down' ? 'text-destructive fill-destructive' : ''}`} />
-                                                                </Button>
-                                                            </div>
-                                                        </div>
-                                                        <pre className="whitespace-pre-wrap text-xs p-2 border rounded bg-background max-h-40 overflow-y-auto">{text}</pre>
-                                                        <div className="flex flex-wrap gap-2 mt-3">
-                                                            <Button size="sm" variant="outline" onClick={() => handleOpenReviseDialog(text, format, version)}>
-                                                                <Sparkles className="mr-1 h-3 w-3"/> Revise
-                                                            </Button>
-                                                            <Button size="sm" variant="outline" onClick={() => handleOpenAuditDialog(text)} disabled={!campaign.brandProfile}>
-                                                                <SearchCheck className="mr-1 h-3 w-3"/> Audit
-                                                            </Button>
-                                                            <Button size="sm" variant="outline" onClick={() => handleOpenTranslateDialog(text, format, version)}>
-                                                                <Languages className="mr-1 h-3 w-3"/> Translate
-                                                            </Button>
-                                                            <Button size="sm" variant="outline" onClick={() => handleOpenOptimizeDialog(text, format, version)}>
-                                                                <Zap className="mr-1 h-3 w-3"/> Optimize
-                                                            </Button>
-                                                        </div>
-                                                    </div>
-                                                ) : null
-                                            )}
-                                        </div>
-                                    </AccordionContent>
-                                </AccordionItem>
-                            ))}
-                        </Accordion>
-                    )}
-                </CardContent>
-            </Card>
+            <ContentVersionsDisplay
+                campaign={campaign}
+                isGeneratingContent={isGeneratingContent}
+                submittedFeedback={submittedFeedback}
+                onGenerateInitialContent={handleGenerateInitialContent}
+                onOpenReviseDialog={(original, type, version) => { setContentToRevise({ originalContent: original, contentType: type, version }); setIsReviseDialogOpen(true); setRevisedContent(null); }}
+                onOpenAuditDialog={(content) => { setContentToAudit(content); setIsAuditDialogOpen(true); setAuditResult(null); }}
+                onOpenTranslateDialog={(original, type, version) => { setContentToTranslate({ originalContent: original, contentType: type, version }); setIsTranslateDialogOpen(true); setTranslatedContent(null); }}
+                onOpenOptimizeDialog={(original, type, version) => { setContentToOptimize({ originalContent: original, contentType: type, version }); setIsOptimizeDialogOpen(true); setOptimizationResult(null); }}
+                onFeedbackSubmit={async (version, format, rating) => {
+                    try {
+                        const response = await fetch('/api/feedback', {
+                            method: 'POST',
+                            headers: {'Content-Type': 'application/json'},
+                            body: JSON.stringify({ campaignId: campaign.id, contentVersionId: version.id, contentFormat: format, rating }),
+                        });
+                        const result = await response.json();
+                        if (!response.ok) throw new Error(result.error || 'Failed to submit feedback.');
+                        
+                        setSubmittedFeedback(prev => ({ ...prev, [`${version.id}-${format}`]: rating === 1 ? 'up' : 'down' }));
+                        toast({ title: "Feedback Submitted!", description: "Thank you for helping us improve." });
+                        await awardXP(5, "providing feedback");
+                    } catch (err) {
+                        const msg = err instanceof Error ? err.message : 'An unknown error occurred.';
+                        toast({ title: "Feedback Error", description: msg, variant: "destructive" });
+                    }
+                }}
+            />
         </div>
       </div>
       
-
-      {/* Dialogs */}
+      {/* DIALOGS */}
        <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
         <DialogContent>
           <DialogHeader>
@@ -808,171 +605,6 @@ export function CampaignDetailClient({ initialCampaign, onBack, onCampaignUpdate
                 <Button onClick={handleReviseContent} disabled={isPending}>
                     {isPending && !revisedContent ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Sparkles className="mr-2 h-4 w-4"/>}
                     {isPending && !revisedContent ? 'Revising...' : 'Run Revision'}
-                </Button>
-                <DialogClose asChild><Button variant="outline">Close</Button></DialogClose>
-            </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={isAuditDialogOpen} onOpenChange={setIsAuditDialogOpen}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Brand Alignment Audit</DialogTitle>
-              <DialogDescription>
-                Checking how well this piece of content aligns with the campaign's Brand Profile.
-              </DialogDescription>
-            </DialogHeader>
-             <div className="space-y-2 py-4">
-                <Label>Content to Audit</Label>
-                <Textarea readOnly value={contentToAudit} rows={6} className="text-xs"/>
-            </div>
-            {auditResult && (
-                <div className="space-y-4">
-                    <Separator/>
-                    <div className="text-center">
-                        <p className="text-sm text-muted-foreground">Alignment Score</p>
-                        <p className="text-4xl font-bold text-primary">{auditResult.alignmentScore}<span className="text-2xl text-muted-foreground">/100</span></p>
-                    </div>
-                    <div>
-                        <h4 className="font-semibold mb-1">Justification</h4>
-                        <p className="text-sm text-muted-foreground p-2 border rounded-md bg-muted/50">{auditResult.justification}</p>
-                    </div>
-                    <div>
-                        <h4 className="font-semibold mb-1">Suggestions for Improvement</h4>
-                        <ul className="list-disc list-inside text-sm text-muted-foreground space-y-1 p-2 border rounded-md bg-muted/50">
-                            {auditResult.suggestions.map((s, i) => <li key={i}>{s}</li>)}
-                        </ul>
-                    </div>
-                </div>
-            )}
-            <DialogFooter>
-              <DialogClose asChild><Button variant="outline">Close</Button></DialogClose>
-              <Button onClick={handleRunAudit} disabled={isPending}>
-                {isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <SearchCheck className="mr-2 h-4 w-4" />}
-                {auditResult ? 'Re-run Audit' : 'Run Audit'}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-      </Dialog>
-      
-      <Dialog open={isTranslateDialogOpen} onOpenChange={setIsTranslateDialogOpen}>
-        <DialogContent className="sm:max-w-2xl">
-            <DialogHeader>
-                <DialogTitle>Translate Content</DialogTitle>
-                <DialogDescription>Translate content to a different language. The original is on the left, the translation will appear on the right.</DialogDescription>
-            </DialogHeader>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 py-4">
-                <div className="space-y-2">
-                    <Label>Original Content ({contentToTranslate?.contentType})</Label>
-                    <Textarea readOnly value={contentToTranslate?.originalContent} rows={8} className="text-xs"/>
-                </div>
-                 <div className="space-y-2">
-                    <Label>Translated Content</Label>
-                    <Textarea readOnly value={translatedContent ?? "AI translation will appear here..."} rows={8} className="text-xs"/>
-                </div>
-            </div>
-             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                    <Label htmlFor="target-language">Target Language</Label>
-                    <Input id="target-language" value={targetLanguage} onChange={(e) => setTargetLanguage(e.target.value)} placeholder="e.g., Spanish, Japanese, Bengali"/>
-                </div>
-                <div className="space-y-2">
-                    <Label htmlFor="tone-description">Tone Description (Optional)</Label>
-                    <Input id="tone-description" value={toneDescription} onChange={(e) => setToneDescription(e.target.value)} placeholder="e.g., Formal and respectful"/>
-                </div>
-            </div>
-            <DialogFooter>
-                {translatedContent && contentToTranslate && (
-                    <Button onClick={() => handleSaveAsNewVersion(translatedContent, contentToTranslate.contentType, contentToTranslate.version, `Translated "${contentToTranslate.contentType}" to ${targetLanguage}.`, "Localization AI")} disabled={isPending} variant="secondary">
-                        <Save className="mr-2 h-4 w-4" /> Save as New Version
-                    </Button>
-                )}
-                <Button onClick={handleTranslateContent} disabled={isPending}>
-                    {isPending && !translatedContent ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Languages className="mr-2 h-4 w-4"/>}
-                    {isPending && !translatedContent ? 'Translating...' : 'Run Translation'}
-                </Button>
-                <DialogClose asChild><Button variant="outline">Close</Button></DialogClose>
-            </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={isOptimizeDialogOpen} onOpenChange={setIsOptimizeDialogOpen}>
-        <DialogContent className="sm:max-w-3xl">
-            <DialogHeader>
-                <DialogTitle>Optimize Content Performance</DialogTitle>
-                <DialogDescription>
-                    Select a goal and the AI will analyze and rewrite the content to improve its performance.
-                </DialogDescription>
-            </DialogHeader>
-            <div className="py-4 space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                        <Label>Original Content ({contentToOptimize?.contentType})</Label>
-                        <Textarea readOnly value={contentToOptimize?.originalContent} rows={8} className="text-xs mt-1"/>
-                    </div>
-                    <div>
-                        <Label>Optimized Content</Label>
-                        <Textarea readOnly value={optimizationResult?.optimizedContent ?? "AI optimization will appear here..."} rows={8} className="text-xs mt-1"/>
-                    </div>
-                </div>
-
-                <div className="space-y-2">
-                    <Label htmlFor="optimization-goal">Optimization Goal</Label>
-                     <Select value={optimizationGoal} onValueChange={setOptimizationGoal}>
-                        <SelectTrigger id="optimization-goal">
-                            <SelectValue placeholder="Select a goal..." />
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectItem value="Improve user engagement">Improve User Engagement</SelectItem>
-                            <SelectItem value="Increase click-through rate">Increase Click-Through Rate (CTR)</SelectItem>
-                            <SelectItem value="Boost conversion rate">Boost Conversion Rate</SelectItem>
-                            <SelectItem value="Enhance readability">Enhance Readability</SelectItem>
-                            <SelectItem value="Strengthen call-to-action">Strengthen Call-to-Action (CTA)</SelectItem>
-                        </SelectContent>
-                    </Select>
-                </div>
-                
-                {isPending && !optimizationResult && (
-                  <div className="flex justify-center items-center p-4">
-                    <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-                    <span>Optimizing...</span>
-                  </div>
-                )}
-
-                {optimizationResult && !isPending && (
-                    <div className="space-y-4 pt-4 border-t">
-                       <h4 className="font-semibold text-md">Optimization Analysis</h4>
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-center">
-                             <Card>
-                                <CardHeader className="pb-2">
-                                    <CardDescription>Original Score</CardDescription>
-                                    <CardTitle className="text-4xl text-primary">{optimizationResult.predictedPerformance.score}</CardTitle>
-                                </CardHeader>
-                                <CardContent>
-                                    <p className="text-xs text-muted-foreground">{optimizationResult.predictedPerformance.justification}</p>
-                                </CardContent>
-                            </Card>
-                            <Card className="md:col-span-2">
-                                <CardHeader className="pb-2">
-                                    <CardDescription>What Changed & Why</CardDescription>
-                                </CardHeader>
-                                 <CardContent>
-                                    <p className="text-sm text-muted-foreground text-left">{optimizationResult.explanation}</p>
-                                </CardContent>
-                            </Card>
-                        </div>
-                    </div>
-                )}
-            </div>
-            <DialogFooter>
-                 {optimizationResult && contentToOptimize && (
-                    <Button onClick={() => handleSaveAsNewVersion(optimizationResult.optimizedContent, contentToOptimize.contentType, contentToOptimize.version, `Optimized "${contentToOptimize.contentType}" for ${optimizationGoal}.`, "Performance AI")} disabled={isPending} variant="secondary">
-                        <Save className="mr-2 h-4 w-4" /> Save as New Version
-                    </Button>
-                )}
-                <Button onClick={handleOptimizeContent} disabled={isPending}>
-                    {isPending && !optimizationResult ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Zap className="mr-2 h-4 w-4"/>}
-                    {optimizationResult ? 'Re-run Optimization' : 'Run Optimization'}
                 </Button>
                 <DialogClose asChild><Button variant="outline">Close</Button></DialogClose>
             </DialogFooter>

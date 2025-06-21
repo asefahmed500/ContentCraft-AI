@@ -21,7 +21,9 @@ export function AdminCampaignCard({ campaign, onView, onFlag, onDelete }: AdminC
       <CardHeader>
         <CardTitle className="font-headline text-lg line-clamp-2">{campaign.title}</CardTitle>
         <CardDescription className="flex flex-wrap gap-2 items-center text-xs">
-            <span>By User ID: {campaign.userId}</span>
+           <span>By User ID: {campaign.userId}</span>
+           <span>|</span>
+           <span>Updated {formatDistanceToNow(new Date(campaign.updatedAt), { addSuffix: true })}</span>
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-2">
@@ -34,21 +36,16 @@ export function AdminCampaignCard({ campaign, onView, onFlag, onDelete }: AdminC
             {campaign.isPrivate && <Badge variant="outline">Private</Badge>}
         </div>
       </CardContent>
-      <CardFooter className="flex justify-between items-center bg-muted/50 p-3 mt-auto">
-        <p className="text-xs text-muted-foreground">
-          Updated {formatDistanceToNow(new Date(campaign.updatedAt), { addSuffix: true })}
-        </p>
-        <div className="flex gap-2">
-          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={onView} title="View Details">
-            <Eye className="h-4 w-4" />
-          </Button>
-          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={onFlag} title="Flag/Unflag Campaign">
-            <Flag className="h-4 w-4" />
-          </Button>
-          <Button variant="destructive" size="icon" className="h-8 w-8" onClick={onDelete} title="Delete Campaign">
-            <Trash2 className="h-4 w-4" />
-          </Button>
-        </div>
+      <CardFooter className="flex justify-end items-center gap-2 bg-muted/50 p-3 mt-auto">
+        <Button variant="outline" size="sm" onClick={onView} title="View Details">
+            <Eye className="h-4 w-4 mr-2" /> View
+        </Button>
+         <Button variant="outline" size="sm" onClick={onFlag} title="Flag/Unflag Campaign">
+            <Flag className="h-4 w-4 mr-2" /> Flag
+        </Button>
+        <Button variant="destructive" size="sm" onClick={onDelete} title="Delete Campaign">
+            <Trash2 className="h-4 w-4 mr-2" /> Delete
+        </Button>
       </CardFooter>
     </Card>
   );

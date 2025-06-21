@@ -5,12 +5,10 @@ import type { Campaign } from '@/types/content';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Eye, Trash2, Edit } from 'lucide-react';
+import { Eye, Trash2 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import {
   AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
   AlertDialogContent,
   AlertDialogDescription,
   AlertDialogFooter,
@@ -33,7 +31,8 @@ export function CampaignCard({ campaign, onView, onDelete }: CampaignCardProps) 
   const [isDeleting, setIsDeleting] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   
-  const handleDeletePrompt = () => {
+  const handleDeletePrompt = (e: React.MouseEvent) => {
+    e.stopPropagation(); // Prevent card's onClick from firing
     setIsDeleteDialogOpen(true);
   };
 
@@ -60,7 +59,10 @@ export function CampaignCard({ campaign, onView, onDelete }: CampaignCardProps) 
 
   return (
     <>
-      <Card className="flex flex-col justify-between hover:shadow-lg transition-shadow duration-200">
+      <Card 
+        className="flex flex-col justify-between hover:shadow-lg transition-shadow duration-200 cursor-pointer"
+        onClick={onView}
+      >
         <CardHeader>
           <CardTitle className="font-headline text-lg line-clamp-2">{campaign.title}</CardTitle>
           <CardDescription className="text-xs">
@@ -97,7 +99,7 @@ export function CampaignCard({ campaign, onView, onDelete }: CampaignCardProps) 
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogCancel onClick={() => setIsDeleteDialogOpen(false)}>Cancel</AlertDialogCancel>
             <Button onClick={handleDeleteCampaign} variant="destructive" disabled={isDeleting}>
               {isDeleting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Delete Campaign
