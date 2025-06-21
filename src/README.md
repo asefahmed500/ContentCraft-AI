@@ -20,7 +20,7 @@ ContentCraft AI is a revolutionary multi-agent content creation system designed 
     *   **Translate**: Localize the content into different languages.
     *   **Optimize**: Improve the content for a specific goal like engagement or click-through-rate.
 *   **Gamification System**: Earn Creative XP for actions like generating content, using AI tools, or providing feedback. Level up and track your progress in the site header.
-*   **Feedback Loop**: Provide direct feedback (👍/👎) on generated content to guide future AI improvements and earn XP.
+*   **Persistent Feedback Loop**: Provide direct feedback (👍/👎) on generated content to guide future AI improvements and earn XP. The system prevents duplicate feedback submissions.
 
 ### Admin Features
 *   **Comprehensive Admin Dashboard**: Centralized control panel at `/admin/dashboard` for platform oversight, including usage statistics and analytics charts.

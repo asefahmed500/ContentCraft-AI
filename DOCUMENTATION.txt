@@ -88,7 +88,10 @@ ContentCraft AI is a Next.js web application designed as a multi-agent AI conten
 
     *   **Gamification / Creative XP System**:
         *   XP and Level are displayed in the site header for logged-in users.
-        *   Users earn XP for completing key actions like generating a brand profile, running a debate, creating a schedule, or saving a new content version.
+        *   Users earn XP for completing key actions like generating a brand profile, running a debate, creating a schedule, providing feedback, or saving a new content version.
+
+    *   **Feedback Loop**:
+        *   Users can provide "thumbs up" or "thumbs down" feedback on individual pieces of generated content, earning XP and helping to refine the AI models over time. The system prevents duplicate feedback submissions.
 
     *   **API-Based Settings**:
         *   User profile (name) and password changes are supported via API endpoints (`/api/user/*`). A dedicated settings UI is not present but can be added.
@@ -145,6 +148,9 @@ ContentCraft AI is a Next.js web application designed as a multi-agent AI conten
         *   `isFlagged`: Boolean (default false, for admin moderation of a specific version)
         *   `adminModerationNotes`: String (admin notes for this version)
         *   ...and other fields like `versionNumber`, `changeSummary`, `multiFormatContentSnapshot`.
+
+    *   **FeedbackLog** (`feedback_logs` collection):
+        *   Stores user feedback (rating, comment) on specific content versions.
 
 -----------------
 5. AI Integration (Genkit)
