@@ -12,7 +12,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { LogOut, Settings, UserCircle, LayoutDashboard } from 'lucide-react';
+import { LogOut, UserCircle, LayoutDashboard } from 'lucide-react';
 import { Logo } from '@/components/Logo';
 import { useSession, signOut } from 'next-auth/react'; 
 import UserXPDisplay from '@/components/UserXPDisplay';
@@ -98,5 +98,3 @@ export function SiteHeader() {
     </header>
   );
 }
-
-    

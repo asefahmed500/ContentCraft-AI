@@ -38,7 +38,7 @@ function SignUpPageContent() {
   useEffect(() => {
     if (!authLoading && isAuthenticated) {
       // Middleware will handle redirection based on role
-      // router.replace(session?.user?.role === 'admin' ? '/admin/dashboard' : '/');
+      router.replace(session?.user?.role === 'admin' ? '/admin/dashboard' : '/');
     }
   }, [authLoading, isAuthenticated, router, session]);
 
@@ -214,5 +214,3 @@ export default function SignUpPage() {
       <SignUpPageContent />
   );
 }
-
-    
