@@ -2,22 +2,27 @@
 "use client";
 
 import { useState, useEffect, useCallback } from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Separator } from '@/components/ui/separator';
 import { Button } from '@/components/ui/button';
 import { UserTable } from './components/UserTable';
 import { AdminCampaignList } from './components/AdminCampaignList';
 import { FlaggedContentTable } from './components/FlaggedContentTable'; 
-import { AgentDebateDisplay } from './components/AgentDebateDisplay'; // New Import
+import { AgentDebateDisplay } from './components/AgentDebateDisplay';
 import type { Campaign, ContentVersion, AgentInteraction, MultiFormatContent } from '@/types/content';
 import type { User as NextAuthUser } from 'next-auth';
-import { BarChart, BrainCircuit, LineChart as LucideLineChart, Users, FileText, Activity, Zap, Brain, Download, Info, PieChart, ListTree, XCircle, MessageSquare, Trophy, ShieldAlert as ShieldAlertIcon } from 'lucide-react';
+import { BarChart, BrainCircuit, LineChart as LucideLineChart, Users, FileText, Activity, Zap, Brain, Download, Info, PieChart, ListTree, XCircle, MessageSquare, Trophy, ShieldAlert as ShieldAlertIcon, BotMessageSquare, Edit } from 'lucide-react';
 import { ResponsiveContainer, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, BarChart as RechartsBarChart, Line, LineChart as RechartsLineChart, Pie, Cell, PieChart as RechartsPieChart } from 'recharts';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2 } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
+import { Label } from '@/components/ui/label';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { format, formatDistanceToNow } from 'date-fns';
 
 interface PlatformStats {
   totalUsers: number;
@@ -37,7 +42,6 @@ interface AdminUser extends NextAuthUser {
   createdAt?: Date | string;
   updatedAt?: Date | string;
 }
-
 
 const mockWeeklyActivityData = [
   { date: 'Mon', users: Math.floor(Math.random() * 20) + 5, campaigns: Math.floor(Math.random() * 10) + 2, flows: Math.floor(Math.random() * 50) + 20 },
@@ -77,6 +81,16 @@ export default function AdminDashboardPage() {
   const [flaggedContentRefreshTrigger, setFlaggedContentRefreshTrigger] = useState(0);
 
   const [isDebating, setIsDebating] = useState(false);
+
+  // State for Revise Content Dialog
+  const [isReviseDialogOpen, setIsReviseDialogOpen] = useState(false);
+  const [contentToRevise, setContentToRevise] = useState<{originalContent: string; versionInfo: string} | null>(null);
+  const [revisionInstructions, setRevisionInstructions] = useState('');
+  const [revisionAudience, setRevisionAudience] = useState('');
+  const [revisionTone, setRevisionTone] = useState('');
+  const [revisionResult, setRevisionResult] = useState<string | null>(null);
+  const [isRevising, setIsRevising] = useState(false);
+
 
   const fetchAllCampaigns = useCallback(async (showToast = false) => {
     setIsLoadingCampaigns(true);
@@ -224,11 +238,9 @@ export default function AdminDashboardPage() {
       }
 
       toast({ title: "Strategy Session Complete!", description: "Debate log has been saved to the campaign." });
-      // Refresh campaign data to show the new debate
       const updatedCampaign = await fetchSingleCampaign(campaign.id);
       if (updatedCampaign) {
           setSelectedCampaignForAdminView(updatedCampaign);
-          // Also update the main list
           setAllCampaigns(prev => prev.map(c => c.id === updatedCampaign.id ? updatedCampaign : c));
       }
 
@@ -240,6 +252,49 @@ export default function AdminDashboardPage() {
     }
   };
 
+  const handleOpenReviseDialog = (version: ContentVersion) => {
+    const originalContent = version.multiFormatContentSnapshot.blogPost || 
+                            Object.values(version.multiFormatContentSnapshot).find(c => !!c) || 
+                            '';
+    setContentToRevise({
+      originalContent,
+      versionInfo: `Version ${version.versionNumber} by ${version.actorName}`
+    });
+    setRevisionInstructions('');
+    setRevisionAudience('');
+    setRevisionTone('');
+    setRevisionResult(null);
+    setIsReviseDialogOpen(true);
+  };
+
+  const handleReviseContent = async () => {
+    if (!contentToRevise) return;
+    setIsRevising(true);
+    setRevisionResult(null);
+    try {
+      const response = await fetch('/api/content/revise', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+          originalContent: contentToRevise.originalContent,
+          revisionInstructions,
+          targetAudience: revisionAudience,
+          desiredTone: revisionTone,
+        })
+      });
+      const result = await response.json();
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to revise content.');
+      }
+      setRevisionResult(result.revisedContent);
+      toast({title: "Content Revised", description: "The AI has generated a revised version of your content."});
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : "An unknown error occurred.";
+      toast({title: "Revision Error", description: errorMessage, variant: "destructive"});
+    } finally {
+      setIsRevising(false);
+    }
+  };
 
   const handleAdminCampaignAction = useCallback(async (campaignId: string, action: 'view' | 'edit' | 'delete' | 'flag') => {
     if (action === 'view') {
@@ -279,6 +334,7 @@ export default function AdminDashboardPage() {
   };
   
   return (
+    <>
     <div className="space-y-8">
       <div>
         <h1 className="font-headline text-3xl md:text-4xl font-bold tracking-tight">Admin Dashboard</h1>
@@ -564,14 +620,41 @@ export default function AdminDashboardPage() {
 
                     <Card>
                          <CardHeader>
-                            <CardTitle>Content Versions (Raw Data)</CardTitle>
+                            <CardTitle>Content Versions</CardTitle>
+                            <CardDescription>View generated content versions and use tools to revise them.</CardDescription>
                         </CardHeader>
-                        <CardContent>
+                        <CardContent className="space-y-4">
                              {selectedCampaignForAdminView.contentVersions && selectedCampaignForAdminView.contentVersions.length > 0 ? (
-                                <pre className="whitespace-pre-wrap text-xs p-2 border rounded bg-muted/50 max-h-96 overflow-y-auto">
-                                    {JSON.stringify(selectedCampaignForAdminView.contentVersions, null, 2)}
-                                </pre>
-                            ): <p className="text-sm text-muted-foreground">No content versions recorded for this campaign.</p>}
+                                selectedCampaignForAdminView.contentVersions.map((version) => (
+                                  <Card key={version.id} className="bg-muted/30">
+                                    <CardHeader>
+                                      <CardTitle className="text-base flex justify-between items-center">
+                                        <span>Version {version.versionNumber}</span>
+                                        <Button size="sm" variant="outline" onClick={() => handleOpenReviseDialog(version)}>
+                                            <Edit className="mr-2 h-4 w-4" />
+                                            Revise Content
+                                        </Button>
+                                      </CardTitle>
+                                      <CardDescription>
+                                        By: {version.actorName} on {format(new Date(version.timestamp), "MMM d, yyyy 'at' p")}
+                                      </CardDescription>
+                                    </CardHeader>
+                                    <CardContent>
+                                        <p className="font-medium text-sm mb-2">Change Summary: <span className="font-normal">{version.changeSummary}</span></p>
+                                        <div className="space-y-2">
+                                            {Object.entries(version.multiFormatContentSnapshot).map(([format, text]) =>
+                                                text ? (
+                                                    <details key={format}>
+                                                        <summary className="text-sm font-semibold cursor-pointer">{format.replace(/([A-Z])/g, ' $1').trim()}</summary>
+                                                        <pre className="mt-1 whitespace-pre-wrap text-xs p-2 border rounded bg-background max-h-48 overflow-y-auto">{text}</pre>
+                                                    </details>
+                                                ) : null
+                                            )}
+                                        </div>
+                                    </CardContent>
+                                  </Card>
+                                ))
+                            ): <p className="text-sm text-muted-foreground text-center py-4">No content versions recorded for this campaign.</p>}
                         </CardContent>
                     </Card>
                 </>
@@ -608,5 +691,70 @@ export default function AdminDashboardPage() {
         </TabsContent>
       </Tabs>
     </div>
+
+    {/* Revise Content Dialog */}
+    <Dialog open={isReviseDialogOpen} onOpenChange={setIsReviseDialogOpen}>
+      <DialogContent className="max-w-3xl">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2"><BotMessageSquare /> AI Content Revision</DialogTitle>
+          <DialogDescription>
+            Fine-tune content for a specific tone or audience. Original from: {contentToRevise?.versionInfo}
+          </DialogDescription>
+        </DialogHeader>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 py-4 max-h-[70vh] overflow-y-auto">
+            <div className="space-y-4">
+                <div className="space-y-2">
+                    <Label htmlFor="original-content">Original Content</Label>
+                    <Textarea id="original-content" value={contentToRevise?.originalContent || ''} readOnly rows={8} className="bg-muted/50" />
+                </div>
+                <div className="space-y-2">
+                    <Label htmlFor="revision-instructions">Revision Instructions</Label>
+                    <Textarea 
+                      id="revision-instructions"
+                      value={revisionInstructions}
+                      onChange={e => setRevisionInstructions(e.target.value)}
+                      placeholder="e.g., Make this more persuasive for Gen Z. Add more data points. Shorten the paragraphs."
+                      rows={4}
+                    />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                        <Label htmlFor="revision-audience">Target Audience (Optional)</Label>
+                        <Input id="revision-audience" value={revisionAudience} onChange={e => setRevisionAudience(e.target.value)} placeholder="e.g., Tech enthusiasts"/>
+                    </div>
+                    <div className="space-y-2">
+                        <Label htmlFor="revision-tone">Desired Tone (Optional)</Label>
+                        <Input id="revision-tone" value={revisionTone} onChange={e => setRevisionTone(e.target.value)} placeholder="e.g., Playful, formal" />
+                    </div>
+                </div>
+                 <Button onClick={handleReviseContent} disabled={isRevising || !revisionInstructions}>
+                    {isRevising && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                    Revise with AI
+                </Button>
+            </div>
+            <div className="space-y-2">
+                 <Label htmlFor="revision-result">Revised Content</Label>
+                 {isRevising ? (
+                    <div className="flex flex-col items-center justify-center h-full border rounded-md bg-muted/50 p-4">
+                        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                        <p className="mt-2 text-sm text-muted-foreground">AI is working its magic...</p>
+                    </div>
+                 ) : (
+                    <Textarea 
+                      id="revision-result" 
+                      value={revisionResult || 'AI revision will appear here...'} 
+                      readOnly 
+                      rows={15}
+                      className={revisionResult ? 'bg-green-50 dark:bg-green-900/20' : 'bg-muted/50'}
+                    />
+                 )}
+            </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => setIsReviseDialogOpen(false)}>Close</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+    </>
   );
 }

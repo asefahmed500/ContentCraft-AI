@@ -1,3 +1,4 @@
+
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { reviseContent, type ReviseContentInput } from '@/ai/flows/revise-content-flow';
@@ -16,7 +17,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Missing required fields: originalContent and revisionInstructions' }, { status: 400 });
     }
 
-    // Potentially, add campaignId to ReviseContentInput and check user ownership
+    // In a real-world scenario with user roles, you might want to check
+    // if token.role is 'editor' or 'admin' here.
     // For now, any authenticated user can use the flow.
 
     const result = await reviseContent(body);
