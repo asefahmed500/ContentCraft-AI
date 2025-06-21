@@ -4,14 +4,18 @@
 import type { Campaign, ContentVersion, AgentInteraction, MultiFormatContent, ScheduledPost } from '@/types/content';
 import type { BrandProfile } from '@/types/brand';
 import { useState, useTransition } from 'react';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { z } from 'zod';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose } from '@/components/ui/dialog';
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, Beaker, FileText, Sparkles, ArrowLeft, Bot, MessageSquare, Microscope, FlaskConical, PencilRuler, SearchCheck, CheckCircle2, CalendarDays, Languages, Zap } from 'lucide-react';
+import { Loader2, Beaker, FileText, Sparkles, ArrowLeft, Bot, MessageSquare, Microscope, FlaskConical, PencilRuler, SearchCheck, CheckCircle2, CalendarDays, Languages, Zap, Pencil, Save } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { analyzeBrandProfile } from '@/ai/flows/brand-learning';
 import { AgentDebateDisplay } from '@/components/AgentDebateDisplay';
@@ -21,12 +25,20 @@ import { Separator } from '@/components/ui/separator';
 import { ContentCalendarDisplay } from './ContentCalendarDisplay';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
-
 interface CampaignDetailClientProps {
   initialCampaign: Campaign;
   onBack: () => void;
   onCampaignUpdate: (updatedCampaign: Campaign) => void;
 }
+
+const campaignEditSchema = z.object({
+  title: z.string().min(5, 'Title must be at least 5 characters long.').max(100, 'Title is too long.'),
+  brief: z.string().min(10, 'Brief must be at least 10 characters long.').max(1000, 'Brief is too long.'),
+  targetAudience: z.string().max(200, 'Target audience description is too long.').optional(),
+  tone: z.string().max(100, 'Tone description is too long.').optional(),
+});
+type CampaignEditValues = z.infer<typeof campaignEditSchema>;
+
 
 // Helper to convert base64 to data URI
 const textToDataUri = (text: string) => {
@@ -39,19 +51,32 @@ export function CampaignDetailClient({ initialCampaign, onBack, onCampaignUpdate
   const [campaign, setCampaign] = useState<Campaign>(initialCampaign);
   const [isPending, startTransition] = useTransition();
 
-  // Brand Analysis State
+  // Dialog states
   const [isAnalyzeDialogOpen, setIsAnalyzeDialogOpen] = useState(false);
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  
+  // Loading states
+  const [isDebating, setIsDebating] = useState(false);
+  const [isGeneratingSchedule, setIsGeneratingSchedule] = useState(false);
+  const [isGeneratingContent, setIsGeneratingContent] = useState(false);
+
+  // Form for editing campaign
+  const form = useForm<CampaignEditValues>({
+    resolver: zodResolver(campaignEditSchema),
+    values: {
+      title: campaign.title,
+      brief: campaign.brief,
+      targetAudience: campaign.targetAudience,
+      tone: campaign.tone,
+    },
+  });
+
+  // Brand Analysis State
   const [referenceText, setReferenceText] = useState('');
 
-  // War Room State
-  const [isDebating, setIsDebating] = useState(false);
-
-  // Content Calendar State
-  const [isGeneratingSchedule, setIsGeneratingSchedule] = useState(false);
-  
   // Revise Content State
   const [isReviseDialogOpen, setIsReviseDialogOpen] = useState(false);
-  const [contentToRevise, setContentToRevise] = useState<{ originalContent: string; contentType: string } | null>(null);
+  const [contentToRevise, setContentToRevise] = useState<{ originalContent: string; contentType: string; version: ContentVersion } | null>(null);
   const [revisionInstructions, setRevisionInstructions] = useState('');
   const [revisedContent, setRevisedContent] = useState<string | null>(null);
 
@@ -62,14 +87,14 @@ export function CampaignDetailClient({ initialCampaign, onBack, onCampaignUpdate
   
   // Translate Content State
   const [isTranslateDialogOpen, setIsTranslateDialogOpen] = useState(false);
-  const [contentToTranslate, setContentToTranslate] = useState<{ originalContent: string; contentType: string } | null>(null);
+  const [contentToTranslate, setContentToTranslate] = useState<{ originalContent: string; contentType: string; version: ContentVersion } | null>(null);
   const [targetLanguage, setTargetLanguage] = useState('');
   const [toneDescription, setToneDescription] = useState('');
   const [translatedContent, setTranslatedContent] = useState<string | null>(null);
 
   // Optimize Content State
   const [isOptimizeDialogOpen, setIsOptimizeDialogOpen] = useState(false);
-  const [contentToOptimize, setContentToOptimize] = useState<{ originalContent: string; contentType: string } | null>(null);
+  const [contentToOptimize, setContentToOptimize] = useState<{ originalContent: string; contentType: string; version: ContentVersion } | null>(null);
   const [optimizationGoal, setOptimizationGoal] = useState('Improve user engagement');
   const [optimizationResult, setOptimizationResult] = useState<{ predictedPerformance: { score: number, justification: string }, optimizedContent: string, explanation: string } | null>(null);
 
@@ -96,6 +121,15 @@ export function CampaignDetailClient({ initialCampaign, onBack, onCampaignUpdate
     }
   };
 
+  const handleEditSubmit = async (data: CampaignEditValues) => {
+    startTransition(async () => {
+        const updatedCampaign = await handleUpdateCampaign(data);
+        if (updatedCampaign) {
+            toast({ title: "Campaign Updated", description: "Your campaign details have been saved." });
+            setIsEditDialogOpen(false);
+        }
+    });
+  };
 
   const handleAnalyzeBrand = async () => {
     if (!referenceText.trim()) {
@@ -111,6 +145,7 @@ export function CampaignDetailClient({ initialCampaign, onBack, onCampaignUpdate
 
         toast({ title: "Brand Profile Generated", description: "The brand profile has been analyzed and saved." });
         setIsAnalyzeDialogOpen(false);
+        setReferenceText('');
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred.';
         toast({ title: "Analysis Failed", description: errorMessage, variant: "destructive" });
@@ -131,7 +166,6 @@ export function CampaignDetailClient({ initialCampaign, onBack, onCampaignUpdate
             throw new Error(result.error || 'Failed to run the war room.');
         }
 
-        // The API now saves the debate log, so we just need to refresh the campaign data
         const updatedCampaign = await handleUpdateCampaign({}); // Send empty update to just refetch
         if (updatedCampaign) {
           toast({ title: "War Room Concluded!", description: "The strategy session is complete and has been saved." });
@@ -155,7 +189,6 @@ export function CampaignDetailClient({ initialCampaign, onBack, onCampaignUpdate
         throw new Error(result.error || 'Failed to generate content schedule.');
       }
 
-      // The API returns the full updated campaign, so we can just set it
       const newlyUpdatedCampaign = result as Campaign;
       setCampaign(newlyUpdatedCampaign);
       onCampaignUpdate(newlyUpdatedCampaign);
@@ -169,8 +202,61 @@ export function CampaignDetailClient({ initialCampaign, onBack, onCampaignUpdate
     }
   };
 
-  const handleOpenReviseDialog = (originalContent: string, contentType: string) => {
-    setContentToRevise({ originalContent, contentType });
+  const handleGenerateInitialContent = async () => {
+    setIsGeneratingContent(true);
+    try {
+        const response = await fetch('/api/content/generate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ campaignId: campaign.id }),
+        });
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error || "Failed to generate content.");
+
+        setCampaign(result as Campaign);
+        onCampaignUpdate(result as Campaign);
+        toast({ title: "Content Generated!", description: "Your first content version is ready for review." });
+    } catch (err) {
+        const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred.';
+        toast({ title: "Generation Failed", description: errorMessage, variant: "destructive" });
+    } finally {
+        setIsGeneratingContent(false);
+    }
+  };
+
+  const handleSaveAsNewVersion = async (
+    newContent: string,
+    format: string,
+    sourceVersion: ContentVersion,
+    changeSummary: string,
+    actorName: string
+  ) => {
+    startTransition(async () => {
+        const newSnapshot = { ...sourceVersion.multiFormatContentSnapshot, [format]: newContent };
+        
+        const newVersion: Omit<ContentVersion, 'id'> = {
+            versionNumber: (campaign.contentVersions.length) + 1,
+            timestamp: new Date(),
+            actorName,
+            changeSummary,
+            multiFormatContentSnapshot: newSnapshot,
+            isFlagged: false,
+        };
+
+        const updatedCampaign = await handleUpdateCampaign({ contentVersions: [...campaign.contentVersions, newVersion as ContentVersion] });
+
+        if (updatedCampaign) {
+            toast({ title: "New Version Saved!", description: `Version ${newVersion.versionNumber} has been added to the campaign.` });
+            // Close all dialogs
+            setIsReviseDialogOpen(false);
+            setIsTranslateDialogOpen(false);
+            setIsOptimizeDialogOpen(false);
+        }
+    });
+  };
+
+  const handleOpenReviseDialog = (originalContent: string, contentType: string, version: ContentVersion) => {
+    setContentToRevise({ originalContent, contentType, version });
     setRevisionInstructions('');
     setRevisedContent(null);
     setIsReviseDialogOpen(true);
@@ -187,7 +273,8 @@ export function CampaignDetailClient({ initialCampaign, onBack, onCampaignUpdate
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    ...contentToRevise,
+                    originalContent: contentToRevise.originalContent,
+                    contentType: contentToRevise.contentType,
                     revisionInstructions,
                     campaignId: campaign.id,
                 }),
@@ -229,8 +316,8 @@ export function CampaignDetailClient({ initialCampaign, onBack, onCampaignUpdate
     });
   };
   
-  const handleOpenTranslateDialog = (originalContent: string, contentType: string) => {
-    setContentToTranslate({ originalContent, contentType });
+  const handleOpenTranslateDialog = (originalContent: string, contentType: string, version: ContentVersion) => {
+    setContentToTranslate({ originalContent, contentType, version });
     setTargetLanguage('');
     setToneDescription('');
     setTranslatedContent(null);
@@ -264,8 +351,8 @@ export function CampaignDetailClient({ initialCampaign, onBack, onCampaignUpdate
     });
   };
 
-  const handleOpenOptimizeDialog = (originalContent: string, contentType: string) => {
-    setContentToOptimize({ originalContent, contentType });
+  const handleOpenOptimizeDialog = (originalContent: string, contentType: string, version: ContentVersion) => {
+    setContentToOptimize({ originalContent, contentType, version });
     setOptimizationGoal('Improve user engagement');
     setOptimizationResult(null);
     setIsOptimizeDialogOpen(true);
@@ -282,7 +369,8 @@ export function CampaignDetailClient({ initialCampaign, onBack, onCampaignUpdate
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    ...contentToOptimize,
+                    originalContent: contentToOptimize.originalContent,
+                    contentType: contentToOptimize.contentType,
                     optimizationGoal,
                     campaignId: campaign.id,
                 }),
@@ -310,10 +398,17 @@ export function CampaignDetailClient({ initialCampaign, onBack, onCampaignUpdate
 
       <Card>
         <CardHeader>
-          <CardTitle className="font-headline text-2xl">{campaign.title}</CardTitle>
-          <CardDescription>
-            Status: <Badge variant="secondary">{campaign.status}</Badge> | Last Updated: {format(new Date(campaign.updatedAt), "MMM d, yyyy, p")}
-          </CardDescription>
+          <div className="flex justify-between items-start">
+            <div>
+              <CardTitle className="font-headline text-2xl">{campaign.title}</CardTitle>
+              <CardDescription>
+                Status: <Badge variant="secondary">{campaign.status}</Badge> | Last Updated: {format(new Date(campaign.updatedAt), "MMM d, yyyy, p")}
+              </CardDescription>
+            </div>
+            <Button variant="outline" size="sm" onClick={() => setIsEditDialogOpen(true)}>
+                <Pencil className="mr-2 h-4 w-4" /> Edit Campaign
+            </Button>
+          </div>
         </CardHeader>
         <CardContent>
             <p><span className="font-semibold">Brief:</span> {campaign.brief}</p>
@@ -397,10 +492,13 @@ export function CampaignDetailClient({ initialCampaign, onBack, onCampaignUpdate
                     {campaign.contentVersions.length === 0 ? (
                         <div className="text-center py-8">
                             <p className="text-muted-foreground mb-4">No content has been generated yet.</p>
-                            <Button disabled>Generate Content (Coming Soon)</Button>
+                            <Button onClick={handleGenerateInitialContent} disabled={isGeneratingContent}>
+                                {isGeneratingContent ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Sparkles className="mr-2 h-4 w-4" />}
+                                {isGeneratingContent ? "Generating..." : "Generate Initial Content"}
+                            </Button>
                         </div>
                     ) : (
-                        <Accordion type="single" collapsible className="w-full">
+                        <Accordion type="single" collapsible className="w-full" defaultValue={`v-${campaign.contentVersions[campaign.contentVersions.length - 1].versionNumber}`}>
                             {campaign.contentVersions.map((version) => (
                                 <AccordionItem value={`v-${version.versionNumber}`} key={version.id}>
                                     <AccordionTrigger>Version {version.versionNumber} by {version.actorName}</AccordionTrigger>
@@ -414,16 +512,16 @@ export function CampaignDetailClient({ initialCampaign, onBack, onCampaignUpdate
                                                         <h4 className="font-semibold text-sm capitalize mb-2">{formatTitle(format)}</h4>
                                                         <pre className="whitespace-pre-wrap text-xs p-2 border rounded bg-background max-h-40 overflow-y-auto">{text}</pre>
                                                         <div className="flex flex-wrap gap-2 mt-3">
-                                                            <Button size="xs" variant="outline" onClick={() => handleOpenReviseDialog(text, format)}>
+                                                            <Button size="xs" variant="outline" onClick={() => handleOpenReviseDialog(text, format, version)}>
                                                                 <Sparkles className="mr-1 h-3 w-3"/> Revise
                                                             </Button>
                                                             <Button size="xs" variant="outline" onClick={() => handleOpenAuditDialog(text)} disabled={!campaign.brandProfile}>
                                                                 <SearchCheck className="mr-1 h-3 w-3"/> Audit
                                                             </Button>
-                                                            <Button size="xs" variant="outline" onClick={() => handleOpenTranslateDialog(text, format)}>
+                                                            <Button size="xs" variant="outline" onClick={() => handleOpenTranslateDialog(text, format, version)}>
                                                                 <Languages className="mr-1 h-3 w-3"/> Translate
                                                             </Button>
-                                                            <Button size="xs" variant="outline" onClick={() => handleOpenOptimizeDialog(text, format)}>
+                                                            <Button size="xs" variant="outline" onClick={() => handleOpenOptimizeDialog(text, format, version)}>
                                                                 <Zap className="mr-1 h-3 w-3"/> Optimize
                                                             </Button>
                                                         </div>
@@ -443,6 +541,71 @@ export function CampaignDetailClient({ initialCampaign, onBack, onCampaignUpdate
       
 
       {/* Dialogs */}
+       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit Campaign</DialogTitle>
+            <DialogDescription>
+              Modify your campaign's core details below.
+            </DialogDescription>
+          </DialogHeader>
+          <Form {...form}>
+            <form onSubmit={form.handleSubmit(handleEditSubmit)} className="space-y-4 py-4">
+              <FormField
+                control={form.control}
+                name="title"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Campaign Title</FormLabel>
+                    <FormControl><Input {...field} /></FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="brief"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Creative Brief</FormLabel>
+                    <FormControl><Textarea {...field} rows={4} /></FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="targetAudience"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Target Audience (Optional)</FormLabel>
+                    <FormControl><Input {...field} /></FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="tone"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Desired Tone (Optional)</FormLabel>
+                    <FormControl><Input {...field} /></FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <DialogFooter>
+                <DialogClose asChild><Button type="button" variant="outline">Cancel</Button></DialogClose>
+                <Button type="submit" disabled={isPending}>
+                  {isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  Save Changes
+                </Button>
+              </DialogFooter>
+            </form>
+          </Form>
+        </DialogContent>
+      </Dialog>
       <Dialog open={isAnalyzeDialogOpen} onOpenChange={setIsAnalyzeDialogOpen}>
           <DialogContent>
             <DialogHeader>
@@ -492,11 +655,16 @@ export function CampaignDetailClient({ initialCampaign, onBack, onCampaignUpdate
                 <Textarea id="revision-instructions" value={revisionInstructions} onChange={(e) => setRevisionInstructions(e.target.value)} placeholder="e.g., Make this more persuasive for Gen Z. Add more technical details. Shorten it to two sentences."/>
             </div>
             <DialogFooter>
-                <DialogClose asChild><Button variant="outline">Close</Button></DialogClose>
+                 {revisedContent && contentToRevise && (
+                    <Button onClick={() => handleSaveAsNewVersion(revisedContent, contentToRevise.contentType, contentToRevise.version.versionNumber, `Revised "${contentToRevise.contentType}" with new instructions.`, "User Revision")} disabled={isPending} variant="secondary">
+                        <Save className="mr-2 h-4 w-4" /> Save as New Version
+                    </Button>
+                )}
                 <Button onClick={handleReviseContent} disabled={isPending}>
-                    {isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Sparkles className="mr-2 h-4 w-4"/>}
-                    {isPending ? 'Revising...' : 'Run Revision'}
+                    {isPending && !revisedContent ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Sparkles className="mr-2 h-4 w-4"/>}
+                    {isPending && !revisedContent ? 'Revising...' : 'Run Revision'}
                 </Button>
+                <DialogClose asChild><Button variant="outline">Close</Button></DialogClose>
             </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -569,11 +737,16 @@ export function CampaignDetailClient({ initialCampaign, onBack, onCampaignUpdate
                 </div>
             </div>
             <DialogFooter>
-                <DialogClose asChild><Button variant="outline">Close</Button></DialogClose>
+                {translatedContent && contentToTranslate && (
+                    <Button onClick={() => handleSaveAsNewVersion(translatedContent, contentToTranslate.contentType, contentToTranslate.version.versionNumber, `Translated "${contentToTranslate.contentType}" to ${targetLanguage}.`, "Localization AI")} disabled={isPending} variant="secondary">
+                        <Save className="mr-2 h-4 w-4" /> Save as New Version
+                    </Button>
+                )}
                 <Button onClick={handleTranslateContent} disabled={isPending}>
-                    {isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Languages className="mr-2 h-4 w-4"/>}
-                    {isPending ? 'Translating...' : 'Run Translation'}
+                    {isPending && !translatedContent ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Languages className="mr-2 h-4 w-4"/>}
+                    {isPending && !translatedContent ? 'Translating...' : 'Run Translation'}
                 </Button>
+                <DialogClose asChild><Button variant="outline">Close</Button></DialogClose>
             </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -614,7 +787,7 @@ export function CampaignDetailClient({ initialCampaign, onBack, onCampaignUpdate
                     </Select>
                 </div>
                 
-                {isPending && (
+                {isPending && !optimizationResult && (
                   <div className="flex justify-center items-center p-4">
                     <Loader2 className="mr-2 h-5 w-5 animate-spin" />
                     <span>Optimizing...</span>
@@ -647,11 +820,16 @@ export function CampaignDetailClient({ initialCampaign, onBack, onCampaignUpdate
                 )}
             </div>
             <DialogFooter>
-                <DialogClose asChild><Button variant="outline">Close</Button></DialogClose>
+                 {optimizationResult && contentToOptimize && (
+                    <Button onClick={() => handleSaveAsNewVersion(optimizationResult.optimizedContent, contentToOptimize.contentType, contentToOptimize.version.versionNumber, `Optimized "${contentToOptimize.contentType}" for ${optimizationGoal}.`, "Performance AI")} disabled={isPending} variant="secondary">
+                        <Save className="mr-2 h-4 w-4" /> Save as New Version
+                    </Button>
+                )}
                 <Button onClick={handleOptimizeContent} disabled={isPending}>
-                    {isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Zap className="mr-2 h-4 w-4"/>}
+                    {isPending && !optimizationResult ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Zap className="mr-2 h-4 w-4"/>}
                     {optimizationResult ? 'Re-run Optimization' : 'Run Optimization'}
                 </Button>
+                <DialogClose asChild><Button variant="outline">Close</Button></DialogClose>
             </DialogFooter>
         </DialogContent>
       </Dialog>

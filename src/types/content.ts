@@ -39,10 +39,10 @@ export type CampaignStatus =
   | 'archived';
 
 export interface AgentInteraction {
-  agent: string; // e.g., "Creative Director", "Brand Persona", "Analytics Strategist", "QA Agent", "SEO Optimization", "Orchestrator"
+  agentName: string;
+  agentRole: string;
   message: string;
   timestamp: Date;
-  // Optional: type: 'suggestion', 'critique', 'vote'
 }
 
 export interface ContentVersion {

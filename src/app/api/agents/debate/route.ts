@@ -51,11 +51,16 @@ export async function POST(request: NextRequest) {
 
     const result = await runCreativeWarRoom(warRoomInput);
 
+    const debateLogWithTimestamps = result.debateLog.map(interaction => ({
+        ...interaction,
+        timestamp: new Date()
+    }));
+
     // Save the debate log to the campaign
     const updatedResult = await campaignsCollection.findOneAndUpdate(
       { _id: new ObjectId(campaignId) },
       { $set: { 
-          agentDebates: result.debateLog,
+          agentDebates: debateLogWithTimestamps,
           status: 'review', // Move status to review after debate
           updatedAt: new Date() 
         } 
