@@ -34,14 +34,16 @@ export const mapCampaignDocumentToCampaign = (campaignDoc: Omit<Campaign, 'id'> 
     tone: campaignDoc.tone,
     contentGoals: campaignDoc.contentGoals || [],
     brandId: campaignDoc.brandId,
-    brandProfile: campaignDoc.brandProfile, // Ensure this is mapped
+    brandProfile: campaignDoc.brandProfile,
     referenceMaterials: campaignDoc.referenceMaterials || [],
     agentDebates: (campaignDoc.agentDebates || []).map(ad => ({ ...ad, timestamp: ensureDate(ad.timestamp) || new Date() })),
     contentVersions: (campaignDoc.contentVersions || []).map(cv => ({
         ...cv,
-        id: cv.id || new ObjectId().toString(), // Ensure version ID exists
+        id: cv.id || new ObjectId().toString(),
         versionNumber: cv.versionNumber || 0,
         timestamp: ensureDate(cv.timestamp) || new Date(),
+        actorName: cv.actorName || 'Unknown Actor',
+        changeSummary: cv.changeSummary || 'No summary provided.',
         multiFormatContentSnapshot: cv.multiFormatContentSnapshot || {},
         isFlagged: cv.isFlagged ?? false,
         adminModerationNotes: cv.adminModerationNotes ?? '', 

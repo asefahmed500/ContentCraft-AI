@@ -130,7 +130,7 @@ export interface MultiFormatContent {
 
 export interface TemplateToken {
   name: string; // e.g., "productName", "targetAudienceBenefit"
-  description: string; // e.g., "The name of your product", "The key benefit for the audience"
+  description: string; // e.g., "The key benefit for the audience"
   defaultValue?: string;
 }
 

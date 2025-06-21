@@ -43,15 +43,15 @@ const prompt = ai.definePrompt({
 - Total Campaigns Created: {{{campaignCount}}}
 - Total XP Gained: {{{totalXP}}}
 
-**Auditing Logic:**
-- **Low Risk (0-30):** Normal activity. User is exploring the platform, creating a reasonable number of campaigns relative to their tenure. XP gain is consistent with campaign creation.
-- **Moderate Risk (31-70):** Some unusual patterns. This could include a very high number of campaigns created in a short time (potential spam), or unusually high XP gain that doesn't match campaign activity (potential gaming of the system).
-- **High Risk (71-100):** Clear red flags. For example, a user who joined today has created 50 campaigns, or has gained thousands of XP with zero campaigns. Admins should be alerted immediately.
+**Auditing Logic & Risk Scoring:**
+- **Low Risk (0-30):** Normal activity. User is exploring the platform, creating a reasonable number of campaigns relative to their tenure. For example, a user who joined 30 days ago with 10-15 campaigns is normal. XP gain is consistent with campaign creation (approx. 50-100 XP per campaign action).
+- **Moderate Risk (31-70):** Some unusual patterns. This could include a very high number of campaigns created in a short time (e.g., 20+ campaigns in a single day, suggesting spam or automated activity), or unusually high XP gain that doesn't match campaign activity (e.g., 2000 XP with only 1 campaign, suggesting potential gaming of the system).
+- **High Risk (71-100):** Clear red flags. For example, a user who joined today has created 50 campaigns, or has gained thousands of XP with zero campaigns. A user with the 'viewer' role who has created campaigns is also a high-risk anomaly. Admins should be alerted immediately for high-risk cases.
 
 **Your Task:**
-1.  Calculate a **riskScore** based on the provided logic.
-2.  Write a clear **justification** explaining your score. Connect the data points logically (e.g., "The user joined {{daysSinceJoined}} days ago and has already created {{campaignCount}} campaigns, which is an unusually high rate suggesting potential automated activity.").
-3.  Provide a single, actionable **recommendation** from the allowed enum values.
+1.  Calculate a **riskScore** based on the provided logic. Be analytical.
+2.  Write a clear **justification** explaining your score. Connect the data points logically (e.g., "The user joined {{daysSinceJoined}} days ago and has already created {{campaignCount}} campaigns. This rate of creation is unusually high and suggests potential automated activity, warranting a moderate risk score.").
+3.  Provide a single, actionable **recommendation** from the allowed enum values based on the risk level.
 
 Your output must be a valid JSON object matching the defined schema.
 `,

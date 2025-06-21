@@ -3,7 +3,7 @@
 
 import type { Campaign, ContentVersion, AgentInteraction, MultiFormatContent, ScheduledPost } from '@/types/content';
 import type { BrandProfile } from '@/types/brand';
-import { useState, useTransition } from 'react';
+import { useState, useTransition, useEffect, useCallback } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -83,6 +83,28 @@ export function CampaignDetailClient({ initialCampaign, onBack, onCampaignUpdate
   
   // Feedback state
   const [submittedFeedback, setSubmittedFeedback] = useState<SubmittedFeedback>({});
+
+  const fetchFeedbackHistory = useCallback(async () => {
+    try {
+        const response = await fetch(`/api/feedback?campaignId=${initialCampaign.id}`);
+        if (!response.ok) return;
+        const feedbackItems: { contentVersionId: string; contentFormat: string; rating: 1 | -1 }[] = await response.json();
+        
+        const feedbackMap: SubmittedFeedback = {};
+        feedbackItems.forEach(item => {
+            const key = `${item.contentVersionId}-${item.contentFormat}`;
+            feedbackMap[key] = item.rating === 1 ? 'up' : 'down';
+        });
+        setSubmittedFeedback(feedbackMap);
+    } catch (err) {
+        console.error("Could not fetch feedback history", err);
+    }
+  }, [initialCampaign.id]);
+
+  useEffect(() => {
+    fetchFeedbackHistory();
+  }, [fetchFeedbackHistory]);
+
 
   // Revise Content State
   const [isReviseDialogOpen, setIsReviseDialogOpen] = useState(false);
@@ -463,7 +485,9 @@ export function CampaignDetailClient({ initialCampaign, onBack, onCampaignUpdate
             }),
         });
         const result = await response.json();
-        if (!response.ok) throw new Error(result.error || 'Failed to submit feedback.');
+        if (!response.ok) {
+            throw new Error(result.error || 'Failed to submit feedback.');
+        }
 
         setSubmittedFeedback(prev => ({ ...prev, [feedbackKey]: rating === 1 ? 'up' : 'down' }));
         toast({ title: "Feedback Submitted!", description: "Thank you for helping us improve." });
@@ -471,7 +495,12 @@ export function CampaignDetailClient({ initialCampaign, onBack, onCampaignUpdate
 
     } catch (err) {
         const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred.';
-        toast({ title: "Feedback Error", description: errorMessage, variant: "destructive" });
+        // If the error is a conflict (already submitted), just update the UI state silently
+        if (errorMessage.includes('already submitted')) {
+            setSubmittedFeedback(prev => ({...prev, [feedbackKey]: 'down' })); // Assume it exists
+        } else {
+            toast({ title: "Feedback Error", description: errorMessage, variant: "destructive" });
+        }
     } finally {
         setFeedbackLoading(null);
     }
@@ -609,7 +638,7 @@ export function CampaignDetailClient({ initialCampaign, onBack, onCampaignUpdate
                                                                     variant="ghost"
                                                                     className="h-7 w-7"
                                                                     onClick={() => handleFeedbackSubmit(version, format, 1)}
-                                                                    disabled={feedbackLoading === `${version.id}-${format}` || submittedFeedback[`${version.id}-${format}`]}
+                                                                    disabled={feedbackLoading === `${version.id}-${format}` || !!submittedFeedback[`${version.id}-${format}`]}
                                                                     title="Good content"
                                                                 >
                                                                     <ThumbsUp className={`h-4 w-4 ${submittedFeedback[`${version.id}-${format}`] === 'up' ? 'text-primary fill-primary' : ''}`} />
@@ -619,7 +648,7 @@ export function CampaignDetailClient({ initialCampaign, onBack, onCampaignUpdate
                                                                     variant="ghost"
                                                                     className="h-7 w-7"
                                                                     onClick={() => handleFeedbackSubmit(version, format, -1)}
-                                                                    disabled={feedbackLoading === `${version.id}-${format}` || submittedFeedback[`${version.id}-${format}`]}
+                                                                    disabled={feedbackLoading === `${version.id}-${format}` || !!submittedFeedback[`${version.id}-${format}`]}
                                                                     title="Needs improvement"
                                                                 >
                                                                     <ThumbsDown className={`h-4 w-4 ${submittedFeedback[`${version.id}-${format}`] === 'down' ? 'text-destructive fill-destructive' : ''}`} />
